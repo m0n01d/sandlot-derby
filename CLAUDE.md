@@ -22,9 +22,13 @@ routing, PR screenshot and grooming rules do.
 - `Core/` — Swift package `DerbyCore`. **Pure Swift, no UIKit, no SpriteKit, no Foundation beyond
   `Foundation` math.** Flight physics, pitching, slice contact, seeded parks, the six-beat state
   machine. Everything here is deterministic and unit-tested.
-- `App/` — (not yet created) the Xcode project: SwiftUI `ContentView` → `SpriteView` → two scenes
-  (`AtBatScene`, `WideScene`) driven by `DerbyMachine`. Scenes are renderers and gesture sources
-  only; they own no game state.
+- `App/` — the iOS app. The Xcode project is generated and git-ignored:
+  `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
+  two scenes (`AtBatScene`, `WideScene`) driven by `DerbyMachine` through `GameController`. Scenes
+  are renderers and gesture sources only; they own no game state. Both draw a whole frame into a
+  software `PixelCanvas` (the prototype's `px/rect/line/disc/t3/t5`) shown through one
+  nearest-filtered `SKMutableTexture`. DEBUG only: space bar is the dev slice, and the
+  `-autoslice` launch argument swings at every pitch.
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
@@ -54,5 +58,5 @@ routing, PR screenshot and grooming rules do.
 
 ## Milestones
 
-See DESIGN.md §13. M0 is "core compiles and the calibration tests pass on a Mac", and it is the
-first thing to do in this repo.
+See DESIGN.md §13. M0 ("core compiles and the calibration tests pass on a Mac") is done, and the
+app has the bones of M1–M2. Next is M3, feel, which needs a real phone.
