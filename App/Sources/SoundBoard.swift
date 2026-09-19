@@ -15,6 +15,11 @@ final class SoundBoard {
     private let voices = (0..<5).map { _ in AVAudioPlayerNode() }
     /// The crowd has its own node so a new reaction replaces the last one instead of piling on.
     private let crowd = AVAudioPlayerNode()
+    /// The organ has its own node too, so the pitch can cut it off mid-note, as a real organist
+    /// stops dead when the pitcher comes set.
+    private let organ = AVAudioPlayerNode()
+    /// Bumped whenever the organ starts or is cut, so a crowd answer never follows a cut prompt.
+    private var promptID = 0
     private var nextVoice = 0
     private var observers: [NSObjectProtocol] = []
 
@@ -25,6 +30,7 @@ final class SoundBoard {
     private let cheers: [AVAudioPCMBuffer]
     private let whiffBuffer, strikeBuffer, ballBuffer, groanBuffer: AVAudioPCMBuffer
     private let wallBuffer, groundBuffer, streakOverBuffer, calledUpBuffer: AVAudioPCMBuffer
+    private let wompBuffer, chargeRunBuffer, shoutBuffer: AVAudioPCMBuffer
 
     init() {
         let format = self.format
@@ -44,9 +50,12 @@ final class SoundBoard {
         groundBuffer = buffer(Synth.thump(deep: true))
         streakOverBuffer = buffer(Synth.streakOver())
         calledUpBuffer = buffer(Synth.calledUp())
+        wompBuffer = buffer(Synth.wompWomp())
+        chargeRunBuffer = buffer(Synth.chargeRun())
+        shoutBuffer = buffer(Synth.crowdShout())
 
         guard !isMuted else { return }
-        for node in voices + [crowd] {
+        for node in voices + [crowd, organ] {
             engine.attach(node)
             engine.connect(node, to: engine.mainMixerNode, format: format)
         }
@@ -102,7 +111,31 @@ final class SoundBoard {
     func whiff() { play(whiffBuffer) }
     func calledStrike() { play(strikeBuffer) }
     func calledBall() { play(ballBuffer) }
-    func offTheWall() { play(wallBuffer); play(groanBuffer, on: crowd, after: 0.08) }
+    /// The thump, the crowd's *ohh*, and then the trombone has its say.
+    func offTheWall() {
+        play(wallBuffer)
+        play(groanBuffer, on: crowd, after: 0.08)
+        play(wompBuffer, after: 0.22)
+    }
+
+    /// The organ runs up the scale and the crowd answers. If the pitch cuts the organ off first,
+    /// nobody answers.
+    func chargePrompt() {
+        promptID += 1
+        let id = promptID
+        play(chargeRunBuffer, on: organ)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Synth.chargeRunSeconds * 1_000_000_000))
+            guard let self, self.promptID == id else { return }
+            self.play(self.shoutBuffer)
+        }
+    }
+
+    /// The pitcher is set: the organ stops, mid-note. No fade, ever.
+    func stopOrgan() {
+        promptID += 1
+        if organ.isPlaying { organ.stop() }
+    }
     func landed() { play(groundBuffer) }
     func streakOver(after seconds: Double) { play(streakOverBuffer, after: seconds) }
     func calledUp() { play(calledUpBuffer, after: 0.5) }

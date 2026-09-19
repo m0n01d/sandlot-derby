@@ -94,7 +94,8 @@ final class GameController {
                 view?.presentScene(atBatScene)
             case .pitchThrown:
                 streakAtThePitch = machine.tally.homeRunStreak
-                haptics.prepare()            // and then silence: nothing sounds during the pitch
+                haptics.prepare()
+                sound.stopOrgan()            // and then silence: nothing sounds during the pitch
             case .called(let call):
                 if call == .strike {
                     sound.calledStrike()
@@ -118,7 +119,13 @@ final class GameController {
         }
         // The streak is already 0 in the tally from the moment of contact; the sad notes wait for
         // the landing number, so they cannot spoil the flight.
-        if machine.beat == .result, beatBefore != .result, machine.flight?.homeRun != true { mournStreak(after: 0.35) }
+        if machine.beat == .result, beatBefore != .result {
+            if machine.flight?.homeRun != true {
+                mournStreak(after: 0.35)
+            } else if machine.tally.homeRunStreak == 2 {
+                sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
+            }
+        }
     }
 
     // MARK: - Sound and haptics (DESIGN.md §11)

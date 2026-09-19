@@ -204,6 +204,97 @@ enum Synth {
         return finish(out, gain: deep ? 0.42 : 0.6)
     }
 
+    // MARK: - The band
+
+    /// Off the wall: the sad trombone. *Womp*, then a longer *wommmp* that sags and wobbles. A
+    /// sawtooth through a resonant low-pass that opens and shuts, which is all a wah mute is.
+    static func wompWomp() -> [Float] {
+        func note(_ dur: Double, from f0: Double, to f1: Double, wobble: Double) -> [Double] {
+            let n = count(dur)
+            var low = 0.0, band = 0.0, phase = 0.0
+            var out = [Double](repeating: 0, count: n)
+            for i in 0..<n {
+                let t = Double(i) / sampleRate, p = t / dur
+                let vibrato = 1 + wobble * p * 0.012 * sin(2 * Double.pi * 5.5 * t)
+                phase += (f0 + (f1 - f0) * p * p) * vibrato / sampleRate
+                let saw = 2 * (phase - phase.rounded(.down)) - 1
+                // The mouth: shut, open by a fifth of the way in, shut again.
+                let open = p < 0.2 ? p / 0.2 : pow(1 - (p - 0.2) / 0.8, 1.6)
+                let f = 2 * sin(Double.pi * (280 + 1_250 * open) / sampleRate)
+                low += f * band
+                band += f * (saw - low - 0.45 * band)
+                out[i] = low * min(1, t / 0.02) * min(1, (dur - t) / 0.06)
+            }
+            return out
+        }
+        let rest = [Double](repeating: 0, count: count(0.07))
+        return finish(note(0.30, from: 233, to: 226, wobble: 0) + rest + note(0.85, from: 220, to: 190, wobble: 1), gain: 0.42)
+    }
+
+    /// A ballpark organ, one hand: drawbar partials, a click on every key and a Leslie's wobble.
+    /// `midi` nil is a rest. Notes are slightly detached, the way an organist prompts a crowd.
+    static func organ(_ notes: [(midi: Int?, seconds: Double)], gain: Double = 0.5) -> [Float] {
+        let drawbars: [(ratio: Double, level: Double)] = [(0.5, 0.45), (1, 1), (1.5, 0.5), (2, 0.7), (3, 0.35), (4, 0.25)]
+        var noise = Noise(seed: 0x0464_0001)
+        var out: [Double] = []
+        for note in notes {
+            let n = count(note.seconds)
+            guard let midi = note.midi else { out += [Double](repeating: 0, count: n); continue }
+            let hz = 440 * pow(2, Double(midi - 69) / 12)
+            let held = note.seconds * 0.9
+            var phases = [Double](repeating: 0, count: drawbars.count)
+            for i in 0..<n {
+                let t = Double(i) / sampleRate
+                let spin = sin(2 * Double.pi * 6.2 * t)
+                var tone = 0.0
+                for k in drawbars.indices {
+                    phases[k] += hz * drawbars[k].ratio * (1 + 0.0035 * spin) / sampleRate
+                    tone += sin(2 * Double.pi * phases[k]) * drawbars[k].level
+                }
+                let click = noise.next() * exp(-t / 0.004) * 0.5
+                let shape = min(1, t / 0.006) * max(0, min(1, (held - t) / 0.02))
+                out.append((tone / 3.2 * (1 + 0.12 * spin) + click) * shape)
+            }
+        }
+        return finish(out, gain: gain)
+    }
+
+    /// The rally prompt: a run up the scale that speeds toward a held top note, asking the crowd
+    /// a question. Deliberately **not** the famous six-note "Charge!" fanfare, which was written
+    /// in 1946 and is still somebody's property; a major scale is nobody's.
+    static func chargeRun() -> [Float] {
+        let run: [(midi: Int?, seconds: Double)] = [
+            (72, 0.15), (74, 0.14), (76, 0.13), (77, 0.12), (79, 0.11), (81, 0.10), (83, 0.09), (84, 0.42),
+        ]
+        return organ(run, gain: 0.55)
+    }
+
+    /// How long `chargeRun` lasts: when the crowd answers.
+    static let chargeRunSeconds = 1.26
+
+    /// The answer: a few dozen people shouting one open syllable at once, with the hiss of its
+    /// first consonant on the front. *CHARGE!*
+    static func crowdShout() -> [Float] {
+        let dur = 0.62, n = count(dur)
+        var out = [Double](repeating: 0, count: n)
+        var pick = Noise(seed: 0xC4A6_0001)
+        for v in 0..<14 {
+            let f0 = 150 + 70 * (pick.next() + 1), late = count(0.02 * (pick.next() + 1))
+            let voice = syllable(dur - 0.06, from: f0 * 1.12, to: f0 * 0.82, growl: 0.35, breath: 0.5,
+                                 seed: 0xC4A6_1000 &+ UInt32(v),
+                                 formants: [Formant(hz: 720, q: 3.5, gain: 1), Formant(hz: 1_180, q: 4, gain: 0.8),
+                                            Formant(hz: 2_600, q: 6, gain: 0.35)])
+            for i in 0..<voice.count where late + i < n { out[late + i] += voice[i] / 5 }
+        }
+        var hiss = Biquad.highpass(2_800), air = Noise(seed: 0xC4A6_0002)
+        for i in 0..<count(0.09) { out[i] += hiss.process(air.next()) * exp(-Double(i) / sampleRate / 0.03) * 0.5 }
+        for i in 0..<n {
+            let t = Double(i) / sampleRate
+            out[i] *= min(1, t / 0.025) * (t < 0.22 ? 1 : exp(-(t - 0.22) / 0.16))
+        }
+        return finish(out, gain: 0.7)
+    }
+
     // MARK: - Beeps and boops
 
     /// Square-wave notes played one after another.
