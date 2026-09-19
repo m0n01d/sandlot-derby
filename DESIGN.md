@@ -404,7 +404,18 @@ the player is not entitled, the cut back goes to the **contract card** instead o
 **Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
 not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
 every other way. Core knows nothing about money; the app sets the ceiling from the entitlement.
-Tested like everything else.
+Tested like everything else. **Built 2026-09-19**, with two things the paragraph above left open:
+
+- **Paying the advance.** The home run at the ceiling leaves an advance *owed*. When the app sets
+  `parkCeiling` back to nil (signed, restored, a pending purchase landing), the machine pays it at
+  the next windup: `.parkChanged`, the park's books close, `pitchesToTheShow` is recorded, a fresh
+  windup under the new park's rules, and **no second `.calledUp`**. A pitch already in the air
+  resolves in Triple-A first. With nothing owed, lifting the ceiling changes nothing.
+- **The debt is not saved.** Decline, quit, come back and sign from the stats board, and it takes
+  one more Triple-A home run to go up. That is a call-up with the fanfare, not a penalty, and it
+  keeps a bookkeeping key out of the tally.
+- The park's books (`parksCleared`, `pitchesThisPark`, `fewestPitchesToClearPark`) stay open at
+  the ceiling. `isAtCeiling` is `park.number >= parkCeiling`, so a refund's ceiling just works.
 
 **App.** StoreKit 2 only, no server: `Product.products`, `purchase()`,
 `Transaction.currentEntitlements` at launch, `Transaction.updates` for purchases made elsewhere and
@@ -429,7 +440,7 @@ the App Store Small Business Program (15 %).
 direct-sold or swapped with other indies, drawn in the palette. Never an interstitial, a banner
 or a rewarded video.
 
-**Build order (M5):** `parkCeiling` + tests → contract card scene → StoreKit 2 with the local
+**Build order (M5):** ~~`parkCeiling` + tests~~ (done) → contract card scene → StoreKit 2 with the local
 configuration file → sandbox on TestFlight → grandfathering → listing copy.
 
 **Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
@@ -439,6 +450,11 @@ what keeps a non-payer around, so ship it first.
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
 2. Fallback if the paywall tests badly: paid upfront at $1.99, smaller audience, lean on press.
+3. **Is `.calledUp` on every ceiling home run a nag?** As specced and built, a player who declined
+   gets `CALLED UP` and the arpeggio on *every* Triple-A home run, forever. Read one way that is a
+   celebration; read another it is exactly the reminder "never nagged" rules out. The quiet
+   alternative: the machine announces the first one per session and the app treats the rest as
+   ordinary home runs. Decide when the contract card is built and it can be heard.
 
 ## 17. Life: fireworks, sky and backdrops
 
