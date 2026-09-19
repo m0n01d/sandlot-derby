@@ -349,6 +349,9 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
 3. **Wind.** Parks reserve it. It would show as a flag on the wall and a horizontal term in
    flight. Not before M4.
 4. **Sharing.** A park number plus the tally is a screenshot-able brag. Nothing more is planned.
+5. **The wrist.** An Apple Watch version is specced in [`docs/watch.md`](docs/watch.md): the centre
+   column of the at-bat frame cut out 1:1, the number over the arc in the wide view, haptics
+   instead of sound. A proposal until its W2 go/no-go; nothing in this document changes for it yet.
 
 ## 15. Non-goals
 
