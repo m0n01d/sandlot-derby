@@ -110,7 +110,12 @@ final class PixelCanvas {
         "S": Array("111100111001111"), "I": Array("111010010010111"), "N": Array("110101101101101"),
         "W": Array("101101101111101"), "L": Array("100100100100111"), "O": Array("111101101101111"),
         "U": Array("101101101101111"), "C": Array("111100100100111"), "B": Array("110101110101110"),
-        "V": Array("101101101101010"), "Y": Array("101101010010010"), " ": Array("000000000000000")
+        "V": Array("101101101101010"), "Y": Array("101101010010010"), " ": Array("000000000000000"),
+        // Not in the prototype: the stats screen needs the rest of the alphabet and some marks.
+        "J": Array("001001001101111"), "Q": Array("111101101111001"), "X": Array("101101010101101"),
+        "Z": Array("111001010100111"), ".": Array("000000000000010"), ":": Array("000010000010000"),
+        "-": Array("000000111000000"), "%": Array("101001010100101"), "/": Array("001001010100100"),
+        ",": Array("000000000010100")
     ]
 
     /// 5x7 bitmap face, copied verbatim from the prototype's `F5`

@@ -27,14 +27,149 @@ public struct Timings: Equatable {
     public static let standard = Timings()
 }
 
-public struct Tally: Equatable {
-    public var pitches = 0
-    public var hits = 0
-    public var homeRuns = 0
-    public var longestFeet = 0
-    /// The score. Total feet, forever, never reset.
-    public var totalFeet = 0
+/// The name of one career number. A string, not an enum, so a save written by an older build
+/// still loads after new stats are added: a missing key reads as 0.
+public struct Stat: Hashable {
+    public let key: String
+    public init(_ key: String) { self.key = key }
+
+    // The cost and the progress (DESIGN.md §10).
+    public static let pitches = Stat("pitches")
+    public static let parksCleared = Stat("parksCleared")
+    public static let pitchesThisPark = Stat("pitchesThisPark")
+    /// Absent until the first park is cleared.
+    public static let fewestPitchesToClearPark = Stat("fewestPitchesToClearPark")
+    public static let secondsPlayed = Stat("secondsPlayed")
+
+    // Plate discipline.
+    public static let swings = Stat("swings")
+    public static let whiffs = Stat("whiffs")
+    public static let calledStrikes = Stat("calledStrikes")
+    public static let ballsTaken = Stat("ballsTaken")
+    /// Swings at pitches outside the zone, hit or not.
+    public static let chases = Stat("chases")
+
+    // Contact.
+    public static let hits = Stat("hits")
+    public static let barrels = Stat("barrels")
+    public static let groundBalls = Stat("groundBalls")
+    public static let lineDrives = Stat("lineDrives")
+    public static let flyBalls = Stat("flyBalls")
+    public static let popUps = Stat("popUps")
+    public static let wallHits = Stat("wallHits")
+    public static let exitVelocitySum = Stat("exitVelocitySum")
+    public static let launchAngleSum = Stat("launchAngleSum")
+    public static let bestExitVelocityMPH = Stat("bestExitVelocityMPH")
+    public static let highestApexFeet = Stat("highestApexFeet")
+    public static let longestHangTime = Stat("longestHangTime")
+
+    // Distance.
+    public static let totalFeet = Stat("totalFeet")
+    public static let longestFeet = Stat("longestFeet")
+
+    // Home runs.
+    public static let homeRuns = Stat("homeRuns")
+    public static let noDoubters = Stat("noDoubters")
+    public static let wallScrapers = Stat("wallScrapers")
+    public static let moonshots = Stat("moonshots")
+    public static let lasers = Stat("lasers")
+
+    // Streaks.
+    public static let homeRunStreak = Stat("homeRunStreak")
+    public static let bestHomeRunStreak = Stat("bestHomeRunStreak")
+    public static let hitStreak = Stat("hitStreak")
+    public static let bestHitStreak = Stat("bestHitStreak")
+
+    // Per pitch type, keyed by `PitchType.name`.
+    public static func seen(_ t: PitchType) -> Stat { Stat("seen." + t.name) }
+    public static func hits(_ t: PitchType) -> Stat { Stat("hits." + t.name) }
+    public static func homeRuns(_ t: PitchType) -> Stat { Stat("homeRuns." + t.name) }
+}
+
+/// Every career number, forever, never reset. Counted, never punished.
+public struct Tally: Equatable, Codable {
+    private var values: [String: Double] = [:]
     public init() {}
+
+    public subscript(_ s: Stat) -> Double { values[s.key] ?? 0 }
+    public func count(_ s: Stat) -> Int { Int(self[s].rounded()) }
+    /// Nil until the stat has been written once. For minimums, where 0 is not "none".
+    public func value(ifRecorded s: Stat) -> Double? { values[s.key] }
+
+    mutating func add(_ s: Stat, _ amount: Double = 1) { values[s.key, default: 0] += amount }
+    mutating func set(_ s: Stat, _ v: Double) { values[s.key] = v }
+    mutating func raise(_ s: Stat, to v: Double) { if v > self[s] { values[s.key] = v } }
+    mutating func lower(_ s: Stat, to v: Double) { if let old = values[s.key], old <= v { return }; values[s.key] = v }
+    /// Extends `streak` by one and carries `best` with it.
+    mutating func extend(_ streak: Stat, best: Stat) { add(streak); raise(best, to: self[streak]) }
+
+    public var pitches: Int { count(.pitches) }
+    public var hits: Int { count(.hits) }
+    public var homeRuns: Int { count(.homeRuns) }
+    public var longestFeet: Int { count(.longestFeet) }
+    public var totalFeet: Int { count(.totalFeet) }
+    public var homeRunStreak: Int { count(.homeRunStreak) }
+    public var bestHomeRunStreak: Int { count(.bestHomeRunStreak) }
+    /// Mean exit velocity over every ball put in play, 0 before the first hit.
+    public var averageExitVelocityMPH: Double { hits > 0 ? self[.exitVelocitySum] / Double(hits) : 0 }
+    public var averageLaunchAngleDegrees: Double { hits > 0 ? self[.launchAngleSum] / Double(hits) : 0 }
+}
+
+/// How a batted ball is sorted into the counted kinds. None of this changes the flight.
+public struct StatRules: Equatable {
+    /// Statcast's barrel: at least this hard…
+    public var barrelMinExitVelocity: Double = 98
+    /// …and inside this launch window at the minimum velocity. The window opens by
+    /// `barrelWidening` degrees a side per mph above it, to at most `barrelMaxWindow`.
+    /// An approximation of the published table, not the table.
+    public var barrelWindow: ClosedRange<Double> = 26...30
+    public var barrelWidening: Double = 1.1
+    public var barrelMaxWindow: ClosedRange<Double> = 8...50
+    /// Statcast's batted-ball classes by launch angle: ground < line < fly < pop-up.
+    public var lineDriveFrom: Double = 10
+    public var flyBallFrom: Double = 25
+    public var popUpFrom: Double = 50
+    /// A home run landing this far past the wall never had a doubt.
+    public var noDoubterMarginFeet: Double = 50
+    /// A home run landing within this of the wall scraped over.
+    public var wallScraperMarginFeet: Double = 12
+    /// Apex, in feet, that makes any batted ball a moonshot.
+    public var moonshotApexFeet: Double = 150
+    /// A home run launched at or below this is a laser.
+    public var laserMaxAngle: Double = 20
+    /// Taking a pitch outside the zone keeps the home run streak alive. Everything else that
+    /// is not a home run (called strike, whiff, any other contact) ends it.
+    public var takenBallKeepsStreak = true
+    public init() {}
+    public static let standard = StatRules()
+
+    public func isBarrel(exitVelocityMPH ev: Double, launchAngleDegrees la: Double) -> Bool {
+        guard ev >= barrelMinExitVelocity else { return false }
+        let open = (ev - barrelMinExitVelocity) * barrelWidening
+        let lo = max(barrelMaxWindow.lowerBound, barrelWindow.lowerBound - open)
+        let hi = min(barrelMaxWindow.upperBound, barrelWindow.upperBound + open)
+        return la >= lo && la <= hi
+    }
+}
+
+/// Which of the two flight framings is up. With the at-bat view that makes three cameras, and
+/// every change between them is a hard cut (DESIGN.md §3).
+public enum FlightCamera: Equatable {
+    /// The whole field, batter to beyond the wall. The ball leaves the bat here, and the result
+    /// comes back here so the landing number sits over the whole arc.
+    case wide
+    /// Tight on the wall, so a 6 ft fence reads as a fence and "did it clear?" is a picture.
+    case close
+}
+
+public struct CameraRules: Equatable {
+    /// A ball earns the close camera only if it ever gets within this many feet of the wall.
+    /// Everything else is watched from the wide camera start to finish.
+    public var closeReachFeet: Double = 60
+    /// The cut to the close camera comes when the ball is this far short of the wall.
+    public var closeLeadFeet: Double = 100
+    public init() {}
+    public static let standard = CameraRules()
 }
 
 /// What the scene needs to do in response to a tick. The machine never touches a node.
@@ -62,13 +197,18 @@ public struct DerbyMachine: Equatable {
     public var timings: Timings
     public var sliceRules: SliceRules
     public var pitchingRules: PitchingRules
+    public var statRules: StatRules
     private var rng: SplitMix64
 
-    public init(seed: UInt64, park: Park = .first, timings: Timings = .standard,
-                sliceRules: SliceRules = .standard, pitchingRules: PitchingRules = .standard) {
+    /// `park` and `tally` are what a save restores; everything else starts fresh.
+    public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
+                sliceRules: SliceRules = .standard, pitchingRules: PitchingRules = .standard,
+                statRules: StatRules = .standard) {
         var g = SplitMix64(seed: seed)
         let first = Pitching.generate(using: &g, rules: pitchingRules)
         self.park = park
+        self.tally = tally
+        self.statRules = statRules
         self.timings = timings
         self.sliceRules = sliceRules
         self.pitchingRules = pitchingRules
@@ -81,6 +221,20 @@ public struct DerbyMachine: Equatable {
 
     /// The ball right now during the pitch, in at-bat design units.
     public var ballNow: BallSample { Pitching.ball(pitch, at: min(1.15, pitchProgress), rules: pitchingRules) }
+
+    public var cameraRules = CameraRules.standard
+
+    /// The flight framing right now: a pure function of the flight and how much of it has played,
+    /// so a replay cuts exactly where the live game did. Only `.flight` is ever close; the
+    /// result hold always cuts back out.
+    public var flightCamera: FlightCamera {
+        guard beat == .flight, let f = flight else { return .wide }
+        let wall = park.wallDistanceFeet
+        guard let reach = f.points.map(\.xFeet).max(), reach >= wall - cameraRules.closeReachFeet,
+              let cut = f.points.firstIndex(where: { $0.xFeet >= wall - cameraRules.closeLeadFeet })
+        else { return .wide }
+        return playbackIndex >= Double(cut) ? .close : .wide
+    }
 
     public var playbackPoint: FlightPoint? {
         guard let f = flight, !f.points.isEmpty else { return nil }
@@ -96,12 +250,8 @@ public struct DerbyMachine: Equatable {
         let l = Contact.resolve(crossing, pitch: pitch, rules: sliceRules)
         let f = Flight.simulate(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees,
                                 wallDistanceFeet: park.wallDistanceFeet, wallHeightFeet: park.wallHeightFeet)
-        tally.pitches += 1
-        tally.hits += 1
-        if f.homeRun { tally.homeRuns += 1 }
-        let d = Int(f.distanceFeet.rounded())
-        tally.totalFeet += d
-        if d > tally.longestFeet { tally.longestFeet = d }
+        countPitch()
+        countContact(l, f)
         launch = l
         flight = f
         playbackIndex = 0
@@ -112,9 +262,68 @@ public struct DerbyMachine: Equatable {
     /// Called when the finger lifts during `.pitch` without a contact.
     public mutating func sliceMissed() {
         guard beat == .pitch else { return }
-        tally.pitches += 1
+        countPitch()
+        tally.add(.swings)
+        tally.add(.whiffs)
+        if !pitch.isStrike { tally.add(.chases) }
+        endStreaks()
         lastCall = .miss
         enter(.miss)
+    }
+
+    // MARK: - Counting
+
+    private mutating func countPitch() {
+        tally.add(.pitches)
+        tally.add(.pitchesThisPark)
+        tally.add(.seen(pitch.type))
+    }
+
+    private mutating func endStreaks() {
+        tally.set(.homeRunStreak, 0)
+        tally.set(.hitStreak, 0)
+    }
+
+    private mutating func countContact(_ l: Launch, _ f: FlightResult) {
+        let r = statRules
+        tally.add(.swings)
+        if !pitch.isStrike { tally.add(.chases) }
+        tally.add(.hits)
+        tally.add(.hits(pitch.type))
+        tally.extend(.hitStreak, best: .bestHitStreak)
+
+        tally.add(.exitVelocitySum, l.exitVelocityMPH)
+        tally.add(.launchAngleSum, l.launchAngleDegrees)
+        tally.raise(.bestExitVelocityMPH, to: l.exitVelocityMPH)
+        tally.raise(.highestApexFeet, to: f.apexFeet)
+        if let hang = f.hangTime { tally.raise(.longestHangTime, to: hang) }
+        if r.isBarrel(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees) {
+            tally.add(.barrels)
+        }
+        if f.apexFeet >= r.moonshotApexFeet { tally.add(.moonshots) }
+        switch l.launchAngleDegrees {
+        case ..<r.lineDriveFrom: tally.add(.groundBalls)
+        case ..<r.flyBallFrom: tally.add(.lineDrives)
+        case ..<r.popUpFrom: tally.add(.flyBalls)
+        default: tally.add(.popUps)
+        }
+
+        let d = f.distanceFeet.rounded()
+        tally.add(.totalFeet, d)
+        tally.raise(.longestFeet, to: d)
+        if f.wallHit { tally.add(.wallHits) }
+
+        if f.homeRun {
+            tally.add(.homeRuns)
+            tally.add(.homeRuns(pitch.type))
+            tally.extend(.homeRunStreak, best: .bestHomeRunStreak)
+            let past = f.distanceFeet - park.wallDistanceFeet
+            if past >= r.noDoubterMarginFeet { tally.add(.noDoubters) }
+            if past < r.wallScraperMarginFeet { tally.add(.wallScrapers) }
+            if l.launchAngleDegrees <= r.laserMaxAngle { tally.add(.lasers) }
+        } else {
+            tally.set(.homeRunStreak, 0)
+        }
     }
 
     // MARK: - Clock
@@ -122,13 +331,21 @@ public struct DerbyMachine: Equatable {
     @discardableResult
     public mutating func tick(_ dt: Double) -> [Transition] {
         elapsed += dt
+        tally.add(.secondsPlayed, dt)
         var out: [Transition] = []
         switch beat {
         case .windup:
             if elapsed > timings.windup { enter(.pitch); out.append(.pitchThrown) }
         case .pitch:
             if elapsed > pitch.duration * timings.pitchOverrun + timings.takeGrace {
-                tally.pitches += 1
+                countPitch()
+                if pitch.isStrike {
+                    tally.add(.calledStrikes)
+                    endStreaks()
+                } else {
+                    tally.add(.ballsTaken)
+                    if !statRules.takenBallKeepsStreak { endStreaks() }
+                }
                 lastCall = pitch.isStrike ? .strike : .ball
                 enter(.miss)
             }
@@ -146,6 +363,9 @@ public struct DerbyMachine: Equatable {
         case .result:
             if elapsed > timings.resultHold {
                 if let f = flight, f.homeRun {
+                    tally.add(.parksCleared)
+                    tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
+                    tally.set(.pitchesThisPark, 0)
                     park = Park.generate(number: park.number + 1)
                     out.append(.parkChanged(park))
                 }

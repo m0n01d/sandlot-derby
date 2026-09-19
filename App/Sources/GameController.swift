@@ -9,14 +9,39 @@ final class GameController {
     private(set) var machine: DerbyMachine
     let atBatScene: AtBatScene
     let wideScene: WideScene
+    let statsScene: StatsScene
     private weak var view: SKView?
 
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
-        machine = DerbyMachine(seed: seed)
+        let save = SaveStore.load()
+        machine = DerbyMachine(seed: seed,
+                               park: save.map { Park.generate(number: $0.parkNumber) } ?? .first,
+                               tally: save?.tally ?? Tally())
         atBatScene = AtBatScene()
         wideScene = WideScene()
+        statsScene = StatsScene()
         atBatScene.controller = self
         wideScene.controller = self
+        statsScene.controller = self
+    }
+
+    /// Written at every beat change, so at worst a second or so of `secondsPlayed` is lost.
+    private func persist() {
+        SaveStore.save(SaveState(parkNumber: machine.park.number, tally: machine.tally))
+    }
+
+    // MARK: - The stats board
+
+    /// Hard cut to the board. The machine stops ticking while it is up (`StatsScene.ticksMachine`).
+    func showStats() {
+        guard let view, view.scene !== statsScene else { return }
+        view.presentScene(statsScene)
+    }
+
+    /// The board is only ever opened from the at-bat view, so that is where it returns.
+    func hideStats() {
+        guard let view, view.scene === statsScene else { return }
+        view.presentScene(atBatScene)
     }
 
     /// Called once, from `GameView.makeUIView`. Presents the initial (at-bat) scene.
@@ -35,7 +60,7 @@ final class GameController {
         let width = max(320, (224 * aspect).rounded())
         let size = CGSize(width: width, height: 224)
         let designPerPoint = 224 / Double(viewSize.height)
-        for scene in [atBatScene, wideScene] as [CanvasScene] {
+        for scene in [atBatScene, wideScene, statsScene] as [CanvasScene] {
             scene.size = size
             scene.scaleMode = .aspectFit
             scene.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
@@ -47,7 +72,17 @@ final class GameController {
     /// from whichever scene is currently presented, inside its own `update(_:)`.
     func tick(_ dt: TimeInterval) {
         let clamped = min(dt, 1.0 / 20.0)
+        let beatBefore = machine.beat
         let transitions = machine.tick(clamped)
+        if machine.beat != beatBefore { persist() }
+        #if DEBUG
+        // `-showstats`: cut to the board once a robot career is worth looking at (screenshots).
+        if Self.showStatsForScreenshots, machine.beat == .windup, machine.tally.pitches >= 12 {
+            Self.showStatsForScreenshots = false
+            showStats()
+            return
+        }
+        #endif
         let flash = transitions.contains(.flash)
         for transition in transitions {
             switch transition {
@@ -68,12 +103,18 @@ final class GameController {
     /// `DerbyMachine.slice` itself ignores calls made outside `.pitch`.
     func recordSlice(_ crossing: SliceCrossing) {
         machine.slice(crossing)
+        persist()
     }
 
     /// `DerbyMachine.sliceMissed` itself ignores calls made outside `.pitch`.
     func recordMissedSlice() {
         machine.sliceMissed()
+        persist()
     }
+
+    #if DEBUG
+    private static var showStatsForScreenshots = ProcessInfo.processInfo.arguments.contains("-showstats")
+    #endif
 
     /// The ball's position at a given pitch progress, for `Contact.test`'s `ballAt` closure
     /// and for building miss/call markers.

@@ -11,18 +11,25 @@ Every number in it is a named knob in `Core/`; §12 lists them.
 Desert Golfing's restraint pointed at a batter's box. You stand in, the pitch comes, you slice
 through it Fruit Ninja style, the frame freezes on your slash, and the view cuts to a wide shot
 where the ball flies with real drag and the distance ticks up under it. No outs, no menus, no
-timers. Parks are seeded and endless. The score is total feet, forever.
+timers. Parks are seeded and endless. The score is how deep you are and how many pitches it took,
+forever.
 
 **Pillars**
 
 1. **One gesture.** A slice. Its direction is the swing angle, its speed is the power. Nothing else
    is ever asked of the player. No buttons.
-2. **Two cameras, one edit.** At-bat view for the pitch, wide view for the flight. The only cut in
-   the game is contact → flight, and it is always a hard cut.
+2. **Three cameras, hard cuts only.** At-bat for the pitch; wide as the ball leaves the bat; close
+   on the wall as the ball gets there; back out to wide when it lands, for the number over the
+   whole arc. Every change is a hard cut. Nothing ever tweens, zooms or scrolls: the hardware this
+   imitates could not scale. (Was "two cameras, one edit" until 2026-09-19; the close camera exists
+   because a 6 ft wall is 4 px in the wide view.)
 3. **Sixteen colours.** One Genesis palette line, 320×224 design space, integer scaling, no
    anti-aliasing, dither only in the sky.
-4. **Never punished, only counted.** A miss brings the next pitch. The only number that matters is
-   feet, and it never resets.
+4. **Never punished, only counted.** A miss brings the next pitch. Nothing ever stops or resets the
+   game. What is counted is the point: the headline is `PARK n · PITCHES` (progress and what it
+   cost, Desert Golfing's strokes), the short game is the **home run streak** (the one number that
+   can go back to 0), and everything else is on the stats board (§10). Decided 2026-09-19; total
+   feet was the original score and is now one stat among many.
 
 **Why this and not the market:** every existing hitting game (Flick Home Run!, Baseball Boy!,
 Homerun Clash, the MLB app) wraps a simple input in upgrades, ads, modes or seasons. Nothing
@@ -56,7 +63,7 @@ games) were bolt-ons inside full sims. The bare loop is open.
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
 | 3 | **contact** | at-bat | 0.35 s | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
-| 4 | **flight** | wide | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. |
+| 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
@@ -64,7 +71,8 @@ A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. I
 progress at that moment it resolves as a miss with markers; otherwise it is a called strike or
 ball. Taken pitches count as pitches. Only contact counts as a hit.
 
-State machine (`DerbyMachine`): six beats, one camera-changing edge, no knowledge of nodes.
+State machine (`DerbyMachine`): six beats, one scene-changing edge (contact → flight; the wide and
+close framings are one scene and `flightCamera` picks between them), no knowledge of nodes.
 
 ```
 windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.35s─▶ flight ─playback ends─▶ result
@@ -170,6 +178,13 @@ number centred at y = 52 in the 5×7 face at 3×; `HR` below it, blinking at 3 H
 Wider phones extend the sky and grass to the edges; the wall and readouts anchor to the right and
 left edges respectively.
 
+**Close view.** The same side view at 2× the wide scale, fixed (it does not follow the ball
+sideways), wall 55 % of the way across so the ball cuts in about a quarter of the way in. The sky
+never moves; if the ball would leave the top, the ground drops out of frame instead (24 px of
+headroom). 6 px ball with its highlight pixel and a `shade` shadow on the grass; grass stripes and
+foot ticks are drawn in world space, so they are twice as wide. Same readouts and distance ticker.
+The batter is a stamp, not scaled art, and is off screen here.
+
 **Night parks.** Sky swaps per `docs/palette.md`, 40 fixed stars, a light tower behind the wall.
 
 ## 9. Art
@@ -196,9 +211,31 @@ left edges respectively.
 - Park N is a pure function of N (SplitMix64 seeded by N). Park 1 is always 380 ft / 10 ft, day.
   Park N ≥ 2: wall 330–410 ft, height 6–26 ft, night with p = 0.25. Wind is reserved for later.
 - A home run advances to the next park at the end of the result hold. Anything else stays.
-- Tally: pitches, hits, home runs, longest, **total feet**. Total feet is the score and never
-  resets. Persist on every change. Game Center: total feet and longest.
-- No sessions, no lives, no daily anything.
+- **Headline:** `PARK n  p PITCHES`, top-left of the at-bat view. Pitches are the cost and never
+  reset.
+- **Home run streak:** consecutive home runs. Shown under the headline from 2 up (hidden during
+  the contact freeze, which would spoil the cut) and under `HR` in the wide view. A whiff, a called
+  strike or any contact that is not a home run sets it to 0. Taking a ball keeps it
+  (`StatRules.takenBallKeepsStreak`): plate discipline is a skill, and balls carry a contact penalty.
+  Best streak persists.
+- **Tally** (`Tally`, a keyed bag of `Stat`s, so old saves load in new builds): count everything,
+  Rocket League style. Pitches, parks cleared, fewest pitches to clear a park, time at the plate;
+  swings, whiffs, called strikes, balls taken, chases; hits, barrels, average and best exit velo,
+  average launch angle, grounders / liners / fly balls / pop-ups, off the wall; total feet,
+  longest, highest apex, longest hang; home runs, no-doubters, wall scrapers, moonshots, lasers;
+  HR and hit streaks with bests; seen / hit / HR per pitch type. Sorting rules are `StatRules`.
+- **Stats board:** tap the outfield scoreboard in the at-bat view; tap anywhere to leave. It is the
+  scoreboard up close, not a menu: nothing on it can be chosen or changed. The machine does not
+  tick while it is up, and the tap is not a swing.
+- Persist at every beat change (`UserDefaults`, one JSON blob: park number + tally). The pitch
+  sequence is not saved.
+- Game Center (M5): best HR streak, fewest pitches to park 100, and the daily card. **Not**
+  longest: exit velo is capped and flight is deterministic, so everyone reaches the same maximum.
+- **Approved 2026-09-19, not built:** a daily card (the first ten pitches of the day are seeded by
+  the date, same park and pitches for everyone, Wordle-style share string; name undecided, not
+  "Daily Ten"), a pixel-perfect **replay** clip as the share artifact (re-rendered from seed +
+  launch through `PixelCanvas`), **more park variety** (seeded landmarks and rare events, same for
+  everyone on park N), and **more feel** (M3). See issues.
 
 ## 11. Audio and haptics (M5)
 
@@ -225,6 +262,12 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `contactHold` | `Timings` | 0.35 s | the slash freeze |
 | `liftCoefficient` | `FlightParams` | 0.15 | under-rewards high spinny hits on purpose |
 | wall ranges | `Park.Rules` | 330–410 / 6–26 | park variety |
+| `closeReachFeet` / `closeLeadFeet` | `CameraRules` | 60 / 100 ft | which balls earn the close camera, and how early it cuts in |
+| `takenBallKeepsStreak` | `StatRules` | true | whether a taken ball ends the HR streak |
+| `barrelMinExitVelocity` / `barrelWindow` | `StatRules` | 98 mph / 26–30° | barrel call, window widens 1.1° a side per mph |
+| `noDoubterMarginFeet` / `wallScraperMarginFeet` | `StatRules` | 50 / 12 | how far past the wall a HR landed |
+| `moonshotApexFeet` / `laserMaxAngle` | `StatRules` | 150 ft / 20° | the other two HR kinds |
+| `lineDriveFrom` / `flyBallFrom` / `popUpFrom` | `StatRules` | 10° / 25° / 50° | Statcast batted-ball classes |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.

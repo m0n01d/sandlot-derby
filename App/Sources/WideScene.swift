@@ -1,16 +1,47 @@
 import SpriteKit
 import DerbyCore
 
-/// The flight camera: side view, the batted ball travelling with real drag, and the landing
-/// number. A port of the prototype's `drawWide` (prototypes/03-camera-cut-and-slice.html
-/// ~L426-455), minus the parts of that function that only existed for the "wide only" debug
-/// camera (pitch/miss drawing), which this build never shows here — the at-bat camera owns
-/// those beats.
+/// The two flight cameras, side on: the batted ball travelling with real drag, and the landing
+/// number. `DerbyMachine.flightCamera` says which framing is up; this scene only draws it, and
+/// the change between them is a hard cut (the framing simply differs from one frame to the next).
+///
+/// The wide framing is a port of the prototype's `drawWide` (prototypes/03-camera-cut-and-
+/// slice.html ~L426-455), minus its "wide only" debug drawing of the pitch and the miss.
 final class WideScene: CanvasScene {
-    /// View starts 24 ft behind the plate; `s` is px-per-foot, uniform, derived from the
-    /// canvas width so wider phones see more field (DESIGN.md §8).
-    private let viewLeftFeet = -24.0
     private let groundY = 176.0
+    /// Wide: the view starts 24 ft behind the plate (DESIGN.md §8).
+    private let wideLeftFeet = -24.0
+    /// Close: this many times the wide scale, with the wall this far across the screen.
+    private let closeScale = 2.0
+    private let closeWallAt = 0.55   // the ball cuts in about a quarter of the way across, clear of the island
+    /// Close: the ground drops out of frame rather than let the ball leave the top.
+    private let closeHeadroom = 24.0
+
+    /// World feet → canvas pixels for one frame.
+    private struct Framing {
+        let scale: Double       // px per foot
+        let originX: Double     // canvas x of 0 ft
+        let ground: Double      // canvas y of 0 ft
+        func x(_ feet: Double) -> Double { originX + feet * scale }
+        func y(_ feet: Double) -> Double { ground - feet * scale }
+    }
+
+    private func framing(_ machine: DerbyMachine, width: Double) -> (Framing, FlightCamera, Double) {
+        // The field starts inside the safe area so the batter isn't under the Dynamic Island;
+        // sky and grass still run edge to edge.
+        let wideScale = min((width - safeLeft - safeRight) / 584, 170.0 / 230.0)
+        let camera = machine.flightCamera
+        switch camera {
+        case .wide:
+            return (Framing(scale: wideScale, originX: safeLeft - wideLeftFeet * wideScale, ground: groundY), camera, 1)
+        case .close:
+            let s = wideScale * closeScale
+            let ballUp = (machine.playbackPoint?.yFeet ?? 0) * s
+            let lift = max(0, closeHeadroom - (groundY - ballUp))
+            let originX = width * closeWallAt - machine.park.wallDistanceFeet * s
+            return (Framing(scale: s, originX: originX, ground: groundY + lift), camera, closeScale)
+        }
+    }
 
     override func render(into canvas: PixelCanvas) {
         guard let controller else { return }
@@ -18,47 +49,36 @@ final class WideScene: CanvasScene {
         let scheme = Palette.scheme(isNight: machine.park.isNight)
         let H = 224.0
         let fullWidth = Double(canvas.width)
-        // The field starts inside the safe area so the batter isn't under the Dynamic Island;
-        // sky and grass still run edge to edge.
-        let s = min((fullWidth - safeLeft - safeRight) / 584, 170.0 / 230.0)
-        func sx(_ feet: Double) -> Double { safeLeft + (feet - viewLeftFeet) * s }
-        func sy(_ feet: Double) -> Double { groundY - feet * s }
+        let (view, camera, zoom) = framing(machine, width: fullWidth)
+        let ground = view.ground
 
+        // The sky is infinitely far away: it never moves, whatever the camera does.
         canvas.rect(0, 0, fullWidth, H, scheme.sky1)
         canvas.rect(0, 70, fullWidth, 60, scheme.sky2)
-        canvas.rect(0, 130, fullWidth, groundY - 130, scheme.sky3)
+        canvas.rect(0, 130, fullWidth, max(0, ground - 130), scheme.sky3)
         canvas.dither(0, 66, fullWidth, 8, scheme.sky1, scheme.sky2)
         canvas.dither(0, 126, fullWidth, 8, scheme.sky2, scheme.sky3)
 
-        canvas.rect(0, groundY, fullWidth, H - groundY, Palette.grassA)
-        var gx = 0.0
-        while gx < fullWidth { canvas.rect(gx, groundY, 12, H - groundY, Palette.grassB); gx += 24 }
+        // Grass, striped in world space so the stripes are wider up close.
+        canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
+        let stripe = 12 * zoom
+        var gx = view.x(0).truncatingRemainder(dividingBy: stripe * 2) - stripe * 2
+        while gx < fullWidth { canvas.rect(gx, ground, stripe, H - ground, Palette.grassB); gx += stripe * 2 }
 
-        let wallX = sx(machine.park.wallDistanceFeet)
-        let wallH = machine.park.wallHeightFeet * s
-        canvas.rect(wallX, groundY - wallH, fullWidth - wallX, wallH, Palette.wall)
-        canvas.rect(wallX, groundY - wallH, fullWidth - wallX, 1, Palette.chalk)
-        canvas.rect(wallX, groundY - wallH - 1, 2, wallH + 1, Palette.chalk)
-        canvas.t3(wallX + 6, groundY - wallH + 3, "\(Int(machine.park.wallDistanceFeet))", Palette.score)
+        let wallX = view.x(machine.park.wallDistanceFeet)
+        let wallH = machine.park.wallHeightFeet * view.scale
+        canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, Palette.wall)
+        canvas.rect(wallX, ground - wallH, fullWidth - wallX, 1, Palette.chalk)
+        canvas.rect(wallX, ground - wallH - 1, 2, wallH + 1, Palette.chalk)
+        // On the wall when it is tall enough to carry a 5 px face, above it when it is not.
+        let wallLabelY = wallH >= 11 ? ground - wallH + 3 : ground - wallH - 8
+        canvas.t3(wallX + 6, wallLabelY, "\(Int(machine.park.wallDistanceFeet))", Palette.score)
 
         var f = 100.0
-        while sx(f) < fullWidth { canvas.rect(sx(f), groundY, 1, 4, Palette.chalk); f += 100 }
+        while view.x(f) < fullWidth { canvas.rect(view.x(f), ground, zoom, 4 * zoom, Palette.chalk); f += 100 }
 
-        canvas.rect(sx(-8), groundY, 16 * s * 2, 5, Palette.dirt)
-
-        let bx = sx(0), by = groundY
-        let frame: Int = machine.flight != nil ? (machine.playbackIndex < 12 ? 1 : 2) : 0
-        canvas.rect(bx - 5, by - 14, 4, 14, Palette.ink)
-        canvas.rect(bx + 1, by - 14, 4, 14, Palette.ink)
-        canvas.rect(bx - 5, by - 30, 10, 16, Palette.ink)
-        canvas.rect(bx - 3, by - 40, 7, 10, Palette.skin)
-        canvas.rect(bx - 4, by - 42, 8, 3, Palette.cap)
-        canvas.rect(bx - 4, by - 38, 10, 2, Palette.cap)
-        switch frame {
-        case 0: canvas.line(bx + 3, by - 26, bx - 4, by - 50, Palette.bat, thickness: 2)
-        case 1: canvas.line(bx + 4, by - 26, bx + 24, by - 24, Palette.bat, thickness: 2)
-        default: canvas.line(bx - 8, by - 30, bx - 22, by - 46, Palette.bat, thickness: 2)
-        }
+        canvas.rect(view.x(-8), ground, 16 * view.scale * 2, 5, Palette.dirt)
+        drawBatter(canvas, x: view.x(0), y: ground, machine: machine)
 
         if let flightResult = machine.flight, !flightResult.points.isEmpty {
             let points = flightResult.points
@@ -67,13 +87,21 @@ final class WideScene: CanvasScene {
             var k = 0
             while k < i {
                 let pt = points[k]
-                canvas.px(sx(pt.xFeet), sy(pt.yFeet) - 2, Palette.chalk)
-                k += 8
+                canvas.px(view.x(pt.xFeet), view.y(pt.yFeet) - 2, Palette.chalk)
+                k += camera == .close ? 4 : 8
             }
             let b = points[i]
-            let X = sx(b.xFeet), Y = sy(b.yFeet) - 3
-            canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
-            canvas.px(X, Y, scheme.sky3)
+            let X = view.x(b.xFeet), Y = view.y(b.yFeet) - 3
+            switch camera {
+            case .wide:
+                canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
+                canvas.px(X, Y, scheme.sky3)
+            case .close:
+                // The 6 px ball with its one highlight pixel (DESIGN.md §9), and its shadow.
+                canvas.rect(X - 3, ground + 1, 6, 2, Palette.shade)
+                canvas.disc(X, Y, 3, Palette.chalk)
+                canvas.px(X - 1, Y - 1, scheme.sky3)
+            }
 
             if let launch = machine.launch {
                 canvas.t3(8, 8, "\(Int(launch.exitVelocityMPH.rounded())) MPH", Palette.score, scale: 2)
@@ -92,6 +120,10 @@ final class WideScene: CanvasScene {
                 if flightResult.homeRun, Int(machine.elapsed * 6) % 2 == 0 {
                     canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", Palette.cap, scale: 3)
                 }
+                if flightResult.homeRun, machine.tally.homeRunStreak >= 2 {
+                    let streak = "STREAK \(machine.tally.homeRunStreak)"
+                    canvas.t3(fullWidth / 2 - Double(streak.count) * 4, 116, streak, Palette.score, scale: 2)
+                }
                 if flightResult.wallHit {
                     canvas.t3(fullWidth / 2 - 30, 90, "OFF THE WALL", Palette.chalk)
                 }
@@ -99,5 +131,21 @@ final class WideScene: CanvasScene {
         }
 
         canvas.t3(fullWidth - 42, H - 12, "PARK \(machine.park.number)", Palette.chalk)
+    }
+
+    /// A stamp, not scaled art: the same size in either framing (and off screen up close).
+    private func drawBatter(_ canvas: PixelCanvas, x bx: Double, y by: Double, machine: DerbyMachine) {
+        let frame: Int = machine.flight != nil ? (machine.playbackIndex < 12 ? 1 : 2) : 0
+        canvas.rect(bx - 5, by - 14, 4, 14, Palette.ink)
+        canvas.rect(bx + 1, by - 14, 4, 14, Palette.ink)
+        canvas.rect(bx - 5, by - 30, 10, 16, Palette.ink)
+        canvas.rect(bx - 3, by - 40, 7, 10, Palette.skin)
+        canvas.rect(bx - 4, by - 42, 8, 3, Palette.cap)
+        canvas.rect(bx - 4, by - 38, 10, 2, Palette.cap)
+        switch frame {
+        case 0: canvas.line(bx + 3, by - 26, bx - 4, by - 50, Palette.bat, thickness: 2)
+        case 1: canvas.line(bx + 4, by - 26, bx + 24, by - 24, Palette.bat, thickness: 2)
+        default: canvas.line(bx - 8, by - 30, bx - 22, by - 46, Palette.bat, thickness: 2)
+        }
     }
 }
