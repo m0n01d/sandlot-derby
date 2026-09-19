@@ -1,0 +1,486 @@
+<title>Sandlot Derby Camera Cut</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Oswald:wght@500;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F2F0E8; --paper:#FFFFFF; --ink:#1A1C22; --ink-2:#4A4D55; --ink-3:#7B7E86; --line:#D8D5CB;
+  --accent:#CC2222; --accent-2:#228844; --code-bg:#ECE9E0;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161C; --paper:#1C1F27; --ink:#ECEAE2; --ink-2:#B8B6AE; --ink-3:#868890; --line:#2D313B;
+    --accent:#EE5555; --accent-2:#44CC66; --code-bg:#22262F;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14161C; --paper:#1C1F27; --ink:#ECEAE2; --ink-2:#B8B6AE; --ink-3:#868890; --line:#2D313B;
+  --accent:#EE5555; --accent-2:#44CC66; --code-bg:#22262F;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;padding-block:32px 64px;padding-inline:16px}
+.wrap{max-width:760px;margin:0 auto}
+.wide{max-width:1000px;margin-inline:auto}
+h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
+h1{font-family:"Press Start 2P","Courier New",monospace;font-size:clamp(20px,4.2vw,34px);letter-spacing:.02em;line-height:1.35}
+h2{font-family:"Oswald","Arial Narrow",sans-serif;font-size:28px;font-weight:500;margin-top:56px;margin-bottom:12px;padding-top:12px;border-top:3px solid var(--accent)}
+h3{font-family:"Oswald",sans-serif;font-size:19px;font-weight:500;margin-top:24px;margin-bottom:8px}
+p{margin:0 0 14px;max-width:66ch}
+ul,ol{padding-left:22px;margin:0 0 14px;max-width:66ch} li{margin-bottom:6px}
+a{color:var(--accent-2);text-decoration-thickness:1px;text-underline-offset:2px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+.lede{font-size:19px;color:var(--ink-2);max-width:60ch;margin-top:16px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.px{font-family:"Press Start 2P",monospace;font-size:10px;letter-spacing:.02em;line-height:1.8}
+.src{font-size:13px;color:var(--ink-3)} .src a{color:var(--ink-3)}
+canvas.pix{image-rendering:pixelated;image-rendering:crisp-edges;display:block;max-width:100%;height:auto}
+.study{background:var(--paper);border:1px solid var(--line);padding:14px;margin:18px 0}
+.study .cap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:13.5px;color:var(--ink-2)}
+.study .cap .px{color:var(--ink-3);font-size:8px}
+.screen{background:#000;display:flex;justify-content:center;touch-action:none;cursor:crosshair}
+#game{width:960px;max-width:100%}
+.opts{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center;font-size:13px;margin:10px 0 0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{background:none;border:0;padding:5px 12px;font:inherit;font-size:13px;color:var(--ink-2);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.opts label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;background:var(--code-bg)}
+figure{margin:20px 0 26px} figure svg{max-width:100%;height:auto;display:block;color:var(--ink)}
+figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:66ch}
+.pro{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);margin:14px 0 20px}
+.pro>div{background:var(--paper);padding:12px 14px;font-size:14px}
+.pro>div b{display:block;font-family:"Press Start 2P",monospace;font-size:8.5px;margin-bottom:6px;line-height:1.6}
+.pro .up b{color:var(--accent-2)} .pro .down b{color:var(--accent)}
+@media (max-width:600px){.pro{grid-template-columns:1fr}}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:12px 0 20px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tscroll{overflow-x:auto;margin:12px 0 20px} .tscroll table{min-width:560px;margin:0}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Design note &middot; 19 Sep 2026 &middot; follows the research note and the mood board</div>
+  <h1>THE CAMERA CUT</h1>
+  <p class="lede">Two cameras: an at-bat view where the pitch comes at you and you react, then a hard cut to the wide view for the flight, with the numbers. This is not a new idea, it is the classic derby structure, and that is the strongest argument for it. The prototype below lets you feel it against the single-camera version.</p>
+</div>
+
+<div class="wrap">
+  <h2>1. The precedent is exactly this</h2>
+  <p>World Series Baseball ’94 on Genesis ran its Home Run Derby from the catcher’s-eye view for the pitch and cut to a field view once the ball was hit. The Griffey SNES games did the same with a tighter batter cam. Flick Home Run!, the closest modern analogue, is the at-bat view only and never cuts, which is why its flights feel like a number rather than an event. So the two-camera design is the traditional one, and the one-camera side view was the Desert Golfing-flavoured departure.</p>
+
+  <div class="pro">
+    <div class="up"><b>WHAT THE CUT BUYS</b>The pitch becomes real input. Reaction, not aim. A 100 mph exit velocity earned by timing feels like hitting; a drag vector feels like launching.</div>
+    <div class="up"><b>A MOMENT OF CONTACT</b>Every 16-bit sports game had a hitstop: a freeze, a flash, then the cut. Here the freeze shows your slash through the ball and the swing angle it made, so that beat is literally where the game lives. The wide view alone never gets it.</div>
+    <div class="down"><b>WHAT IT COSTS</b>A second scene, a pitcher sprite with a windup, a batter from a second angle, and the ball drawn at four sizes. Roughly doubles the art, still tiny.</div>
+    <div class="down"><b>THE MINIMALISM TAX</b>Desert Golfing never cut. A cut is an edit, and edits are a voice. It is fine as long as the cut is always the same, always instant, and never a transition effect.</div>
+  </div>
+
+  <h2>2. Storyboard</h2>
+  <figure>
+    <svg viewBox="0 0 760 250" role="img" aria-label="Storyboard of one pitch in five beats: windup in the at-bat view, pitch arriving, contact with a two-frame freeze, hard cut to the wide view with the ball in flight and live readouts, then the landing number and a return to the at-bat view. Each beat carries its duration.">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <g>
+        <rect x="10" y="30" width="130" height="92" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <rect x="10" y="30" width="130" height="30" fill="currentColor" opacity=".12"/>
+        <circle cx="75" cy="62" r="4" fill="currentColor"/><rect x="72" y="66" width="6" height="12" fill="currentColor"/>
+        <rect x="24" y="82" width="12" height="38" fill="currentColor"/><line x1="36" y1="90" x2="52" y2="70" stroke="currentColor" stroke-width="3"/>
+        <text x="75" y="140" font-size="11" text-anchor="middle" fill="currentColor" font-weight="600">1 · Windup</text>
+        <text x="75" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">at-bat view · 0.5 s</text>
+        <text x="75" y="170" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">pitcher sprite, 3 frames</text>
+      </g>
+      <line x1="142" y1="76" x2="158" y2="76" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <g>
+        <rect x="162" y="30" width="130" height="92" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <rect x="162" y="30" width="130" height="30" fill="currentColor" opacity=".12"/>
+        <circle cx="227" cy="62" r="3" fill="currentColor"/><rect x="224" y="66" width="6" height="12" fill="currentColor"/>
+        <circle cx="236" cy="78" r="2" fill="#EEEEEE" stroke="currentColor"/><circle cx="242" cy="92" r="4" fill="#EEEEEE" stroke="currentColor"/>
+        <rect x="176" y="82" width="12" height="38" fill="currentColor"/><line x1="188" y1="90" x2="204" y2="70" stroke="currentColor" stroke-width="3"/>
+        <rect x="232" y="84" width="20" height="26" fill="none" stroke="currentColor" stroke-dasharray="2 2"/>
+        <text x="227" y="140" font-size="11" text-anchor="middle" fill="currentColor" font-weight="600">2 · Pitch</text>
+        <text x="227" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">ball grows 2 → 8 px · 0.6 s</text>
+        <text x="227" y="170" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">player slices through it</text>
+      </g>
+      <line x1="294" y1="76" x2="310" y2="76" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <g>
+        <rect x="314" y="30" width="130" height="92" fill="#EEEEEE" stroke="#CC2222" stroke-width="2"/>
+        <rect x="328" y="82" width="12" height="38" fill="#1A1C22"/><line x1="340" y1="98" x2="380" y2="96" stroke="#1A1C22" stroke-width="3"/>
+        <circle cx="384" cy="96" r="4" fill="#EEEEEE" stroke="#1A1C22"/>
+        <text x="379" y="140" font-size="11" text-anchor="middle" fill="#CC2222" font-weight="600">3 · Contact</text>
+        <text x="379" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">slice crosses the ball</text>
+        <text x="379" y="170" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">freeze 0.35 s, show swing angle</text>
+      </g>
+      <line x1="446" y1="76" x2="462" y2="76" stroke="#CC2222" stroke-width="2" marker-end="url(#ar)"/>
+      <text x="454" y="66" font-size="9" text-anchor="middle" fill="#CC2222" font-weight="600">CUT</text>
+      <g>
+        <rect x="466" y="30" width="130" height="92" fill="none" stroke="#228844" stroke-width="2"/>
+        <rect x="466" y="100" width="130" height="22" fill="#228844" opacity=".35"/>
+        <rect x="474" y="86" width="5" height="14" fill="currentColor"/>
+        <path d="M480 90 Q 530 30 585 96" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <circle cx="548" cy="52" r="3" fill="#EEEEEE" stroke="currentColor"/>
+        <rect x="580" y="92" width="4" height="8" fill="#228844"/>
+        <text x="472" y="44" font-size="7" fill="currentColor" font-family="IBM Plex Mono, monospace">104 MPH 27°</text>
+        <text x="531" y="140" font-size="11" text-anchor="middle" fill="#228844" font-weight="600">4 · Flight</text>
+        <text x="531" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">wide view · 2 to 5 s at 1×</text>
+        <text x="531" y="170" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">velo, angle, live distance</text>
+      </g>
+      <line x1="598" y1="76" x2="614" y2="76" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <g>
+        <rect x="618" y="30" width="130" height="92" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <rect x="618" y="100" width="130" height="22" fill="#228844" opacity=".35"/>
+        <text x="683" y="80" font-size="18" text-anchor="middle" fill="currentColor" font-family="Press Start 2P, monospace">412 FT</text>
+        <text x="683" y="140" font-size="11" text-anchor="middle" fill="currentColor" font-weight="600">5 · Result</text>
+        <text x="683" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">hold 1 s · HR flash</text>
+        <text x="683" y="170" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">then cut back to 1</text>
+      </g>
+      <path d="M683 180 L683 215 L75 215 L75 180" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+      <text x="379" y="232" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".8">one pitch ≈ 4 to 7 s · the loop never leaves these five beats</text>
+    </svg>
+    <figcaption>One pitch in five beats. The only edit in the whole game is beat 3 to beat 4, and it always happens at the same moment: the frame after contact. A strike, a ball, or a tap that misses the ball skips 3, 4 and 5 and goes straight back to windup. There are no outs.</figcaption>
+  </figure>
+
+  <h2>3. Prototype</h2>
+  <p>Both cameras, 320×224, the mood board palette. The pitcher mixes fastballs, changeups and curves, and misses the zone about a third of the time. The zone is oversized for thumbs. <strong>Slice through the ball, Fruit Ninja style.</strong> Drag a line; if it passes through the ball as it arrives, that is contact. The direction of your slice is the swing angle and becomes the launch angle, its speed is the power. A slice that misses, a strike, or a ball just brings the next pitch, and nothing is ever an out. Toggle to <em>wide only</em> to feel what the cut adds. Flight physics is the same calibrated model as the research note.</p>
+</div>
+<div class="wide">
+  <div class="study">
+    <div class="screen"><canvas id="game" class="pix" width="320" height="224" aria-label="Playable prototype. At-bat view: a pitch comes toward you, tap or flick to swing. On contact the view cuts to a wide side view showing the flight with exit velocity, angle, and a live distance counter."></canvas></div>
+    <div class="opts">
+      <div class="seg" role="group" aria-label="Camera"><button id="camTwo" aria-pressed="true">Two cameras</button><button id="camWide" aria-pressed="false">Wide only</button></div>
+            <div class="seg" role="group" aria-label="Flight speed"><button id="sp1" aria-pressed="false">1×</button><button id="sp2" aria-pressed="true">2×</button></div>
+            <span id="hint" style="color:var(--ink-2)">Slice through the ball as it arrives. Slice upward for loft, flat for a liner. Faster is harder. <kbd>space</kbd> = a medium 27° slice through the ball.</span>
+    </div>
+    <div class="cap"><span id="stats">Session: 0 pitches · 0 hits · 0 HR · longest —</span><span class="px">PROTOTYPE 01</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>4. What the prototype settles</h2>
+  <ul>
+    <li><strong>Slice through the ball.</strong> Every finger movement is tested as a line segment against where the ball is, with a nine-pixel margin and 120 ms of lag forgiveness. The first segment that crosses the ball is contact. The swing angle is the direction from where the drag started to the crossing point, so the whole stroke counts, not the last wobble. Slice upward for loft, flat for a line drive, downward and you top it into the ground. Power is finger speed at the crossing, with drag length as a floor, and it is blended 40/60 with how close to centre the slice passed.</li>
+    <li><strong>Misses explain themselves.</strong> A slice that misses freezes the frame and draws your actual trail with speed lines at its closest point, a pulsing ring where the ball actually was, a dashed line between them and a label such as <span class="px" style="font-size:8px">HIGH OUT 7 IN</span> or <span class="px" style="font-size:8px">EARLY</span>. A called strike or ball shows the ring at the plate so you see what you took. Inches are real: the 8-pixel ball is 2.9 inches. This is the Fruit Ninja lesson: the miss has to be legible on the object, not on a meter.</li>
+    <li><strong>It is still one gesture, and now it is a familiar one.</strong> This is Fruit Ninja’s verb pointed at a pitch. Nobody needs the tutorial. The only thing Fruit Ninja never had is that the slice has a direction that matters, and the freeze frame exists to show it: a slash through the ball, the angle, and the power, for 0.35 s before the cut.</li>
+    <li><strong>The cut must be instant.</strong> Any wipe or zoom turns a hit into a cutscene. The freeze ends on release, then one white frame and a hard cut.</li>
+    <li><strong>Real-time flight is too slow.</strong> A 450 ft ball is in the air for over five seconds. Every classic derby sped this up or cut early. 2× feels right; 1× is in the prototype for comparison.</li>
+    <li><strong>The wide view is the scoreboard.</strong> Velocity and angle appear the frame after the cut, distance ticks up under the ball, the final number lands big. No separate results screen is needed, which keeps the no-menus rule intact.</li>
+    <li><strong>Misses go straight back.</strong> A swing and miss never cuts. That asymmetry is what makes the cut feel like a reward rather than a scene change.</li>
+  </ul>
+
+  <h2>5. Cost in sprites</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>Asset</th><th>View</th><th>Size</th><th>Frames</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>Pitcher</td><td>at-bat</td><td class="num">12×24</td><td class="num">3</td><td>set, leg kick, release. Small because he is 60 ft away.</td></tr>
+      <tr><td>Batter, rear three-quarter</td><td>at-bat</td><td class="num">32×56</td><td class="num">3</td><td>stance, contact, follow-through. The big one.</td></tr>
+      <tr><td>Batter, side</td><td>wide</td><td class="num">32×48</td><td class="num">2</td><td>contact hold, follow-through. From the mood board.</td></tr>
+      <tr><td>Ball</td><td>both</td><td class="num">2 to 8 px</td><td class="num">4 sizes</td><td>no rotation, one highlight pixel at 6 px and up.</td></tr>
+      <tr><td>Strike zone, plate, mound</td><td>at-bat</td><td class="num">—</td><td class="num">static</td><td>rectangles.</td></tr>
+      <tr><td>Pitch types</td><td>at-bat</td><td class="num">—</td><td class="num">0</td><td>fastball, changeup, curve. A table of speed, drop and drift; no art at all.</td></tr>
+      <tr><td>Park</td><td>both</td><td class="num">—</td><td class="num">static</td><td>wall distance, height, night flag. Same three numbers drive both views.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Eleven drawn frames in total. Desert Golfing shipped with fewer, but this is still a weekend of pixel art, not a month.</p>
+
+  <h2>6. In Swift</h2>
+  <p>Two <code>SKScene</code> subclasses, or one scene with two root nodes and a hidden flag, both driven by the same pure state machine. The cut is <code>SKView.presentScene(_:)</code> with no transition argument. The state machine has exactly the five beats from the storyboard, plus <em>miss</em>. It knows nothing about nodes, which keeps it unit-testable like the Flight module.</p>
+  <figure>
+    <svg viewBox="0 0 720 150" role="img" aria-label="State machine with six states: windup, pitch, contact, flight, result, and miss. Pitch goes to contact on a timed swing or to miss on a late or missed swing. Contact goes to flight, flight to result, result back to windup. Miss goes back to windup. Only the contact to flight edge changes the camera.">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <g font-size="12" text-anchor="middle" fill="currentColor">
+        <rect x="20" y="40" width="100" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><text x="70" y="63">windup</text>
+        <rect x="160" y="40" width="100" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><text x="210" y="63">pitch</text>
+        <rect x="300" y="40" width="100" height="36" rx="3" fill="none" stroke="#CC2222" stroke-width="2"/><text x="350" y="63">contact</text>
+        <rect x="440" y="40" width="100" height="36" rx="3" fill="none" stroke="#228844" stroke-width="2"/><text x="490" y="63">flight</text>
+        <rect x="580" y="40" width="100" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/><text x="630" y="63">result</text>
+        <rect x="160" y="105" width="100" height="32" rx="3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/><text x="210" y="126">miss</text>
+      </g>
+      <line x1="120" y1="58" x2="158" y2="58" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <line x1="260" y1="58" x2="298" y2="58" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <text x="279" y="50" font-size="9" text-anchor="middle" fill="currentColor">slice through ball</text>
+      <line x1="400" y1="58" x2="438" y2="58" stroke="#CC2222" stroke-width="2" marker-end="url(#ar2)"/>
+      <text x="419" y="48" font-size="9" text-anchor="middle" fill="#CC2222" font-weight="600">camera cut</text>
+      <line x1="540" y1="58" x2="578" y2="58" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <path d="M630 76 L630 92 L70 92 L70 78" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <text x="350" y="88" font-size="9" text-anchor="middle" fill="currentColor">camera back, new park seed if HR</text>
+      <line x1="210" y1="76" x2="210" y2="103" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <text x="252" y="94" font-size="9" fill="currentColor">slice misses, or no slice</text>
+      <path d="M160 121 L70 121 L70 78" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+    </svg>
+    <figcaption>Six states, one camera-changing edge. Contact holds for 0.35 s to show the slash and the swing angle, then cuts. Everything the two scenes need to draw is derivable from the current state plus the flight path, so neither scene owns any game state.</figcaption>
+  </figure>
+</div>
+
+<script>
+(function(){
+  const P={sky1:'#4466CC',sky2:'#66AAEE',sky3:'#AACCEE',grassA:'#22AA44',grassB:'#228844',wall:'#226644',dirt:'#CC8844',dirtD:'#AA6622',chalk:'#EEEEEE',ink:'#222244',skin:'#EEAA88',cap:'#CC2222',bat:'#AA8844',score:'#EEDD22',shade:'#116633'};
+  const cv=document.getElementById('game'); const c=cv.getContext('2d'); c.imageSmoothingEnabled=false;
+  const W=320,H=224;
+  const px=(x,y,col)=>{c.fillStyle=col;c.fillRect(x|0,y|0,1,1);};
+  const rect=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(x|0,y|0,w|0,h|0);};
+  function line(x0,y0,x1,y1,col,t){ t=t||1; x0|=0;y0|=0;x1|=0;y1|=0; let dx=Math.abs(x1-x0),sx=x0<x1?1:-1,dy=-Math.abs(y1-y0),sy=y0<y1?1:-1,err=dx+dy; for(;;){ for(let i=0;i<t;i++)for(let j=0;j<t;j++)px(x0+i-(t>>1),y0+j-(t>>1),col); if(x0===x1&&y0===y1)break; const e2=2*err; if(e2>=dy){err+=dy;x0+=sx;} if(e2<=dx){err+=dx;y0+=sy;} } }
+  function disc(cx,cy,r,col){ for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++) if(x*x+y*y<=r*r+r*0.5) px(cx+x,cy+y,col); }
+  function dither(x,y,w,h,a,b){ for(let j=0;j<h;j++)for(let i=0;i<w;i++) px(x+i,y+j,((i+j)&1)?a:b); }
+  const F3={'0':'111101101101111','1':'010110010010111','2':'111001111100111','3':'111001111001111','4':'101101111001001','5':'111100111001111','6':'111100111101111','7':'111001001001001','8':'111101111101111','9':'111101111001111','F':'111100110100100','T':'111010010010010','H':'101101111101101','R':'110101110101101','P':'110101110100100','A':'010101111101101','K':'101110100110101','M':'101111111101101','D':'110101101101110','E':'111100111100111','G':'111100101101111','S':'111100111001111','I':'111010010010111','N':'110101101101101','W':'101101101111101','L':'100100100100111','O':'111101101101111','U':'101101101101111','C':'111100100100111','B':'110101110101110','V':'101101101101010','Y':'101101010010010',' ':'000000000000000'};
+  function t3(x,y,s,col,sc){ sc=sc||1; for(const ch of s){ const m=F3[ch]||F3[' ']; for(let j=0;j<5;j++)for(let i=0;i<3;i++) if(m[j*3+i]==='1') rect(x+i*sc,y+j*sc,sc,sc,col); x+=4*sc; } }
+  const F5={'0':'01110100011000110001100011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111','3':'11111000100010000010000011000101110','4':'00010001100101010010111110001000010','5':'11111100001111000001000011000101110','6':'00110010001000011110100011000101110','7':'11111000010001000100010000100001000','8':'01110100011000101110100011000101110','9':'01110100011000101111000010001001100','F':'11111100001000011110100001000010000','T':'11111001000010000100001000010000100','H':'10001100011000111111100011000110001','R':'11110100011000111110101001001010001',' ':'00000000000000000000000000000000000'};
+  function t5(x,y,s,col,sc){ sc=sc||1; for(const ch of s){ const m=F5[ch]||F5[' ']; for(let j=0;j<7;j++)for(let i=0;i<5;i++) if(m[j*5+i]==='1') rect(x+i*sc,y+j*sc,sc,sc,col); x+=6*sc; } }
+
+  // ---- flight physics (feet in, feet out) ----
+  const K=0.0174,G=9.81,FT=3.28084,MPH=0.44704;
+  function simulate(v_mph,deg,wallX,wallH){
+    let v=v_mph*MPH,th=deg*Math.PI/180,x=0,y=1.0,vx=v*Math.cos(th),vy=v*Math.sin(th);
+    const dt=1/240,pts=[]; let t=0,wallHit=false,hr=false,dist=null,apex=0;
+    while(t<12){ const s=Math.hypot(vx,vy); const ax=-K*0.33*s*vx-K*0.15*s*vy, ay=-G-K*0.33*s*vy+K*0.15*s*vx; const prevXf=x*FT;
+      vx+=ax*dt;vy+=ay*dt;x+=vx*dt;y+=vy*dt;t+=dt; const xf=x*FT,yf=y*FT; if(yf>apex)apex=yf;
+      if(prevXf<wallX&&xf>=wallX){ if(yf<wallH){wallHit=true;vx=-vx*0.35;x=(wallX-0.1)/FT;} else if(dist===null) hr=true; }
+      if(y<0){ y=0; if(dist===null)dist=Math.max(0,xf); vy=-vy*0.4; vx*=0.75; if(Math.abs(vy)<0.5)vy=0; }
+      if(y===0&&vy===0){ vx*=0.985; if(Math.abs(vx)<0.3)break; }
+      pts.push([x*FT,y*FT,t]); }
+    if(dist===null)dist=Math.max(0,x*FT);
+    return {pts,dist,wallHit,hr,apex};
+  }
+
+  // ---- pitch model ----
+  // zone in at-bat screen space (generous for thumbs)
+  const Z={x:150,y:136,w:40,h:50};
+  const TYPES=[
+    {name:'FASTBALL',  spd:[92,99], breakY:0,   breakX:0,  w:0.45},
+    {name:'CHANGEUP',  spd:[74,82], breakY:6,   breakX:0,  w:0.25},
+    {name:'CURVE',     spd:[76,84], breakY:22,  breakX:-8, w:0.30}
+  ];
+  function pickType(){ let r=Math.random(); for(const t of TYPES){ if(r<t.w)return t; r-=t.w; } return TYPES[0]; }
+  function newPitch(){
+    const ty=pickType(); const speed=ty.spd[0]+Math.random()*(ty.spd[1]-ty.spd[0]);
+    const strike=Math.random()<0.65;
+    // final location: inside zone or just outside
+    let tx,tyy;
+    if(strike){ tx=Z.x+4+Math.random()*(Z.w-8); tyy=Z.y+4+Math.random()*(Z.h-8); }
+    else { const side=Math.floor(Math.random()*4); const m=6+Math.random()*10;
+      if(side===0){tx=Z.x-m;tyy=Z.y+Math.random()*Z.h;} else if(side===1){tx=Z.x+Z.w+m;tyy=Z.y+Math.random()*Z.h;} else if(side===2){tx=Z.x+Math.random()*Z.w;tyy=Z.y-m;} else {tx=Z.x+Math.random()*Z.w;tyy=Z.y+Z.h+m;} }
+    pitch={type:ty,speed,strike,tx,ty:tyy,dur:0.60*(90/speed)};
+    setState('windup');
+  }
+  // ball position/radius at pitch progress p (0 release .. 1 plate)
+  const REL={x:166,y:108};
+  function ballAt(p){
+    const ty=pitch.type;
+    const x=REL.x+(pitch.tx-REL.x)*p + ty.breakX*Math.sin(p*Math.PI);
+    // base path eases down toward target; break adds a late drop (curve) or small fade (change)
+    const y=REL.y+(pitch.ty-REL.y)*p*p - ty.breakY*(1-p)*p*1.6 + ty.breakY*(p*p*p-p*p);
+    const r=p<0.3?1:p<0.6?2:p<0.85?3:4;
+    return {x,y,r};
+  }
+
+  // ---- state ----
+  const opt={two:true,flick:false,speed:2,hitstop:true};
+  let park={wall:380,wallH:10,n:7};
+  let S={name:'windup',t:0};
+  let pitch=null, flight=null, pitches=0, hits=0, hrs=0, best=0, flash=0, callText='';
+  const stats=document.getElementById('stats'), hint=document.getElementById('hint');
+  try{ best=+localStorage.getItem('sd_cam_best')||0; }catch(e){}
+  function setState(n){ S={name:n,t:0}; }
+  function updStats(){ stats.textContent='Session: '+pitches+' pitches · '+hits+' hits · '+hrs+' HR · longest '+(best?best+' ft':'—'); }
+  updStats(); newPitch();
+
+  // ---- input model: slice through the ball. Direction = swing angle, speed = power ----
+  let trail=null, fadeTrail=null, contact=null, missInfo=null;
+  const ballNow=p=>opt.two?ballAt(p):wideBall(p);
+  function segDist(ax,ay,bx,by,qx,qy){ const dx=bx-ax, dy=by-ay, l2=dx*dx+dy*dy; let t=l2?((qx-ax)*dx+(qy-ay)*dy)/l2:0; t=Math.max(0,Math.min(1,t)); return Math.hypot(qx-(ax+dx*t), qy-(ay+dy*t)); }
+  function beginSlice(pt){ trail={pts:[{x:pt.x,y:pt.y,t:performance.now()}], minD:Infinity, minBall:null, minP:null, minPt:null}; }
+  function moveSlice(pt){
+    if(!trail) return; const a=trail.pts[trail.pts.length-1], b={x:pt.x,y:pt.y,t:performance.now()}; trail.pts.push(b);
+    if(S.name!=='pitch') return;
+    const p=S.t/pitch.dur; let bestD=Infinity,bestB=null,bestP=p;
+    for(let k=0;k<=4;k++){ const pk=Math.max(0,Math.min(1.15,p-k*0.03/pitch.dur)); const bb=ballNow(pk); const d=segDist(a.x,a.y,b.x,b.y,bb.x,bb.y); if(d<bestD){bestD=d;bestB=bb;bestP=pk;} }
+    if(bestD<trail.minD){ trail.minD=bestD; trail.minBall=bestB; trail.minP=bestP; trail.minPt={x:b.x,y:b.y}; }
+    const R=bestB.r+9;
+    if(bestD>R) return;
+    const tq=Math.max(0,1-Math.abs(bestP-1)/0.28);
+    if(tq<=0) return;                                  // sliced the ball while it was still far: not contact
+    const cq=1-Math.min(1,bestD/R)*0.4;
+    let q=tq*cq; if(!pitch.strike) q*=0.8;
+    // swing angle: from where the drag started to here (falls back to the last segment for tiny drags)
+    const s0=trail.pts[0]; let dx=b.x-s0.x, dy=b.y-s0.y; if(Math.hypot(dx,dy)<12){ dx=b.x-a.x; dy=b.y-a.y; }
+    const angle=Math.max(-20,Math.min(80, Math.atan2(-dy,Math.abs(dx))*180/Math.PI));
+    // power: finger speed over the last ~80 ms, or drag length, whichever is bigger
+    let j=trail.pts.length-1; while(j>0 && b.t-trail.pts[j].t<80) j--;
+    const sp=Math.hypot(b.x-trail.pts[j].x,b.y-trail.pts[j].y)/Math.max(0.016,(b.t-trail.pts[j].t)/1000);
+    const power=Math.max(0.3, Math.min(1, Math.max(sp/520, Math.hypot(dx,dy)/(W*0.28))));
+    doContact(q,bestP,bestB,angle,power,{x:b.x,y:b.y},{x:dx,y:dy});
+  }
+  function doContact(q,p,ball,angle,power,pt,vec){
+    pitches++;
+    const v=55 + 57*(0.4*q + 0.6*power) + (pitch.type.name==='FASTBALL'?3:pitch.type.name==='CHANGEUP'?-3:0);
+    let deg=angle + (1-p)*40; deg=Math.max(-8,Math.min(70,deg));
+    const r=simulate(v,deg,park.wall,park.wallH);
+    flight={r,v,deg,i:0,power};
+    hits++; if(r.hr)hrs++;
+    const d=Math.round(r.dist); if(d>best){best=d; try{localStorage.setItem('sd_cam_best',String(best));}catch(e){}}
+    updStats();
+    const L=Math.hypot(vec.x,vec.y)||1;
+    contact={ball, pt, angle, power, dir:{x:vec.x/L,y:vec.y/L}, trailPts:trail.pts.slice(-18)};
+    fadeTrail=null; trail=null;
+    setState('contact'); flash=1;
+  }
+  function endSlice(){
+    if(!trail) return; const tr=trail; trail=null; fadeTrail={pts:tr.pts.slice(-18), t:performance.now()};
+    if(S.name!=='pitch') return;                        // swung before the pitch: nothing happens
+    pitches++; callText='MISS';
+    const pNow=Math.min(1.15,S.t/pitch.dur);
+    const early = tr.minBall ? (1-Math.abs(tr.minP-1)/0.28)<=0 : true;
+    missInfo={press: tr.minPt||tr.pts[tr.pts.length-1], ball: tr.minBall||ballNow(pNow), early, feetAway:Math.max(0,(1-(tr.minP==null?pNow:tr.minP))*60.5), trailPts:tr.pts.slice(-24)};
+    setState('miss'); updStats();
+  }
+  function drawTrail(pts,col,core,thick){ for(let i=1;i<pts.length;i++){ line(pts[i-1].x,pts[i-1].y,pts[i].x,pts[i].y,col,thick); } if(core) for(let i=Math.max(1,pts.length-6);i<pts.length;i++) line(pts[i-1].x,pts[i-1].y,pts[i].x,pts[i].y,core,1); }
+  function drawLiveTrail(){
+    if(trail && trail.pts.length>1) drawTrail(trail.pts.slice(-14),P.chalk,P.score,2);
+    if(fadeTrail){ const age=performance.now()-fadeTrail.t; if(age<300) drawTrail(fadeTrail.pts,P.chalk,null,1); else fadeTrail=null; }
+  }
+  function drawContact(){
+    if(!contact) return; const c=contact;
+    drawTrail(c.trailPts,P.chalk,null,1);
+    // slash through the ball along the swing, and the ball itself
+    line(c.ball.x-c.dir.x*16,c.ball.y-c.dir.y*16,c.ball.x+c.dir.x*16,c.ball.y+c.dir.y*16,P.chalk,3);
+    line(c.ball.x-c.dir.x*16,c.ball.y-c.dir.y*16,c.ball.x+c.dir.x*16,c.ball.y+c.dir.y*16,P.score,1);
+    disc(c.ball.x,c.ball.y,Math.max(2,c.ball.r),P.chalk);
+    for(let a=0;a<8;a++){ const ang=a/8*Math.PI*2+0.39; const l=(a%2?4:8)+Math.min(8,S.t*40); line(c.ball.x+Math.cos(ang)*10, c.ball.y+Math.sin(ang)*10, c.ball.x+Math.cos(ang)*(10+l), c.ball.y+Math.sin(ang)*(10+l), P.chalk,1); }
+    const label='SWING '+Math.round(c.angle)+'  POWER '+Math.round(c.power*100);
+    const lx=Math.max(4,Math.min(W-label.length*4-4,c.ball.x-label.length*2)), ly=Math.max(4,Math.min(H-24,c.ball.y+18));
+    rect(lx-2,ly-2,label.length*4+3,9,P.ink); t3(lx,ly,label,P.score,1);
+  }
+
+  // ---- miss markers: where you swung vs where the ball was ----
+  function dashed(x0,y0,x1,y1,col){ const L=Math.hypot(x1-x0,y1-y0); const n=Math.max(1,Math.floor(L/2)); for(let i=0;i<=n;i++){ if((i>>1)&1)continue; px(x0+(x1-x0)*i/n, y0+(y1-y0)*i/n, col); } }
+  function drawMiss(view){
+    const m=missInfo; if(!m) return; const t=S.t;
+    // ghost ball where it actually was, plus a pulsing dotted ring
+    disc(m.ball.x,m.ball.y,Math.max(2,m.ball.r),P.chalk); px(m.ball.x+Math.max(2,m.ball.r),m.ball.y,P.ink);
+    const rr=Math.max(2,m.ball.r)+3+((t*40)%12);
+    for(let a=0;a<24;a++){ const ang=a/24*Math.PI*2; px(m.ball.x+Math.cos(ang)*rr, m.ball.y+Math.sin(ang)*rr, P.score); }
+    if(!m.press) return;
+    const sX=m.press.x, sY=m.press.y;
+    // the slice you made, with speed lines at its closest point to the ball
+    if(m.trailPts&&m.trailPts.length>1) drawTrail(m.trailPts,P.chalk,P.score,2);
+    const grow=Math.min(8,t*40);
+    for(let a=0;a<8;a++){ const ang=a/8*Math.PI*2+0.39; const l=(a%2?4:8)+grow; line(sX+Math.cos(ang)*13, sY+Math.sin(ang)*13, sX+Math.cos(ang)*(13+l), sY+Math.sin(ang)*(13+l), P.chalk,1); }
+    line(sX-3,sY-3,sX+3,sY+3,P.cap,1); line(sX-3,sY+3,sX+3,sY-3,P.cap,1);
+    // connector + label
+    dashed(sX,sY,m.ball.x,m.ball.y,P.score);
+    const dx=sX-m.ball.x, dy=sY-m.ball.y, inches=Math.round(Math.hypot(dx,dy)*0.36);
+    let words=[], label;
+    if(m.early){ label='EARLY  BALL '+Math.round(m.feetAway)+' FT OUT'; }
+    else {
+      if(Math.abs(dy)>3) words.push(dy<0?'HIGH':'LOW');
+      if(Math.abs(dx)>3) words.push(view==='atbat' ? (dx<0?'IN':'OUT') : (dx>0?'LATE':'EARLY'));
+      label=(words.join(' ')+' '+inches+' IN').trim();
+    }
+    const lx=Math.max(4,Math.min(W-label.length*4-4,(sX+m.ball.x)/2-label.length*2)); let ly=Math.max(4,Math.min(H-24,(sY+m.ball.y)/2+14));
+    if(ly>104&&ly<134) ly=98;   // keep clear of the MISS callout
+    rect(lx-2,ly-2,label.length*4+3,9,P.ink); t3(lx,ly,label,P.score,1);
+  }
+
+  // ---- at-bat view ----
+  function drawAtBat(){
+    rect(0,0,W,H,P.sky1); rect(0,44,W,26,P.sky2); rect(0,70,W,26,P.sky3); dither(0,42,W,4,P.sky1,P.sky2); dither(0,68,W,4,P.sky2,P.sky3);
+    rect(0,96,W,8,P.wall); rect(0,96,W,1,P.chalk); rect(128,80,64,16,P.wall); rect(128,80,64,1,P.chalk);
+    t3(134,84,String(park.wall)+' FT',P.score,1); t3(134,91,'PARK '+park.n,P.chalk,1);
+    rect(0,104,W,H-104,P.grassA); for(let y=104;y<H;y+=12) rect(0,y,W,6,P.grassB);
+    line(160,196,40,104,P.chalk); line(160,196,280,104,P.chalk);
+    rect(148,116,24,5,P.dirt); rect(150,121,20,2,P.dirtD);
+    rect(120,184,80,14,P.dirt); rect(124,198,72,4,P.dirtD); rect(152,190,16,4,P.chalk);
+    // pitcher
+    const t=S.t, wind = S.name==='windup' ? Math.min(1,t/0.5) : 1;
+    const pxp=160, pyp=117;
+    rect(pxp-2,pyp-12,5,8,P.ink); rect(pxp-2,pyp-16,5,4,P.skin); rect(pxp-3,pyp-18,7,2,P.cap);
+    if(S.name==='windup'&&wind>0.4&&wind<0.9){ rect(pxp-1,pyp-4,3,4,P.ink); rect(pxp+2,pyp-8,2,4,P.ink); line(pxp+3,pyp-12,pxp+6,pyp-20,P.ink,1); }
+    else { rect(pxp-2,pyp-4,2,4,P.ink); rect(pxp+1,pyp-4,2,4,P.ink); line(pxp+3,pyp-10,pxp+7,pyp-6,P.ink,1); }
+    // strike zone (big)
+    for(let i=0;i<=Z.w;i+=3)px(Z.x+i,Z.y,P.chalk),px(Z.x+i,Z.y+Z.h,P.chalk); for(let j=0;j<=Z.h;j+=3)px(Z.x,Z.y+j,P.chalk),px(Z.x+Z.w,Z.y+j,P.chalk);
+    // batter (rear three-quarter)
+    const frame = S.name==='contact' ? 1 : (S.name==='miss'&&callText==='MISS' ? 2 : 0);
+    const bx=104, by=222;
+    rect(bx-8,by-24,7,24,P.ink); rect(bx+3,by-24,7,24,P.ink);
+    rect(bx-9,by-52,20,30,P.ink);
+    rect(bx-6,by-64,12,12,P.skin); rect(bx-8,by-68,16,6,P.cap); rect(bx-8,by-62,4,8,P.cap);
+    if(frame===0){ rect(bx+8,by-48,6,8,P.ink); rect(bx+12,by-52,4,4,P.skin); line(bx+14,by-52,bx+22,by-84,P.bat,3); }
+    if(frame===1){ rect(bx+8,by-44,10,6,P.ink); rect(bx+16,by-44,4,4,P.skin); line(bx+18,by-42,bx+62,by-58,P.bat,3); }
+    if(frame===2){ rect(bx-14,by-40,8,6,P.ink); rect(bx-16,by-40,4,4,P.skin); line(bx-16,by-40,bx-40,by-56,P.bat,3); }
+    // ball
+    if(S.name==='pitch'){
+      const b=ballAt(Math.min(1.15,t/pitch.dur));
+      disc(b.x,b.y,b.r,P.chalk); if(b.r>=3)px(b.x-1,b.y-1,P.sky3); if(b.r>=2)px(b.x+b.r,b.y,P.ink);
+      t3(8,H-12,Math.round(pitch.speed)+' MPH',P.chalk,1);
+    }
+    if(S.name==='contact'){ drawContact(); }
+    if(S.name==='miss'){ drawMiss('atbat'); t3(W/2-callText.length*4,(missInfo&&missInfo.early)?164:118,callText,P.score,2); t3(8,H-12,pitch.type.name+' '+Math.round(pitch.speed)+' MPH',P.chalk,1); }
+    if(S.name==='windup'&&pitch){ /* nothing: type is hidden until it is thrown */ }
+    t3(8,8,'PARK '+park.n,P.chalk,1);
+    drawLiveTrail();
+  }
+
+  // ---- wide view ----
+  const VIEW_L=-24, PX=320/540, GY=176;
+  const sx=f=>(f-VIEW_L)*PX, sy=f=>GY-f*PX;
+  function wideBall(p){ const x=sx(60-60*p), y=sy(3+Math.sin(p*Math.PI)*1.2)-(pitch.type.breakY*0.15)*(p*p*p-p*p)*4; return {x,y,r:1}; }
+  function drawWide(){
+    rect(0,0,W,H,P.sky1); rect(0,70,W,60,P.sky2); rect(0,130,W,GY-130,P.sky3); dither(0,66,W,8,P.sky1,P.sky2); dither(0,126,W,8,P.sky2,P.sky3);
+    rect(0,GY,W,H-GY,P.grassA); for(let x=0;x<W;x+=24) rect(x,GY,12,H-GY,P.grassB);
+    const wx=sx(park.wall), wh=park.wallH*PX;
+    rect(wx,GY-wh,W-wx,wh,P.wall); rect(wx,GY-wh,W-wx,1,P.chalk); rect(wx,GY-wh-1,2,wh+1,P.chalk);
+    t3(wx+6,GY-wh+3,String(park.wall),P.score,1);
+    for(let f=100;f<=500;f+=100){ rect(sx(f),GY,1,4,P.chalk); }
+    rect(sx(-8),GY,16*PX*2,5,P.dirt);
+    const bx=sx(0), by=GY, frame = (flight&&flight.i<12)?1:(flight?2:0);
+    rect(bx-5,by-14,4,14,P.ink); rect(bx+1,by-14,4,14,P.ink); rect(bx-5,by-30,10,16,P.ink);
+    rect(bx-3,by-40,7,10,P.skin); rect(bx-4,by-42,8,3,P.cap); rect(bx-4,by-38,10,2,P.cap);
+    if(frame===0) line(bx+3,by-26,bx-4,by-50,P.bat,2); if(frame===1) line(bx+4,by-26,bx+24,by-24,P.bat,2); if(frame===2) line(bx-8,by-30,bx-22,by-46,P.bat,2);
+    if(!opt.two && (S.name==='windup'||S.name==='pitch'||S.name==='miss')){ rect(sx(58),GY,8,2,P.dirt); rect(sx(60)-1,GY-10,3,10,P.ink); }
+    if(!opt.two && S.name==='pitch'){ const b=wideBall(Math.min(1.15,S.t/pitch.dur)); disc(b.x,b.y,2,P.chalk); t3(8,H-12,Math.round(pitch.speed)+' MPH',P.chalk,1); }
+    if(!opt.two && S.name==='contact'){ drawContact(); }
+    if(!opt.two && S.name==='miss'){ drawMiss('wide'); t3(W/2-callText.length*4,60,callText,P.score,2); t3(8,H-12,pitch.type.name+' '+Math.round(pitch.speed)+' MPH',P.chalk,1); }
+    if(flight){
+      const pts=flight.r.pts, i=Math.min(pts.length-1,Math.floor(flight.i));
+      for(let k=0;k<i;k+=8){ px(sx(pts[k][0]),sy(pts[k][1])-2,P.chalk); }
+      const b=pts[i]; const X=sx(b[0]), Y=sy(b[1])-3; rect(X-1,Y-1,4,4,P.chalk); px(X,Y,P.sky3);
+      t3(8,8,Math.round(flight.v)+' MPH',P.score,2); t3(8,20,Math.round(flight.deg)+' DEG',P.score,2);
+      t3(8,34,pitch.type.name+'  POWER '+Math.round(flight.power*100),P.chalk,1);
+      if(S.name==='flight'){ const d=Math.round(Math.min(b[0],flight.r.dist)); t3(Math.min(W-30,X+6),Math.max(6,Y-10),d+' FT',P.chalk,1); }
+      if(S.name==='result'){ const d=Math.round(flight.r.dist); const s=d+' FT'; t5(W/2-(s.length*6*3)/2+3,52,s,P.score,3);
+        if(flight.r.hr && (Math.floor(S.t*6)%2===0)) t5(W/2-6*3,88,'HR',P.cap,3);
+        if(flight.r.wallHit) t3(W/2-30,90,'OFF THE WALL',P.chalk,1); }
+    }
+    t3(W-42,H-12,'PARK '+park.n,P.chalk,1);
+    if(!opt.two) drawLiveTrail();
+  }
+
+  // ---- loop ----
+  let last=0;
+  function frame(ts){
+    const dt=Math.min(0.05,(ts-last)/1000||0); last=ts; S.t+=dt;
+    if(S.name==='windup'&&S.t>0.5) setState('pitch');
+    if(S.name==='pitch'&&S.t>pitch.dur*1.15+0.05){ if(trail){ endSlice(); } else { pitches++; callText=pitch.strike?'STRIKE':'BALL'; missInfo={press:null, ball:ballNow(1), early:false}; setState('miss'); updStats(); } }
+    if(S.name==='miss'&&S.t>1.2){ missInfo=null; newPitch(); }
+    if(S.name==='contact'&&S.t>0.35){ contact=null; flash=2; setState('flight'); }
+    if(S.name==='flight'){ flight.i+=dt*240*opt.speed; if(flight.i>=flight.r.pts.length-1){ flight.i=flight.r.pts.length-1; setState('result'); } }
+    if(S.name==='result'&&S.t>1.3){ if(flight.r.hr){ park={wall:330+Math.floor(Math.random()*80),wallH:6+Math.floor(Math.random()*20),n:park.n+1}; } flight=null; newPitch(); }
+    const showAtBat = opt.two && (S.name==='windup'||S.name==='pitch'||S.name==='contact'||S.name==='miss');
+    if(showAtBat) drawAtBat(); else drawWide();
+    if(flash>0){ rect(0,0,W,H,P.chalk); flash--; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- input ----
+  function pt(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}; }
+  cv.addEventListener('pointerdown',e=>{ e.preventDefault(); beginSlice(pt(e)); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove',e=>{ if(trail) moveSlice(pt(e)); });
+  cv.addEventListener('pointerup',()=>endSlice());
+  cv.addEventListener('pointercancel',()=>endSlice());
+  window.addEventListener('keydown',e=>{ if(e.code==='Space'&&S.name==='pitch'){ e.preventDefault(); const b=ballNow(Math.min(1.15,S.t/pitch.dur)); beginSlice({x:b.x-20,y:b.y+10}); trail.pts[0].t-=60; moveSlice({x:b.x+20,y:b.y-10}); if(trail) endSlice(); } });
+  function seg(a,b,key,va,vb){ const A=document.getElementById(a),B=document.getElementById(b); A.addEventListener('click',()=>{opt[key]=va;A.setAttribute('aria-pressed','true');B.setAttribute('aria-pressed','false');hintUpd();}); B.addEventListener('click',()=>{opt[key]=vb;A.setAttribute('aria-pressed','false');B.setAttribute('aria-pressed','true');hintUpd();}); }
+  seg('camTwo','camWide','two',true,false); seg('sp1','sp2','speed',1,2);
+    cv.__sd={ beginSlice, moveSlice, endSlice, get state(){return S.name;}, get t(){return S.t;}, get dur(){return pitch?pitch.dur:0;}, ball(){ return ballAt(Math.min(1.15,S.t/pitch.dur)); }, get pitch(){return pitch;} };
+  function hintUpd(){}
+})();
+</script>

@@ -1,0 +1,329 @@
+<title>Sandlot Derby Mood Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Oswald:wght@500;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F2F0E8; --paper:#FFFFFF; --ink:#1A1C22; --ink-2:#4A4D55; --ink-3:#7B7E86; --line:#D8D5CB;
+  --accent:#CC2222; --accent-2:#228844; --grass:#228844; --code-bg:#ECE9E0; --sky:#66AAEE;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161C; --paper:#1C1F27; --ink:#ECEAE2; --ink-2:#B8B6AE; --ink-3:#868890; --line:#2D313B;
+    --accent:#EE5555; --accent-2:#44CC66; --grass:#44CC66; --code-bg:#22262F; --sky:#4466CC;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14161C; --paper:#1C1F27; --ink:#ECEAE2; --ink-2:#B8B6AE; --ink-3:#868890; --line:#2D313B;
+  --accent:#EE5555; --accent-2:#44CC66; --grass:#44CC66; --code-bg:#22262F; --sky:#4466CC;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;padding-block:32px 64px;padding-inline:16px}
+.wrap{max-width:760px;margin:0 auto}
+.wide{max-width:1000px;margin-inline:auto}
+h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
+h1{font-family:"Press Start 2P","Courier New",monospace;font-size:clamp(20px,4.2vw,34px);letter-spacing:.02em;line-height:1.35}
+h2{font-family:"Oswald","Arial Narrow",sans-serif;font-size:28px;font-weight:500;margin-top:56px;margin-bottom:12px;padding-top:12px;border-top:3px solid var(--accent)}
+h3{font-family:"Oswald",sans-serif;font-size:19px;font-weight:500;margin-top:24px;margin-bottom:8px}
+p{margin:0 0 14px;max-width:66ch}
+ul,ol{padding-left:22px;margin:0 0 14px;max-width:66ch} li{margin-bottom:6px}
+a{color:var(--accent-2);text-decoration-thickness:1px;text-underline-offset:2px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+.lede{font-size:19px;color:var(--ink-2);max-width:60ch;margin-top:16px}
+code,.mono{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+code{background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.px{font-family:"Press Start 2P",monospace;font-size:10px;letter-spacing:.02em;line-height:1.8}
+.src{font-size:13px;color:var(--ink-3)} .src a{color:var(--ink-3)}
+canvas.pix{image-rendering:pixelated;image-rendering:crisp-edges;display:block;max-width:100%;height:auto}
+.study{background:var(--paper);border:1px solid var(--line);padding:14px;margin:18px 0}
+.study .cap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:13.5px;color:var(--ink-2)}
+.study .cap .px{color:var(--ink-3);font-size:8px}
+.screen{background:#000;padding:0;line-height:0;display:flex;justify-content:center}
+#screen{width:960px;max-width:100%}
+#sheet,#ball,#type,#park{width:480px;max-width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:700px){.grid2{grid-template-columns:1fr}}
+.swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin:14px 0 6px}
+@media (max-width:700px){.swatches{grid-template-columns:repeat(4,1fr)}}
+.sw{border:1px solid var(--line);background:var(--paper)}
+.sw i{display:block;height:44px}
+.sw b{display:block;font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:10.5px;padding:5px 6px 2px;color:var(--ink)}
+.sw span{display:block;font-size:10px;padding:0 6px 5px;color:var(--ink-3)}
+.refs{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin:16px 0}
+.ref{background:var(--paper);border:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.ref .yr{font-family:"Press Start 2P",monospace;font-size:9px;color:var(--accent)}
+.ref h3{margin:0;font-size:17px}
+.ref .meta{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3)}
+.ref p{font-size:13.5px;margin:0;color:var(--ink-2)}
+.ref .steal{font-size:13.5px;border-top:1px dashed var(--line);padding-top:6px;margin-top:2px}
+.ref .steal b{color:var(--accent-2)}
+.ref a{font-size:12.5px;margin-top:auto}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:1px 7px;border:1px solid var(--line);border-radius:999px;color:var(--ink-2);margin-right:4px}
+.tag.hr{border-color:var(--accent);color:var(--accent)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:12px 0 20px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.tscroll{overflow-x:auto;margin:12px 0 20px} .tscroll table{min-width:600px;margin:0}
+figure{margin:20px 0 26px} figure svg{max-width:100%;height:auto;display:block;color:var(--ink)}
+figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:66ch}
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);margin:14px 0 20px}
+.rules>div{background:var(--paper);padding:12px 14px;font-size:14px}
+.rules>div b{display:block;font-family:"Press Start 2P",monospace;font-size:8.5px;color:var(--ink-3);margin-bottom:6px;line-height:1.6}
+@media (max-width:600px){.rules{grid-template-columns:1fr}}
+.opts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px;margin:6px 0 0}
+.opts button{font:inherit;font-size:12.5px;padding:4px 10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:3px;cursor:pointer}
+.opts button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Mood board &middot; 19 Sep 2026 &middot; companion to the Sandlot Derby research note</div>
+  <h1>SANDLOT DERBY<br>16-BIT MOOD BOARD</h1>
+  <p class="lede">Desert Golfing’s restraint, drawn with a Sega Genesis palette. The bet: a home run derby that is one screen, one gesture, sixteen colours, and a sprite with three frames. Every study below is original and rendered live from a 16-colour palette line, at 320×224.</p>
+</div>
+
+<div class="wrap">
+  <h2>1. The direction in three constraints</h2>
+  <div class="rules">
+    <div><b>ONE PALETTE LINE</b>The Genesis draws from 512 colours but a sprite layer gets 16 at a time. Commit to one line of 16 for the whole game. No gradients, no alpha, dithering only in the sky.</div>
+    <div><b>ONE SCREEN</b>320×224 and nothing scrolls except the ball. The wall is on screen from the first frame, so the goal is never explained. Desert Golfing did this with a cup; we do it with a fence.</div>
+    <div><b>THREE FRAMES</b>Stance, contact, follow-through. Sega’s arcade batters had a dozen frames; the minimal read needs three and a hold on the last one. The ball and its trail do the rest of the animating.</div>
+    <div><b>ONE NUMBER</b>The only HUD is the last distance in a chunky scoreboard font, and it fades. No menu, no lives, no timer. Park number sits small in the corner like Desert Golfing’s hole count.</div>
+  </div>
+
+  <h2>2. Palette: one Genesis line</h2>
+  <p>Every colour is 9-bit legal: each channel is one of eight levels. That constraint is what makes 16-bit art look 16-bit; the “retro filter” people add later is mostly this, plus no anti-aliasing. Fifteen colours plus transparent.</p>
+</div>
+<div class="wide">
+  <div class="swatches" id="swatches"></div>
+  <p class="src">Genesis colour is 3 bits per channel (values 0 to 7). Emulators map those to 0, 34, 68 … 238; hardware output was a touch brighter and less linear. Master System was 2 bits per channel, SNES was 5, Neo Geo 5 plus a dark bit. These hex values are the emulator mapping.</p>
+</div>
+
+<div class="wrap">
+  <h2>3. Screen study</h2>
+  <p>The whole game on one 320×224 screen. Side view, like g0lf and Desert Golfing, because the physics stays legible and the wall is a real place. The classic Genesis derby camera sat behind the pitcher, which sells a batter but hides the flight. Toggle the options to test how much the screen can lose and still read.</p>
+</div>
+<div class="wide">
+  <div class="study">
+    <div class="screen"><canvas id="screen" class="pix" width="320" height="224" aria-label="Pixel-art mock of the game screen: dithered sky, striped outfield, a silhouette batter at left, a chalk wall with 380 painted on it, and a big scoreboard number reading the last distance"></canvas></div>
+    <div class="opts">
+      <button id="oSky" aria-pressed="true">sky dither</button>
+      <button id="oStripes" aria-pressed="true">mown stripes</button>
+      <button id="oTrail" aria-pressed="true">ball trail</button>
+      <button id="oHud" aria-pressed="true">scoreboard</button>
+      <button id="oNight" aria-pressed="false">night game</button>
+      <button id="oFrame" aria-pressed="false">contact frame</button>
+    </div>
+    <div class="cap"><span>320×224, palette line above, drawn each toggle. Nothing here is a texture: sky bands, stripes, wall and sprite are all rectangles and lines snapped to the pixel grid.</span><span class="px">STUDY 01</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>4. Sprite and motion studies</h2>
+  <p>The batter is a silhouette with a cap and a skin tone, nothing more. That is both the minimal read and an honest 16-bit convention: Genesis sprites were often 3 to 5 colours on the character and spent the palette on the field. The swing is three frames, the bat is a rasterised line so it gets true jaggies at each angle.</p>
+</div>
+<div class="wide">
+  <div class="grid2">
+    <div class="study">
+      <canvas id="sheet" class="pix" width="160" height="56" aria-label="Three-frame batter sprite sheet: stance, contact, follow-through, plus a fourth frame with the bat dropped"></canvas>
+      <div class="cap"><span>Sprite sheet, 32×48 cells at 4×. Frames: stance, contact, follow-through, bat drop. Hold contact for two frames on a hit; hold stance forever between pitches.</span><span class="px">STUDY 02</span></div>
+    </div>
+    <div class="study">
+      <canvas id="ball" class="pix" width="160" height="56" aria-label="Ball studies: the 4-pixel ball with a highlight, the dotted trail, a wall-hit spark and a landing dust puff"></canvas>
+      <div class="cap"><span>Ball at 4 px with one highlight pixel, trail as every-fourth-frame dots, wall spark, landing dust. The trail is the animation budget; the ball itself never rotates.</span><span class="px">STUDY 03</span></div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="study">
+      <canvas id="type" class="pix" width="160" height="72" aria-label="Scoreboard type study: distance numbers in a chunky pixel font, park number small, and a home run flash"></canvas>
+      <div class="cap"><span>Type: a 5×7 scoreboard face for the distance, 3×5 for the park number. Yellow on the wall green is the classic outfield-scoreboard read. “HR” flashes twice then clears.</span><span class="px">STUDY 04</span></div>
+    </div>
+    <div class="study">
+      <canvas id="park" class="pix" width="160" height="72" aria-label="Three park variations: a short wall, a tall green monster wall, and a night park with a tall wall and lights"></canvas>
+      <div class="cap"><span>Parks are three numbers, wall distance, height, and wind. Same palette, one colour swap for night. This is the whole “endless” content: seeded parks, forever.</span><span class="px">STUDY 05</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>5. Classic references</h2>
+  <p>Screenshots are linked, not embedded: they belong to Sega, SNK, Nintendo and Accolade. Open the links side by side with the studies above. Games marked <span class="tag hr">HR derby</span> shipped an explicit home run contest mode.</p>
+</div>
+<div class="wide" id="refsHost"><div class="refs"><div class="ref"><div class="yr">1983</div><h3>Champion Baseball</h3><div class="meta">Sega / Alpha Denshi · arcade</div><p>Sega’s first baseball game and the genre’s prototype. Multiple cameras including a close-up batter and pitcher shot.</p><div class="steal"><b>Steal:</b> The idea that a baseball game can cut to a portrait for the moment of contact.</div><a href="https://en.wikipedia.org/wiki/Champion_Baseball">screenshots ↗</a></div><div class="ref"><div class="yr">1985</div><h3>Hardball!</h3><div class="meta">Accolade · C64, Amiga</div><p>Behind-the-pitcher view made famous. Sparse, high-contrast, a handful of colours doing a lot.</p><div class="steal"><b>Steal:</b> How little colour a ballpark needs to read as a ballpark.</div><a href="https://www.mobygames.com/game/7061/hardball/">screenshots ↗</a></div><div class="ref"><div class="yr">1988</div><h3>R.B.I. Baseball</h3><div class="meta">Namco / Tengen · NES</div><p>Diagonal-down compressed view, big-headed chunky players. The definitive 8-bit batter silhouette.</p><div class="steal"><b>Steal:</b> Stubby proportions. A 3-head-tall batter reads instantly at 16 px.</div><a href="https://www.mobygames.com/game/nes/rbi-baseball/screenshots/gameShotId,50048/">screenshots ↗</a></div><div class="ref"><div class="yr">1989</div><h3>Tommy Lasorda Baseball</h3><div class="meta">Sega · Genesis launch</div><p>First 16-bit baseball game. Muted launch-era palette, flat fields, low sprite detail. Selectable cameras.</p><div class="steal"><b>Steal:</b> The flat, unshaded field. Early Genesis is closer to our minimalism than late Genesis.</div><a href="https://www.mobygames.com/game/10364/tommy-lasorda-baseball/">screenshots ↗</a></div><div class="ref"><div class="yr">1989</div><h3>Baseball</h3><div class="meta">Nintendo · Game Boy</div><p>Four greys, diagonal-down batter, launch title. Proof that a batter and a pitch read in monochrome.</p><div class="steal"><b>Steal:</b> The two-frame swing and the ball as a single 2×2 dot.</div><a href="https://www.mobygames.com/game/4516/baseball/screenshots/gameboy/">screenshots ↗</a></div><div class="ref"><div class="yr">1991</div><h3>Clutch Hitter</h3><div class="meta">Sega · arcade, System 18</div><p>Camera directly behind home plate, huge saturated System 18 sprites, unique stances per batter.</p><div class="steal"><b>Steal:</b> Sega arcade colour: saturated primaries with one dark ink. This is the “Sega-like” you mean.</div><a href="https://en.wikipedia.org/wiki/Clutch_Hitter">screenshots ↗</a></div><div class="ref"><div class="yr">1991</div><h3>Super Baseball 2020</h3><div class="meta">SNK · Neo Geo, Genesis, SNES</div><p>Behind-pitcher camera, cartoon cyborgs and robots, Neo Geo gradient shading. No derby mode.</p><div class="steal"><b>Steal:</b> Big scoreboard type over the wall. Nothing else; the palette is too rich for us.</div><a href="https://www.mobygames.com/game/17086/super-baseball-2020/screenshots/">screenshots ↗</a></div><div class="ref"><div class="yr">1992</div><h3>Sports Talk Baseball</h3><div class="meta">Sega · Genesis</div><p>Behind view, diagonal-down. Mid-era Genesis palette. A derby mode is claimed in listings but not confirmed on Wikipedia or MobyGames.</p><div class="steal"><b>Steal:</b> The on-field overlay HUD, small and in one colour.</div><a href="https://www.mobygames.com/game/6594/sports-talk-baseball/">screenshots ↗</a></div><div class="ref"><div class="yr">1992</div><h3>Baseball Stars 2</h3><div class="meta">SNK · Neo Geo</div><p>Largest sprites of the era, comic-panel home run cutscenes. Gorgeous, and the opposite of minimal. No derby mode.</p><div class="steal"><b>Steal:</b> The cutscene instinct, scaled down to a two-frame flash of “HR”.</div><a href="https://www.mobygames.com/game/39557/baseball-stars-2/screenshots/neo-geo/">screenshots ↗</a></div><div class="ref"><div class="yr">1994</div><h3>World Series Baseball</h3><div class="meta">BlueSky / Sega · Genesis</div><div><span class="tag hr">HR derby</span></div><p>The Genesis derby. Catcher’s-eye batter’s-box camera, saturated mid-90s palette, scoreboard overlay. Explicit Home Run Derby mode.</p><div class="steal"><b>Steal:</b> The derby as a mode with no story: pick a hitter, hit. And the outfield scoreboard type.</div><a href="https://www.mobygames.com/game/31369/world-series-baseball/">screenshots ↗</a></div><div class="ref"><div class="yr">1994</div><h3>Ken Griffey Jr. Presents MLB</h3><div class="meta">Rare / Nintendo · SNES</div><div><span class="tag hr">HR derby</span></div><p>Tight pitcher-batter zoom praised for feeling fast, criticised for hiding the field. 1–2 player Home Run Derby against Griffey or fictional sluggers.</p><div class="steal"><b>Steal:</b> Speed from a tight camera. We get the same from a fast pitch and a big ball.</div><a href="https://www.mobygames.com/game/26316/ken-griffey-jr-presents-major-league-baseball/">screenshots ↗</a></div><div class="ref"><div class="yr">1994</div><h3>HardBall III</h3><div class="meta">MindSpan / Accolade · Genesis, SNES, DOS</div><div><span class="tag hr">HR derby</span></div><p>Homerun Derby alongside a practice cage, presented as a warm-up rather than a game.</p><div class="steal"><b>Steal:</b> Nothing visual. Confirms derby modes were bolt-ons even then, which is why a standalone one is still open.</div><a href="https://en.wikipedia.org/wiki/HardBall_III">screenshots ↗</a></div><div class="ref"><div class="yr">1995</div><h3>Frank Thomas Big Hurt Baseball</h3><div class="meta">Iguana / Acclaim · Genesis, SNES</div><div><span class="tag hr">HR derby</span></div><p>Derby is one of six modes: pick sluggers, pick a stadium, compete or watch CPU vs CPU.</p><div class="steal"><b>Steal:</b> Pick a stadium. Our seeded parks are the same idea with no menu.</div><a href="https://gamefaqs.gamespot.com/genesis/586193-frank-thomas-big-hurt-baseball/reviews/7346">screenshots ↗</a></div><div class="ref"><div class="yr">1995</div><h3>Super R.B.I. Baseball</h3><div class="meta">Time Warner · SNES</div><div><span class="tag hr">HR derby</span></div><p>Later RBI entry with an explicit Home Run Derby mode. The 1988 original had none.</p><div class="steal"><b>Steal:</b> The RBI silhouette carried to 16-bit without losing its stubbiness.</div><a href="https://gamefabrique.com/games/super-rbi-baseball/">screenshots ↗</a></div><div class="ref"><div class="yr">1996</div><h3>Ken Griffey Jr.’s Winning Run</h3><div class="meta">Rare / Nintendo · SNES</div><div><span class="tag hr">HR derby</span></div><p>Derby for up to eight hitters, ten outs each. Late-SNES pre-rendered look.</p><div class="steal"><b>Steal:</b> The ten-outs structure, if we ever want a session to end. Desert Golfing says we don’t.</div><a href="https://en.wikipedia.org/wiki/Ken_Griffey_Jr.%27s_Winning_Run">screenshots ↗</a></div></div><p class="src" style="max-width:66ch;margin-inline:0">Verified against Wikipedia, MobyGames and GameFAQs on 19 Sep 2026. Not found with a derby mode despite claims: MLBPA Baseball, Bottom of the 9th (which is Saturn/PS1/N64, not Genesis), Tony La Russa, the Bases Loaded series. Modern retro-styled references worth a look: <a href="https://apps.apple.com/us/app/pixel-pro-baseball/id1552219662">Pixel Pro Baseball</a> (iOS) and <a href="https://noisypixel.net/holobase-baseball-game-hololive-retro-steam/">holoBase</a> (upcoming, modelled on Bases Loaded).</p></div>
+
+<div class="wrap">
+  <h2>6. Camera decision</h2>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="Two camera options. Left: classic behind-the-pitcher view, batter big and facing the camera, ball flies away into depth and distance is read from a number. Right: side view, batter small at left, ball arc fully visible, wall at right, distance read from the picture itself.">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <rect x="20" y="20" width="320" height="150" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="180" y="196" font-size="12" text-anchor="middle" fill="currentColor">Classic derby camera (WSB, Griffey): behind the pitcher</text>
+      <path d="M60 165 L180 60 L300 165" fill="none" stroke="currentColor" stroke-width="1" opacity=".5"/>
+      <rect x="120" y="56" width="120" height="10" fill="none" stroke="currentColor" stroke-width="1"/>
+      <rect x="165" y="95" width="30" height="60" fill="currentColor" opacity=".85"/>
+      <circle cx="180" cy="86" r="9" fill="currentColor" opacity=".85"/>
+      <line x1="180" y1="120" x2="186" y2="62" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+      <text x="196" y="80" font-size="11" fill="currentColor" opacity=".8">ball shrinks into depth</text>
+      <rect x="380" y="20" width="320" height="150" fill="none" stroke="#228844" stroke-width="2"/>
+      <text x="540" y="196" font-size="12" text-anchor="middle" fill="#228844" font-weight="600">Side view (g0lf, Desert Golfing): arc is the information</text>
+      <line x1="380" y1="150" x2="700" y2="150" stroke="currentColor" stroke-width="1"/>
+      <rect x="400" y="120" width="10" height="30" fill="currentColor" opacity=".85"/>
+      <rect x="640" y="122" width="5" height="28" fill="#228844"/>
+      <path d="M410 128 Q 520 -10 660 128" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+      <text x="650" y="116" font-size="11" fill="currentColor" opacity=".8">wall</text>
+    </svg>
+    <figcaption>The classic view is a batter portrait; the side view is a physics readout. For a game whose only content is the flight, the side view wins. Steal the classic view’s batter for the sprite, not its camera.</figcaption>
+  </figure>
+
+  <h2>7. What “minimal” means when it is pixel art</h2>
+  <ul>
+    <li><strong>Desert Golfing had two colours.</strong> We have sixteen, so the restraint moves from colour count to colour discipline: every colour has one job, no colour appears in two roles.</li>
+    <li><strong>No outlines.</strong> Genesis sprites often had black outlines to pop against busy fields. Our field is not busy, so the silhouette can sit directly on the grass with no outline, which reads more modern and more calm.</li>
+    <li><strong>Dither is a spice.</strong> One checkerboard band per sky transition and nothing else. The moment dither appears on the grass, it becomes a texture game.</li>
+    <li><strong>Sixty frames, three drawn.</strong> Smooth ball motion at 60 Hz next to a three-frame batter is exactly the 16-bit sports feel: the world is fluid, the people are stamps.</li>
+    <li><strong>Type is the only decoration.</strong> The scoreboard number gets the chunkiest font on the screen. Everything else is small, one colour, and mostly absent.</li>
+  </ul>
+</div>
+
+<script>
+(function(){
+  // Genesis-legal palette: each channel one of 0,34,68,...,238
+  const P = {
+    sky1:'#4466CC', sky2:'#66AAEE', sky3:'#AACCEE',
+    grassA:'#22AA44', grassB:'#228844', wall:'#226644',
+    dirt:'#CC8844', dirtD:'#AA6622', chalk:'#EEEEEE',
+    ink:'#222244', skin:'#EEAA88', cap:'#CC2222', bat:'#AA8844',
+    score:'#EEDD22', shade:'#116633', night:'#221144'
+  };
+  const names = {sky1:'sky high',sky2:'sky',sky3:'horizon',grassA:'grass A',grassB:'grass B',wall:'wall',dirt:'dirt',dirtD:'dirt shade',chalk:'chalk / ball',ink:'ink',skin:'skin',cap:'cap',bat:'bat',score:'scoreboard',shade:'shadow',night:'night sky'};
+  function g9(hex){ return [1,3,5].map(i=>Math.round(parseInt(hex.substr(i,2),16)/34)).join(''); }
+  const swEl=document.getElementById('swatches');
+  for(const k in P){ const d=document.createElement('div'); d.className='sw'; d.innerHTML='<i style="background:'+P[k]+'"></i><b>'+P[k]+'</b><span>'+names[k]+' · 9-bit '+g9(P[k])+'</span>'; swEl.appendChild(d); }
+
+  // ---- tiny pixel API ----
+  function Pix(cv){ this.c=cv.getContext('2d'); this.c.imageSmoothingEnabled=false; this.w=cv.width; this.h=cv.height; }
+  Pix.prototype.px=function(x,y,col){ this.c.fillStyle=col; this.c.fillRect(x|0,y|0,1,1); };
+  Pix.prototype.rect=function(x,y,w,h,col){ this.c.fillStyle=col; this.c.fillRect(x|0,y|0,w|0,h|0); };
+  Pix.prototype.line=function(x0,y0,x1,y1,col,t){ t=t||1; x0|=0;y0|=0;x1|=0;y1|=0; let dx=Math.abs(x1-x0),sx=x0<x1?1:-1,dy=-Math.abs(y1-y0),sy=y0<y1?1:-1,err=dx+dy; for(;;){ for(let i=0;i<t;i++)for(let j=0;j<t;j++)this.px(x0+i-(t>>1),y0+j-(t>>1),col); if(x0===x1&&y0===y1)break; const e2=2*err; if(e2>=dy){err+=dy;x0+=sx;} if(e2<=dx){err+=dx;y0+=sy;} } };
+  Pix.prototype.disc=function(cx,cy,r,col){ for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++) if(x*x+y*y<=r*r+r*0.5) this.px(cx+x,cy+y,col); };
+  Pix.prototype.dither=function(x,y,w,h,a,b){ for(let j=0;j<h;j++)for(let i=0;i<w;i++) this.px(x+i,y+j,((i+j)&1)?a:b); };
+
+  // 3x5 font (digits + a few letters)
+  const F3 = {
+    '0':'111101101101111','1':'010110010010111','2':'111001111100111','3':'111001111001111','4':'101101111001001',
+    '5':'111100111001111','6':'111100111101111','7':'111001001001001','8':'111101111101111','9':'111101111001111',
+    'F':'111100110100100','T':'111010010010010','H':'101101111101101','R':'110101110101101','P':'110101110100100',
+    'A':'010101111101101','K':'101110100110101','L':'100100100100111','S':'111100111001111',' ':'000000000000000'
+  };
+  function text3(p,x,y,s,col,scale){ scale=scale||1; for(const ch of s){ const m=F3[ch]||F3[' ']; for(let j=0;j<5;j++)for(let i=0;i<3;i++) if(m[j*3+i]==='1') p.rect(x+i*scale,y+j*scale,scale,scale,col); x+=4*scale; } }
+  // 5x7 scoreboard digits
+  const F5 = {
+    '0':'01110100011000110001100011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111',
+    '3':'11111000100010000010000011000101110','4':'00010001100101010010111110001000010','5':'11111100001111000001000011000101110',
+    '6':'00110010001000011110100011000101110','7':'11111000010001000100010000100001000','8':'01110100011000101110100011000101110',
+    '9':'01110100011000101111000010001001100','F':'11111100001000011110100001000010000','T':'11111001000010000100001000010000100',
+    'H':'10001100011000111111100011000110001','R':'11110100011000111110101001001010001',' ':'00000000000000000000000000000000000'
+  };
+  function text5(p,x,y,s,col,scale){ scale=scale||1; for(const ch of s){ const m=F5[ch]||F5[' ']; for(let j=0;j<7;j++)for(let i=0;i<5;i++) if(m[j*5+i]==='1') p.rect(x+i*scale,y+j*scale,scale,scale,col); x+=6*scale; } }
+
+  // batter sprite: frame 0 stance, 1 contact, 2 follow, 3 drop. origin = feet centre (x, y=ground)
+  function batter(p,x,y,frame,cols){
+    const I=cols.ink, S=cols.skin, C=cols.cap, B=cols.bat;
+    // legs
+    if(frame===0){ p.rect(x-7,y-14,5,14,I); p.rect(x+2,y-14,5,14,I); }
+    else if(frame===1){ p.rect(x-9,y-14,5,14,I); p.rect(x+4,y-14,5,14,I); p.rect(x-4,y-14,8,4,I); }
+    else { p.rect(x-10,y-14,5,14,I); p.rect(x+5,y-14,5,14,I); p.rect(x-5,y-14,10,5,I); }
+    // torso
+    const tx = frame===0? x-6 : frame===1? x-5 : x-6;
+    p.rect(tx,y-30,11,17,I);
+    // head + cap
+    const hx = frame===0? x+1 : x+2;
+    p.rect(hx-4,y-40,8,10,S);            // face
+    p.rect(hx-5,y-42,9,4,C);             // cap crown
+    p.rect(hx-5,y-38,11,2,C);            // brim, points right
+    p.rect(hx-4,y-36,2,6,I);             // hair edge
+    // arms + bat
+    if(frame===0){ p.rect(x-2,y-28,6,6,I); p.rect(x+3,y-26,3,3,S); p.line(x+4,y-26,x-6,y-52,B,2); }
+    if(frame===1){ p.rect(x+3,y-27,8,4,I); p.rect(x+10,y-27,3,3,S); p.line(x+11,y-26,x+31,y-24,B,2); }
+    if(frame===2){ p.rect(x-8,y-30,7,4,I); p.rect(x-10,y-31,3,3,S); p.line(x-10,y-30,x-26,y-46,B,2); }
+    if(frame===3){ p.rect(x-1,y-26,5,6,I); p.rect(x+3,y-22,3,3,S); p.line(x+4,y-20,x+16,y-2,B,2); }
+  }
+
+  // ---- STUDY 01: screen ----
+  const scr=new Pix(document.getElementById('screen'));
+  const opt={sky:true,stripes:true,trail:true,hud:true,night:false,frame:false};
+  function drawScreen(){
+    const p=scr, W=320, H=224, GY=176;
+    const sky1=opt.night?P.night:P.sky1, sky2=opt.night?P.ink:P.sky2, sky3=opt.night?'#446688':P.sky3;
+    p.rect(0,0,W,H,sky1);
+    p.rect(0,70,W,60,sky2); p.rect(0,130,W,GY-130,sky3);
+    if(opt.sky){ p.dither(0,66,W,8,sky1,sky2); p.dither(0,126,W,8,sky2,sky3); }
+    if(opt.night){ for(let i=0;i<40;i++){ const sx=(i*53+17)%W, sy=(i*31+5)%60; p.px(sx,sy,P.chalk); } }
+    // wall
+    const wallX=262, wallH=14;
+    p.rect(0,GY,W,H-GY,P.grassA);
+    if(opt.stripes){ for(let x=0;x<W;x+=24) p.rect(x,GY,12,H-GY,P.grassB); }
+    p.rect(wallX,GY-wallH,W-wallX,wallH,P.wall);
+    p.rect(wallX,GY-wallH,W-wallX,1,P.chalk);
+    p.rect(wallX,GY-wallH-1,2,wallH+1,P.chalk);
+    text3(p,wallX+8,GY-wallH+4,'380',P.score,1);
+    if(opt.night){ p.rect(wallX+40,GY-wallH-60,3,60-wallH+14,P.ink); p.rect(wallX+30,GY-wallH-66,23,6,P.chalk); }
+    // dirt + chalk
+    p.rect(20,GY,56,6,P.dirt); p.rect(24,GY+6,48,3,P.dirtD);
+    p.rect(44,GY-1,10,1,P.chalk);
+    // shadow
+    p.rect(38,GY-1,20,2,P.shade);
+    // batter
+    batter(p,48,GY,opt.frame?1:0,P);
+    // ball + trail
+    if(opt.frame){
+      p.rect(78,GY-28,3,3,P.chalk);
+    } else {
+      const pts=[]; for(let i=0;i<=40;i++){ const t=i/40; pts.push([56+t*224, GY-30 - Math.sin(t*Math.PI)*95 + t*t*12]); }
+      if(opt.trail) for(let i=0;i<pts.length-2;i+=2) p.px(pts[i][0],pts[i][1],P.chalk);
+      const b=pts[26]; p.rect(b[0]-1,b[1]-1,4,4,P.chalk); p.px(b[0],b[1],sky3);
+    }
+    // hud
+    if(opt.hud){ text5(p,12,10,'412 FT',P.score,3); text3(p,W-42,H-12,'PARK 7',P.chalk,1); }
+    else { text3(p,W-42,H-12,'PARK 7',P.chalk,1); }
+  }
+  drawScreen();
+  const map={oSky:'sky',oStripes:'stripes',oTrail:'trail',oHud:'hud',oNight:'night',oFrame:'frame'};
+  for(const id in map){ const b=document.getElementById(id); b.addEventListener('click',()=>{ opt[map[id]]=!opt[map[id]]; b.setAttribute('aria-pressed',String(opt[map[id]])); drawScreen(); }); }
+
+  // ---- STUDY 02: sheet ----
+  (function(){ const p=new Pix(document.getElementById('sheet')); p.rect(0,0,160,56,P.grassA);
+    for(let i=0;i<4;i++){ p.rect(i*40,0,1,56,P.grassB); batter(p,i*40+18,52,i,P); }
+  })();
+  // ---- STUDY 03: ball ----
+  (function(){ const p=new Pix(document.getElementById('ball')); p.rect(0,0,160,56,P.sky3); p.rect(0,44,160,12,P.grassA);
+    // big ball 4px
+    p.rect(12,18,4,4,P.chalk); p.px(13,19,P.sky3);
+    // trail
+    for(let i=0;i<9;i++){ p.px(40+i*5, 32-Math.sin(i/8*Math.PI)*16, P.chalk); } p.rect(84,30,4,4,P.chalk); p.px(85,31,P.sky3);
+    // wall spark
+    p.rect(110,22,4,22,P.wall); p.rect(110,22,4,1,P.chalk);
+    p.rect(104,26,4,4,P.chalk); p.px(102,24,P.score); p.px(101,29,P.score); p.px(103,32,P.score); p.px(107,22,P.score);
+    // dust
+    p.rect(136,40,4,4,P.chalk); p.px(135,41,P.sky3);
+    p.px(132,43,P.dirt); p.px(131,41,P.dirt); p.px(141,42,P.dirt); p.px(143,43,P.dirt); p.px(134,39,P.dirt);
+  })();
+  // ---- STUDY 04: type ----
+  (function(){ const p=new Pix(document.getElementById('type')); p.rect(0,0,160,72,P.wall);
+    text5(p,8,8,'412 FT',P.score,3); text3(p,8,36,'PARK 7',P.chalk,1);
+    text5(p,8,46,'HR',P.cap,3); p.rect(50,46,54,21,P.score); text5(p,56,46,'HR',P.wall,3);
+    text3(p,110,36,'FLASH',P.chalk,1);
+  })();
+  // ---- STUDY 05: parks ----
+  (function(){ const p=new Pix(document.getElementById('park'));
+    const parks=[{w:8,night:false,x:0},{w:26,night:false,x:54},{w:18,night:true,x:108}];
+    parks.forEach(k=>{ const x=k.x, GY=60;
+      p.rect(x,0,52,72,k.night?P.night:P.sky2); p.rect(x,30,52,30,k.night?P.ink:P.sky3);
+      if(k.night){ p.px(x+8,6,P.chalk); p.px(x+30,12,P.chalk); p.px(x+44,4,P.chalk); p.px(x+20,20,P.chalk); }
+      p.rect(x,GY,52,12,P.grassA); for(let s=0;s<52;s+=8) p.rect(x+s,GY,4,12,P.grassB);
+      p.rect(x+40,GY-k.w,12,k.w,P.wall); p.rect(x+40,GY-k.w,12,1,P.chalk);
+      if(k.night){ p.rect(x+46,GY-k.w-18,2,18,P.ink); p.rect(x+42,GY-k.w-22,10,4,P.chalk); }
+      p.rect(x+4,GY-6,4,6,P.ink); p.rect(x+3,GY-9,6,3,P.cap);
+    });
+    p.rect(52,0,2,72,P.chalk); p.rect(106,0,2,72,P.chalk);
+  })();
+})();
+</script>

@@ -1,0 +1,555 @@
+<title>Sandlot Derby Research</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F5F2EA; --paper:#FFFFFF; --ink:#1C1F1A; --ink-2:#4A4F47; --ink-3:#7A7F76;
+  --line:#D9D5C8; --grass:#1F5A33; --grass-2:#2E7D46; --clay:#B4552E; --chalk:#FFFFFF;
+  --sky:#DCEBF3; --warn-bg:#FBF1E6; --ok-bg:#E8F2EA; --code-bg:#EFECE3;
+  --shadow:0 1px 2px rgba(28,31,26,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161A; --paper:#181F24; --ink:#EDEAE0; --ink-2:#B9B6AC; --ink-3:#858B84;
+    --line:#2C353B; --grass:#5FBF7C; --grass-2:#3E9A5C; --clay:#E4855E; --chalk:#EDEAE0;
+    --sky:#1B2A36; --warn-bg:#2A2119; --ok-bg:#16261B; --code-bg:#1F272C;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11161A; --paper:#181F24; --ink:#EDEAE0; --ink-2:#B9B6AC; --ink-3:#858B84;
+  --line:#2C353B; --grass:#5FBF7C; --grass-2:#3E9A5C; --clay:#E4855E; --chalk:#EDEAE0;
+  --sky:#1B2A36; --warn-bg:#2A2119; --ok-bg:#16261B; --code-bg:#1F272C;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;padding-block:32px 64px;padding-inline:16px}
+.wrap{max-width:760px;margin:0 auto}
+.wide{max-width:960px;margin-inline:auto}
+h1,h2,h3{font-family:"Oswald","Arial Narrow",sans-serif;text-wrap:balance;line-height:1.1;margin:0}
+h1{font-size:clamp(40px,7vw,64px);font-weight:700;letter-spacing:.01em;text-transform:uppercase}
+h2{font-size:28px;font-weight:500;margin-top:56px;margin-bottom:14px;padding-top:14px;border-top:3px solid var(--grass)}
+h3{font-size:19px;font-weight:500;margin-top:26px;margin-bottom:8px}
+p{margin:0 0 14px;max-width:66ch}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+.lede{font-size:19px;color:var(--ink-2);max-width:60ch;margin-top:14px}
+a{color:var(--grass);text-decoration-thickness:1px;text-underline-offset:2px}
+code,.mono{font-family:"IBM Plex Mono",monospace;font-size:.92em}
+code{background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:4px;overflow-x:auto;font-size:13.5px;line-height:1.5;margin:10px 0 18px}
+pre code{background:none;padding:0}
+ul,ol{padding-left:22px;margin:0 0 14px;max-width:66ch}
+li{margin-bottom:6px}
+.verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:28px 0 10px}
+.verdict>div{background:var(--paper);padding:16px 18px}
+.verdict .q{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.verdict .a{font-family:"Oswald",sans-serif;font-size:26px;font-weight:700;margin:6px 0 4px;line-height:1}
+.verdict .a.yes{color:var(--grass)} .verdict .a.no{color:var(--clay)}
+.verdict .d{font-size:14px;color:var(--ink-2);line-height:1.45}
+@media (max-width:640px){.verdict{grid-template-columns:1fr}}
+.callout{border-left:4px solid var(--clay);background:var(--warn-bg);padding:12px 16px;margin:16px 0 20px;max-width:66ch}
+.callout.ok{border-color:var(--grass);background:var(--ok-bg)}
+.callout p:last-child{margin:0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:12px 0 20px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tscroll{overflow-x:auto;margin:12px 0 20px}
+.tscroll table{min-width:640px;margin:0}
+figure{margin:24px 0 28px}
+figure svg{max-width:100%;height:auto;display:block;color:var(--ink)}
+figcaption{font-size:13.5px;color:var(--ink-2);margin-top:10px;max-width:66ch}
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--ink-2);white-space:nowrap}
+.pill.gap{border-color:var(--clay);color:var(--clay)}
+.src{font-size:13px;color:var(--ink-3)}
+.src a{color:var(--ink-3)}
+
+/* demo */
+.demo{background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);margin:20px 0 8px}
+.demo-top{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px}
+.demo-top label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{background:none;border:0;padding:5px 12px;font:inherit;font-size:13px;color:var(--ink-2);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--grass);color:#fff}
+.seg button:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--clay);outline-offset:2px}
+input[type=range]{width:110px;accent-color:var(--grass)}
+#field{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;background:var(--sky)}
+.scoreboard{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
+.scoreboard>div{padding:10px 14px;border-right:1px solid var(--line)}
+.scoreboard>div:last-child{border-right:0}
+.scoreboard .k{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.scoreboard .v{font-family:"Oswald",sans-serif;font-size:30px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.scoreboard .v small{font-size:14px;font-weight:500;color:var(--ink-3);margin-left:3px}
+@media (max-width:520px){.scoreboard{grid-template-columns:repeat(2,1fr)}.scoreboard>div:nth-child(2){border-right:0}}
+.hint{font-size:13.5px;color:var(--ink-2);margin:8px 0 0}
+.demo-bottom{padding:8px 14px 10px;font-size:13.5px;color:var(--ink-2);border-top:1px solid var(--line)}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;background:var(--code-bg)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:640px){.two{grid-template-columns:1fr}}
+.opt{border:1px solid var(--line);background:var(--paper);padding:14px 16px}
+.opt h3{margin-top:0}
+.opt .tag{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.opt .tag.rec{color:var(--grass)}
+.opt ul{font-size:14.5px;margin-bottom:0}
+@media (prefers-reduced-motion: reduce){#field{cursor:default}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Research note &middot; 19 Sep 2026 &middot; for Dwight</div>
+  <h1>Sandlot Derby</h1>
+  <p class="lede">Is there a “Desert Golfing, but baseball”? Could we ship one on the App Store in native Swift? Short answer: nobody has made the bare version, the physics is small, and SpriteKit is the right tool. One premise needs correcting first.</p>
+
+  <div class="verdict">
+    <div><div class="q">Does it exist?</div><div class="a no">Not really</div><div class="d">Flick-to-hit games exist (Flick Home Run!, Baseball Boy!), all wrapped in upgrades, ads, and modes. No endless, menu-free, one-gesture baseball game was found.</div></div>
+    <div><div class="q">Could we build it?</div><div class="a yes">Yes</div><div class="d">One projectile, gravity plus quadratic drag, one gesture, a wall. Smaller than g0lf: no terrain collision.</div></div>
+    <div><div class="q">Must it be Swift?</div><div class="a">Should be</div><div class="d">“Apple shuns JS apps” is mostly a myth. But for a physics game with no web reuse, SpriteKit is simpler and smoother than a WebView.</div></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>1. What already exists</h2>
+  <p>Every real candidate found is either a flick or tap-timing hitting game with a progression loop bolted on, or a full baseball sim. Ratings counts were read from the US App Store on the day of this note.</p>
+</div>
+<div class="wide">
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>Game</th><th>Dev / year</th><th>Input</th><th>Loop</th><th>Ratings</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td><a href="https://apps.apple.com/us/app/flick-home-run/id454086751">Flick Home Run!</a></td><td>Infinity Pocket, 2011</td><td>One swipe timed against a pitch (pendulum bat)</td><td>Modes, achievements, competitions, freemium</td><td class="num">3.2★ · 1.4K</td><td>Closest mechanic. Still updated 2024.</td></tr>
+      <tr><td><a href="https://apps.apple.com/us/app/baseball-boy/id1333523965">Baseball Boy!</a></td><td>Voodoo, 2018</td><td>Tap to stop a power meter; ball bounces and rolls</td><td>Upgrades, currency, forced ads, $7.99/wk sub</td><td class="num">4.5★ · 534K</td><td>Proves the appetite. The anti-Desert-Golfing.</td></tr>
+      <tr><td><a href="https://apps.apple.com/us/app/homerun-clash/id1345750763">Homerun Clash</a></td><td>HAEGIN</td><td>Hold to charge, release for timing</td><td>PvP, 90-second matches, gacha</td><td class="num">4.4★ · 23K</td><td>2D-styled, but a competitive live-service game.</td></tr>
+      <tr><td><a href="https://apps.apple.com/us/app/baseball-9/id1340866223">Baseball 9</a></td><td>playus soft</td><td>Full pitch / hit / field sim</td><td>Rosters, seasons</td><td class="num">4.6★ · 430K</td><td>Out of scope, cited for scale.</td></tr>
+      <tr><td><a href="https://apps.apple.com/bm/app/mlb-home-run-derby-mobile/id626469977">MLB Home Run Derby</a></td><td>MLB Advanced Media</td><td>Timing swing</td><td>Card collection, live events</td><td class="num">n/a</td><td>Licensed, meta-heavy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+<div class="wrap">
+  <p class="src">Not found as real store listings despite searching: “Ballpark Frank”, “Blooper Baseball”, “Home Run Derby 3D”. “Pinch Hitter” (Mousebreaker, 2010) has only decade-old blog evidence. A search for “Desert Golfing but baseball” returned nothing.</p>
+
+  <figure>
+    <svg viewBox="0 0 720 340" role="img" aria-label="Existing baseball games plotted by input simplicity against how much game wraps the core mechanic; the corner for one gesture and no wrapper is empty, marked as the gap">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <line x1="70" y1="290" x2="690" y2="290" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <line x1="70" y1="290" x2="70" y2="20" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <text x="380" y="322" font-size="12" text-anchor="middle" fill="currentColor">input per swing → more gestures, meters, menus</text>
+      <text x="22" y="160" font-size="12" text-anchor="middle" fill="currentColor" transform="rotate(-90 22 160)">wrapper → upgrades, ads, modes, seasons</text>
+      <text x="80" y="284" font-size="11" fill="currentColor" opacity=".7">one gesture</text>
+      <text x="80" y="36" font-size="11" fill="currentColor" opacity=".7">heavy</text>
+      <rect x="72" y="200" width="150" height="88" fill="none" stroke="#B4552E" stroke-width="1.6" stroke-dasharray="6 4"/>
+      <text x="147" y="222" font-size="13" font-weight="600" text-anchor="middle" fill="#B4552E">the gap</text>
+      <text x="147" y="238" font-size="11" text-anchor="middle" fill="#B4552E">one flick, endless, no menus</text>
+      <circle cx="92" cy="268" r="6" fill="#2E7D46"/><text x="104" y="272" font-size="12" fill="currentColor">Desert Golfing (golf)</text>
+      <circle cx="240" cy="150" r="6" fill="currentColor"/><text x="252" y="154" font-size="12" fill="currentColor">Flick Home Run!</text>
+      <circle cx="300" cy="80" r="6" fill="currentColor"/><text x="312" y="84" font-size="12" fill="currentColor">Baseball Boy!</text>
+      <circle cx="400" cy="60" r="6" fill="currentColor"/><text x="412" y="64" font-size="12" fill="currentColor">Homerun Clash</text>
+      <circle cx="560" cy="45" r="6" fill="currentColor"/><text x="572" y="49" font-size="12" fill="currentColor">Baseball 9</text>
+      <circle cx="480" cy="110" r="6" fill="currentColor"/><text x="492" y="114" font-size="12" fill="currentColor">MLB HR Derby</text>
+    </svg>
+    <figcaption>The market lives in the top half. Everything with a simple input still wraps it in a progression loop. The bottom-left corner, where Desert Golfing sits for golf, is empty for baseball.</figcaption>
+  </figure>
+
+  <h2>2. Try the two candidate mechanics</h2>
+  <p>The design question is which single gesture to build around. Flick Home Run! uses a timed swipe. Your g0lf uses a drag vector. This toy runs both against the same flight model so you can feel the difference. Drag is real baseball drag, calibrated so 100 mph at 28° lands near 400 ft.</p>
+</div>
+<div class="wide">
+  <div class="demo">
+    <div class="demo-top">
+      <div class="seg" role="group" aria-label="Input mode">
+        <button id="modeTiming" aria-pressed="true">Timing</button>
+        <button id="modeFlick" aria-pressed="false">Flick</button>
+      </div>
+      <label for="cd">drag C<sub>d</sub> <input type="range" id="cd" min="0" max="0.5" step="0.01" value="0.33"> <span id="cdv" class="mono">0.33</span></label>
+      <label><input type="checkbox" id="spin" checked> backspin lift</label>
+      <label><input type="checkbox" id="ghost" checked> show no-drag ghost</label>
+      <button id="pitch" style="margin-left:auto;font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--grass);background:var(--grass);color:#fff;border-radius:4px;cursor:pointer">New pitch</button>
+    </div>
+    <canvas id="field" width="960" height="380" aria-label="Side view of a ballpark. Swing to hit the pitch and watch the ball fly."></canvas>
+    <div class="scoreboard">
+      <div><div class="k">Last hit</div><div class="v" id="sDist">—<small>ft</small></div></div>
+      <div><div class="k">Exit velo / angle</div><div class="v" id="sLaunch">—</div></div>
+      <div><div class="k">Home runs</div><div class="v" id="sHR">0<small>/ 0</small></div></div>
+      <div><div class="k">Longest</div><div class="v" id="sBest">—<small>ft</small></div></div>
+    </div>
+    <div class="demo-bottom" id="hint">Timing mode: tap the field or press <kbd>space</kbd> as the pitch reaches the plate. Early lifts it, late tops it.</div>
+  </div>
+  <p class="hint">Wall is 380 ft and 10 ft high. Ground bounce keeps 40 % of vertical speed, then the ball rolls out. Dashed grey arc is the same swing with no air: that gap is the whole reason the drag term matters.</p>
+</div>
+
+<div class="wrap">
+  <h3>What the toy suggests</h3>
+  <ul>
+    <li><strong>Timing is more “baseball”</strong> but it is a rhythm input, not a physics input. The player controls one scalar (when). Angle and power are derived from it, so the design has to invent that mapping.</li>
+    <li><strong>Flick is more Desert Golfing.</strong> The player owns the launch vector directly, the same feel as g0lf. The pitch becomes flavour, not input. It also makes the outcome legible: you see exactly why the ball did what it did.</li>
+    <li><strong>A hybrid is tempting</strong> (flick sets angle and power, pitch timing scales contact quality) but it doubles the input model. Desert Golfing’s whole point was that it never did that.</li>
+  </ul>
+
+  <h2>3. The physics, and why it is smaller than g0lf</h2>
+  <p>A batted ball is one body with two forces. Gravity is constant. Air drag grows with the square of speed, and at 100 mph it is about 1.2 times the ball’s weight, which is why a batted ball goes 400 ft and not 560. Backspin adds a lift term that is worth about 50 ft on a well-hit ball. Everything else is presentation.</p>
+
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="Forces on a batted ball: gravity straight down, drag opposite to velocity and proportional to speed squared, and a smaller lift term perpendicular to velocity from backspin. A trajectory with drag lands far short of the no-drag parabola.">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <line x1="40" y1="250" x2="700" y2="250" stroke="currentColor" stroke-width="1"/>
+      <path d="M60 250 Q 330 -40 600 250" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="6 4" opacity=".5"/>
+      <path d="M60 250 C 160 90, 300 40, 400 250" fill="none" stroke="#2E7D46" stroke-width="2.5"/>
+      <text x="612" y="244" font-size="11" fill="currentColor" opacity=".7">no air, 560 ft</text>
+      <text x="404" y="244" font-size="11" fill="#2E7D46" font-weight="600">with drag, 400 ft</text>
+      <circle cx="255" cy="74" r="7" fill="#2E7D46"/>
+      <line x1="255" y1="74" x2="255" y2="150" stroke="currentColor" stroke-width="1.6" marker-end="url(#ar2)"/>
+      <text x="263" y="150" font-size="12" fill="currentColor">g = 9.81 m/s²</text>
+      <line x1="255" y1="74" x2="182" y2="98" stroke="#B4552E" stroke-width="1.8" marker-end="url(#ar2)"/>
+      <text x="90" y="116" font-size="12" fill="#B4552E">drag = −k·C<tspan baseline-shift="sub" font-size="9">d</tspan>·|v|·v</text>
+      <line x1="255" y1="74" x2="279" y2="4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar2)"/>
+      <text x="288" y="14" font-size="12" fill="currentColor">lift (backspin), small</text>
+      <line x1="255" y1="74" x2="345" y2="44" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar2)"/>
+      <text x="352" y="44" font-size="12" fill="currentColor">v</text>
+      <text x="40" y="285" font-size="12" fill="currentColor" font-family="IBM Plex Mono, monospace">k = ½·ρ·A/m ≈ 0.0174 per metre  (ρ 1.2 kg/m³, A 0.0042 m², m 0.145 kg)</text>
+    </svg>
+    <figcaption>Forces on the ball, and what they cost. The green arc and the dashed arc are the same 100 mph, 28° swing. Numbers from the same integrator that drives the toy above.</figcaption>
+  </figure>
+
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>Exit velo</th><th>Angle</th><th>No air</th><th>Drag only</th><th>Drag + backspin</th></tr></thead>
+    <tbody>
+      <tr><td class="num">90 mph</td><td class="num">28°</td><td class="num">455 ft</td><td class="num">303 ft</td><td class="num">344 ft</td></tr>
+      <tr><td class="num">100 mph</td><td class="num">28°</td><td class="num">560 ft</td><td class="num">348 ft</td><td class="num">398 ft</td></tr>
+      <tr><td class="num">110 mph</td><td class="num">28°</td><td class="num">676 ft</td><td class="num">393 ft</td><td class="num">450 ft</td></tr>
+      <tr><td class="num">110 mph</td><td class="num">40°</td><td class="num">800 ft</td><td class="num">420 ft</td><td class="num">440 ft</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="src">Statcast’s rule of thumb is that 100 mph at about 28° is a 400 ft ball, and that the best launch angles are 25–35°. Both fall out of this model, which is the sanity check that the constants are right. Real backspin lift is stronger than the fixed 0.15 used here, so the model slightly under-rewards high, spinny hits.</p>
+
+  <h3>Integrator</h3>
+  <p>Semi-implicit Euler at a fixed step is enough. The toy runs 4 substeps per frame at 60 Hz. There is no terrain: the only collisions are a flat ground line and one vertical wall, so the hard part of g0lf (segment collision against a procedural polyline) does not exist here.</p>
+<pre><code>// per substep, dt = 1/240 s, SI units
+let speed = hypot(vx, vy)
+let ax = -k * cd * speed * vx - k * lift * speed * vy
+let ay = -g - k * cd * speed * vy + k * lift * speed * vx
+vx += ax * dt;  vy += ay * dt
+x  += vx * dt;  y  += vy * dt
+if y &lt; 0 { y = 0; vy = -vy * 0.4; vx *= 0.75 }   // bounce, then roll</code></pre>
+
+  <h2 id="apple">4. Fact-check: does Apple shun JS apps?</h2>
+  <div id="appleBody">
+  <div class="callout"><p><strong>Mostly a myth.</strong> Nothing in the current App Store Review Guidelines bans JavaScript, Capacitor, Cordova, React Native, or a Phaser game inside a WKWebView. The rule people remember is about something else.</p></div>
+  <ul>
+    <li><strong>2.5.2</strong> says apps may not “download, install, or execute code which introduces or changes features or functionality.” That targets loading new logic from a server after review, not the language the bundle was compiled from.</li>
+    <li><strong>2.5.6</strong> says apps that browse the web must use WebKit. That is about browsers, not games.</li>
+    <li><strong>4.2 Minimum Functionality</strong> is the one that actually rejects things: an app that is “not particularly useful, unique, or ‘app-like’” or is “a repackaged website.” It is a judgement about feel, and a laggy WebView with no haptics, no offline, and browser-style scrolling fails it.</li>
+    <li><strong>4.7</strong> explicitly permits “HTML5 and JavaScript mini apps and mini games” inside a host app, which is the clearest proof there is no class ban. BBC Games ships its kids’ games through Ionic Capacitor, and Phaser publishes an official Capacitor-to-App-Store guide.</li>
+  </ul>
+  <p>So the honest version of the premise is: <em>a web-tech game is allowed, but it has to feel native, and a WebView makes that harder.</em> For a physics toy where 60 fps touch response is the entire product, that is a real cost. The reason to go Swift is not compliance. It is that SpriteKit gives you the frame loop, the physics, Game Center, and haptics for free, and there is no web version of this game to share code with.</p>
+  <p class="src">Guideline text read from <a href="https://developer.apple.com/app-store/review/guidelines/">developer.apple.com/app-store/review/guidelines</a> on 19 Sep 2026. The one thing the researcher could not pin down was a named small indie Phaser game with a live App Store link, so treat “indie HTML5 games ship fine” as strongly implied by 4.7 rather than proven by example.</p>
+  </div>
+
+  <h2>5. Native stack recommendation</h2>
+  <div id="stackBody">
+  <p><strong>SwiftUI shell, SpriteKit scene, hand-rolled flight.</strong> SpriteKit is not deprecated. WWDC 2025 deprecated <em>SceneKit</em> (the 3D one), and forum threads keep conflating the two. SpriteKit still ships with Xcode, renders through Metal, and drops into SwiftUI with <code>SpriteView</code>.</p>
+  <p>The one real wrinkle: SpriteKit’s built-in <code>linearDamping</code> is proportional to velocity, not velocity squared, so it cannot produce baseball drag. Either apply a per-frame force in the scene’s update, or skip the physics engine for the ball entirely and do what g0lf already does: simulate the whole flight on release and play it back.</p>
+
+  <div class="two">
+    <div class="opt">
+      <div class="tag rec">Recommended</div>
+      <h3>Precompute and play back</h3>
+      <ul>
+        <li>On release, integrate the flight once (the loop in section 3) into an array of points.</li>
+        <li>Play it back with <code>SKAction.follow(path)</code> or by stepping the array in <code>update(_:)</code>.</li>
+        <li>Deterministic, testable in a plain XCTest with no scene, and identical to the g0lf architecture.</li>
+        <li>No <code>SKPhysicsBody</code> at all. The wall and ground are two if-statements.</li>
+      </ul>
+    </div>
+    <div class="opt">
+      <div class="tag">Alternative</div>
+      <h3>SKPhysicsBody plus custom force</h3>
+      <ul>
+        <li>Give the ball a physics body, then each frame call <code>applyForce(−k·|v|·v)</code>.</li>
+        <li>Free bounces, wall contact via <code>SKPhysicsContactDelegate</code>.</li>
+        <li>Costs determinism: SpriteKit steps at frame rate, so the same swing can land a foot apart on a busy frame. Bad for a shared seed.</li>
+      </ul>
+    </div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="Recommended architecture: a SwiftUI view hosts a SpriteView with one SKScene. A gesture recogniser sends the flick vector to a pure Swift Flight module that integrates once and returns a path. The scene plays the path back and reports the distance to a Score store, which persists via UserDefaults and posts to Game Center.">
+      <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <rect x="20" y="20" width="680" height="210" rx="4" fill="none" stroke="currentColor" stroke-dasharray="4 4" opacity=".5"/>
+      <text x="32" y="40" font-size="11" fill="currentColor" opacity=".7">SwiftUI ContentView</text>
+      <rect x="40" y="60" width="180" height="150" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="130" y="82" font-size="13" font-weight="600" text-anchor="middle" fill="currentColor">SpriteView → DerbyScene</text>
+      <text x="130" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">draws field, wall, ball</text>
+      <text x="130" y="118" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">UIPanGesture → flick vector</text>
+      <text x="130" y="134" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">update(): steps path index</text>
+      <rect x="290" y="60" width="180" height="70" rx="3" fill="none" stroke="#2E7D46" stroke-width="2"/>
+      <text x="380" y="84" font-size="13" font-weight="600" text-anchor="middle" fill="#2E7D46">Flight (pure Swift)</text>
+      <text x="380" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">integrate(v, θ, park) → [Point]</text>
+      <text x="380" y="118" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">no UIKit, unit-tested</text>
+      <rect x="290" y="150" width="180" height="60" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="380" y="174" font-size="13" font-weight="600" text-anchor="middle" fill="currentColor">Park (seeded)</text>
+      <text x="380" y="192" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">wall distance, height, wind</text>
+      <rect x="530" y="60" width="150" height="150" rx="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <text x="605" y="84" font-size="13" font-weight="600" text-anchor="middle" fill="currentColor">Score</text>
+      <text x="605" y="104" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">total ft, HR, park #</text>
+      <text x="605" y="120" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">UserDefaults</text>
+      <text x="605" y="136" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">GameKit leaderboard</text>
+      <line x1="220" y1="95" x2="288" y2="95" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+      <text x="254" y="88" font-size="10" text-anchor="middle" fill="currentColor">flick</text>
+      <line x1="288" y1="110" x2="220" y2="110" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+      <text x="254" y="124" font-size="10" text-anchor="middle" fill="currentColor">path</text>
+      <line x1="380" y1="148" x2="380" y2="132" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+      <line x1="470" y1="95" x2="528" y2="95" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+      <text x="499" y="88" font-size="10" text-anchor="middle" fill="currentColor">distance</text>
+      <line x1="528" y1="180" x2="472" y2="180" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+      <text x="499" y="196" font-size="10" text-anchor="middle" fill="currentColor">park #</text>
+    </svg>
+    <figcaption>The only module that matters is the green one, and it has no Apple framework in it. The scene is a renderer and a gesture source. This is g0lf’s Physics.res / View.res split with Swift names.</figcaption>
+  </figure>
+
+  <h3>Rejected alternatives</h3>
+  <ul>
+    <li><strong>Godot 4 or Unity.</strong> Real engines for a game with one body and two lines. Both add a second toolchain and an export pipeline to a project that fits in a few Swift files. Unity was also not what Desert Golfing used, despite the folklore.</li>
+    <li><strong>Box2D via Swift bindings.</strong> Desert Golfing genuinely ran on Box2D, inside Justin Smith’s own C++ engine, but g0lf already proved the terrain problem does not need an engine, and a derby has no terrain. The researcher could not verify a maintained Swift Box2D package in 2026.</li>
+    <li><strong>SwiftUI Canvas with a TimelineView.</strong> Works, and is a fair fallback if SpriteView misbehaves. You lose SKAction and texture atlases but for a silhouette and a ball that is nothing.</li>
+  </ul>
+
+  <h3>Shipping logistics</h3>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>Item</th><th>Cost / time</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>Apple Developer Program</td><td class="num">$99 / yr</td><td>Required for TestFlight and the store.</td></tr>
+      <tr><td>Mac + Xcode</td><td class="num">have</td><td>No way around it for Swift. Cloud sessions cannot build or sign.</td></tr>
+      <tr><td>TestFlight, internal testers</td><td class="num">minutes</td><td>No review. External testers need a Beta review, usually 1 to 2 days.</td></tr>
+      <tr><td>First App Store review</td><td class="num">2 to 5 days</td><td>Apple quotes 90 % within 48 h; 2026 trackers show new-app spikes to a week.</td></tr>
+      <tr><td>Game Center leaderboard</td><td class="num">small</td><td>GameKit is a sibling framework; one identifier in App Store Connect, one submit call.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="src">Desert Golfing’s engine and Box2D use come from the Road to the IGF interview and the Surviving the App Store transcript, both secondary summaries; the researcher could not fetch the primary interview text. Worth one manual read if it matters for a pitch. Sources: <a href="https://developer.apple.com/documentation/spritekit">SpriteKit docs</a>, <a href="https://www.gamedeveloper.com/design/road-to-the-igf-justin-smith-s-i-desert-golfing-i-">Road to the IGF</a>, <a href="https://github.com/amirrajan/survivingtheappstore">survivingtheappstore</a>.</p>
+  </div>
+
+  <h2>6. What carries over from g0lf</h2>
+  <div id="golfBody">
+  <p>More than expected. g0lf does not run physics per frame at all: it integrates the whole shot on release and compiles it to CSS keyframes. That “simulate once, play back” shape is exactly the recommended Swift architecture, so the port is a translation of ideas, not a rewrite of an engine. What changes is that most of the hard code goes away.</p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>g0lf module</th><th>What it does</th><th>Derby in Swift</th><th>Carries?</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Rand.res</td><td>mulberry32 seeded PRNG so hole N is always the same course</td><td><code>SeededGenerator: RandomNumberGenerator</code>, same algorithm, park N is always the same park</td><td><span class="pill">port as is</span></td></tr>
+      <tr><td class="mono">Physics.res</td><td>Trapezoidal integrator at 1/720 s, gravity 1500 px/s², restitution 0.42, roll friction 0.62, bisection to the terrain hit</td><td>Semi-implicit Euler with a v² term. Flat ground, one wall. No bisection, no slope spans</td><td><span class="pill">shrinks a lot</span></td></tr>
+      <tr><td class="mono">Terrain.res</td><td>Layered sines, feature pool, slope limiter, landing pads</td><td>Gone. The park is three numbers: wall distance, wall height, wind</td><td><span class="pill gap">drops</span></td></tr>
+      <tr><td class="mono">Css.res</td><td>Stops to @keyframes with per-segment cubic-bezier</td><td>Gone. Playback is stepping an array in <code>update(_:)</code></td><td><span class="pill gap">drops</span></td></tr>
+      <tr><td class="mono">Update.res</td><td>Drag vector to power (clamp at 190 units, launch at 1280) with a 0.06 threshold so a tap is not a stroke</td><td>Same shape and the same thresholds are a good starting point. Map power to 60 to 115 mph</td><td><span class="pill">port</span></td></tr>
+      <tr><td class="mono">Score.res</td><td>Persistent run in localStorage, v1 pipe-delimited</td><td><code>Codable</code> struct in UserDefaults, plus a GameKit submit</td><td><span class="pill">port</span></td></tr>
+      <tr><td class="mono">test/</td><td>Eleven regression tests, each one a shipped bug</td><td>XCTest over the pure Flight module. The wind-in-preview and wedged-ball lessons have derby analogues (wind in the ghost line, ball stuck against the wall base)</td><td><span class="pill">port the idea</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Two g0lf lessons apply directly. First, the trajectory cheat deliberately omits wind so the preview stays honest without giving the shot away; a derby ghost line should do the same. Second, g0lf’s unit choice (a 1000×600 virtual space) let the physics ignore screen size. Doing the same here in feet, with one scale factor at draw time, keeps the Flight module testable against real Statcast numbers.</p>
+  </div>
+
+  <h2>7. Open questions before building</h2>
+  <ol>
+    <li><strong>Which gesture.</strong> Play the toy in both modes for a few minutes. The one you keep playing is the answer.</li>
+    <li><strong>What is endless.</strong> Desert Golfing’s endlessness is the terrain. In a derby the equivalent is probably the wall: distance and height drift per “park”, seeded, so park 1,000 is a real place you can share.</li>
+    <li><strong>What is the score.</strong> Cumulative feet? Home run count out of pitches? Desert Golfing counts strokes forever and never resets; the honest analogue is total feet, forever.</li>
+    <li><strong>Name and look.</strong> Nothing here depends on a licence. A silhouette batter and a chalk line is enough, and it is the look that makes the minimalism read as intent rather than budget.</li>
+  </ol>
+</div>
+
+<script>
+(function(){
+  const cv = document.getElementById('field');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  // world: feet. batter at x=0, wall at 380 ft. view shows -30..500 ft
+  const VIEW_L=-30, VIEW_R=500, GROUND_Y = H-46;
+  const PX = W/(VIEW_R-VIEW_L);
+  const WALL_X=380, WALL_H=10;
+  const K=0.0174, G=9.81, FT=3.28084, MPH=0.44704;
+  const cdEl=document.getElementById('cd'), cdv=document.getElementById('cdv');
+  const spinEl=document.getElementById('spin'), ghostEl=document.getElementById('ghost');
+  const hint=document.getElementById('hint');
+  const sDist=document.getElementById('sDist'), sLaunch=document.getElementById('sLaunch'), sHR=document.getElementById('sHR'), sBest=document.getElementById('sBest');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let mode='timing';
+  let hr=0, swings=0, best=0;
+  try{ best = +localStorage.getItem('sd_best')||0; if(best) sBest.innerHTML = best+'<small>ft</small>'; }catch(e){}
+
+  // state
+  let ball=null;      // {x,y,vx,vy, trail:[], done, dist, wallHit}
+  let ghost=null;     // no-drag trail
+  let pitch=null;     // {t, dur}
+  let flick=null;     // {x0,y0,x1,y1}
+  let lastT=0, msg='', msgT=0;
+
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function sx(ft){ return (ft-VIEW_L)*PX; }
+  function sy(ft){ return GROUND_Y - ft*PX; }
+
+  function newPitch(){
+    ball=null; ghost=null; flick=null;
+    if(mode==='timing'){ pitch={t:0, dur: reduced? 1.4 : 0.9}; }
+    else { pitch=null; }
+  }
+
+  function simulate(v_mph, deg, cd, lift, record){
+    let v=v_mph*MPH, th=deg*Math.PI/180;
+    let x=0, y=1.0, vx=v*Math.cos(th), vy=v*Math.sin(th);
+    const dt=1/240; const pts=[]; let t=0, wallHit=false, hr=false, dist=null;
+    while(t<12){
+      const s=Math.hypot(vx,vy);
+      const ax=-K*cd*s*vx - K*lift*s*vy;
+      const ay=-G-K*cd*s*vy + K*lift*s*vx;
+      const prevXf=x*FT;
+      vx+=ax*dt; vy+=ay*dt; x+=vx*dt; y+=vy*dt; t+=dt;
+      const xf=x*FT, yf=y*FT;
+      // crossing the wall plane, left to right
+      if(prevXf<WALL_X && xf>=WALL_X){
+        if(yf<WALL_H){ wallHit=true; vx=-vx*0.35; x=(WALL_X-0.1)/FT; }
+        else if(dist===null){ hr=true; }
+      }
+      if(y<0){ y=0; if(dist===null) dist=Math.max(0,xf); vy=-vy*0.4; vx*=0.75; if(Math.abs(vy)<0.5){ vy=0; } }
+      if(y===0 && vy===0){ vx*=0.985; if(Math.abs(vx)<0.3) break; }
+      pts.push([x*FT, y*FT]);
+    }
+    if(dist===null) dist=Math.max(0,x*FT);
+    return {pts, dist, wallHit, hr};
+  }
+
+  function launch(v_mph, deg){
+    const cd=+cdEl.value, lift=spinEl.checked?0.15:0;
+    const r=simulate(v_mph,deg,cd,lift);
+    const gh=ghostEl.checked ? simulate(v_mph,deg,0,0) : null;
+    ball={pts:r.pts, i:0, dist:r.dist, hr:r.hr, wallHit:r.wallHit};
+    ghost=gh?{pts:gh.pts,i:0}:null;
+    swings++;
+    if(r.hr) hr++;
+    const d=Math.round(r.dist);
+    if(d>best){ best=d; try{localStorage.setItem('sd_best',String(best));}catch(e){} }
+    sDist.innerHTML=d+'<small>ft</small>';
+    sLaunch.textContent=Math.round(v_mph)+' mph · '+Math.round(deg)+'°';
+    sHR.innerHTML=hr+'<small>/ '+swings+'</small>';
+    sBest.innerHTML=best+'<small>ft</small>';
+    msg = r.hr ? 'HOME RUN' : (r.wallHit ? 'off the wall' : (deg>50?'pop up':'')); msgT=1.8;
+    pitch=null;
+  }
+
+  function swing(){
+    if(mode!=='timing' || !pitch || ball) return;
+    // ideal contact when pitch reaches plate (progress 1). window ±0.12 s
+    const prog=pitch.t/pitch.dur;
+    const dtErr=(prog-1)*pitch.dur;      // negative = early
+    const win=0.13;
+    if(Math.abs(dtErr)>win || prog<0.5){ msg='swing and a miss'; msgT=1.2; swings++; sHR.innerHTML=hr+'<small>/ '+swings+'</small>'; pitch=null; return; }
+    const q=1-Math.abs(dtErr)/win;              // contact quality 0..1
+    const v=70+42*q;                             // 70..112 mph
+    const deg=27 - dtErr*230;                    // early (neg) -> higher angle
+    launch(v, Math.max(-5,Math.min(70,deg)));
+  }
+
+  function flickLaunch(f){
+    const dx=f.x1-f.x0, dy=-(f.y1-f.y0);
+    const len=Math.hypot(dx,dy); if(len<12) return;
+    const ang=Math.atan2(dy,dx)*180/Math.PI;
+    if(ang<-10||ang>85){ msg='foul'; msgT=1.2; return; }
+    const p=Math.min(1,len/(W*0.28));
+    launch(60+55*p, ang);
+  }
+
+  function draw(dt){
+    ctx.clearRect(0,0,W,H);
+    const ink=cssVar('--ink'), ink3=cssVar('--ink-3'), grass=cssVar('--grass-2'), clay=cssVar('--clay'), line=cssVar('--line');
+    // grass
+    ctx.fillStyle=grass; ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+    // distance ticks
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='11px IBM Plex Mono, monospace'; ctx.textAlign='center';
+    for(let f=100;f<=500;f+=100){ ctx.fillRect(sx(f),GROUND_Y,1,8); ctx.fillText(f+' ft',sx(f),GROUND_Y+24); }
+    // wall
+    ctx.fillStyle=clay; ctx.fillRect(sx(WALL_X)-4, sy(WALL_H), 6, WALL_H*PX);
+    ctx.fillStyle=ink; ctx.textAlign='left'; ctx.font='11px IBM Plex Mono, monospace'; ctx.fillText('380 ft wall', sx(WALL_X)+8, sy(WALL_H)+12);
+    // batter silhouette
+    ctx.strokeStyle=ink; ctx.lineWidth=3; ctx.lineCap='round';
+    const bx=sx(0), by=GROUND_Y;
+    ctx.beginPath(); ctx.moveTo(bx-6,by); ctx.lineTo(bx-2,by-22); ctx.lineTo(bx-6,by-42); ctx.moveTo(bx+2,by); ctx.lineTo(bx-2,by-22); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx-8,by-52,6,0,Math.PI*2); ctx.stroke();
+    // bat
+    const swingT = (ball && ball.i<10) ? 1 : 0;
+    ctx.beginPath(); ctx.moveTo(bx-2,by-36); ctx.lineTo(bx-2+(swingT?26:-10), by-36+(swingT?-6:-26)); ctx.stroke();
+    // pitch
+    if(pitch){
+      pitch.t+=dt;
+      const prog=Math.min(1.25,pitch.t/pitch.dur);
+      const px=sx(60.5-60.5*prog), py=sy(2.6 + 1.0*Math.sin(prog*Math.PI)*0.6);
+      ctx.fillStyle='#fff'; ctx.strokeStyle=ink; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      // strike zone marker
+      ctx.strokeStyle=ink3; ctx.setLineDash([3,3]); ctx.strokeRect(sx(0)+6, sy(4), 8, 2.6*PX); ctx.setLineDash([]);
+      if(prog>=1.25){ msg='took it'; msgT=1.0; swings++; sHR.innerHTML=hr+'<small>/ '+swings+'</small>'; pitch=null; }
+    }
+    // mound
+    ctx.fillStyle='rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(sx(60.5),GROUND_Y,14,4,0,0,Math.PI*2); ctx.fill();
+    // ghost trail
+    const stepPer = reduced ? 400 : 6;
+    if(ghost){
+      ghost.i=Math.min(ghost.pts.length-1, ghost.i+stepPer);
+      ctx.strokeStyle=ink3; ctx.lineWidth=1.2; ctx.setLineDash([5,4]); ctx.beginPath();
+      for(let i=0;i<=ghost.i;i+=4){ const p=ghost.pts[i]; const X=sx(p[0]), Y=sy(p[1]); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(ball){
+      ball.i=Math.min(ball.pts.length-1, ball.i+stepPer);
+      ctx.strokeStyle=ink; ctx.lineWidth=1.6; ctx.beginPath();
+      for(let i=0;i<=ball.i;i+=3){ const p=ball.pts[i]; const X=sx(p[0]), Y=sy(p[1]); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); }
+      ctx.stroke();
+      const p=ball.pts[ball.i];
+      ctx.fillStyle='#fff'; ctx.strokeStyle=ink; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.arc(sx(p[0]),sy(p[1])-4,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      if(ball.i>=ball.pts.length-1 && !ball.settled){ ball.settled=true; if(!reduced) setTimeout(newPitch, 900); else newPitch(); }
+    }
+    // flick preview
+    if(flick){
+      ctx.strokeStyle=clay; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(sx(0)+4, sy(3)); ctx.lineTo(sx(0)+4+(flick.x1-flick.x0), sy(3)+(flick.y1-flick.y0)); ctx.stroke(); ctx.setLineDash([]);
+      const dx=flick.x1-flick.x0, dy=-(flick.y1-flick.y0), ang=Math.atan2(dy,dx)*180/Math.PI, p=Math.min(1,Math.hypot(dx,dy)/(W*0.28));
+      ctx.fillStyle=ink; ctx.font='12px IBM Plex Mono, monospace'; ctx.textAlign='left';
+      ctx.fillText(Math.round(60+55*p)+' mph · '+Math.round(ang)+'°', sx(0)+14, sy(12));
+    }
+    // message
+    if(msgT>0){ msgT-=dt; ctx.fillStyle=msg==='HOME RUN'?clay:ink; ctx.font='700 34px Oswald, sans-serif'; ctx.textAlign='center'; ctx.globalAlpha=Math.min(1,msgT); ctx.fillText(msg, W/2, 70); ctx.globalAlpha=1; }
+    if(mode==='timing' && !pitch && !ball){ ctx.fillStyle=ink3; ctx.font='13px IBM Plex Sans, sans-serif'; ctx.textAlign='center'; ctx.fillText('press New pitch', W/2, 70); }
+    if(mode==='flick' && !ball && !flick){ ctx.fillStyle=ink3; ctx.font='13px IBM Plex Sans, sans-serif'; ctx.textAlign='center'; ctx.fillText('drag anywhere: direction is angle, length is power', W/2, 70); }
+  }
+
+  function frame(t){
+    const dt=Math.min(0.05,(t-lastT)/1000||0); lastT=t;
+    draw(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // input
+  function ptr(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*W/r.width, y:(e.clientY-r.top)*H/r.height}; }
+  cv.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    if(mode==='timing'){ if(!pitch && !ball) newPitch(); else swing(); return; }
+    if(ball) return;
+    const p=ptr(e); flick={x0:p.x,y0:p.y,x1:p.x,y1:p.y}; cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e=>{ if(flick){ const p=ptr(e); flick.x1=p.x; flick.y1=p.y; } });
+  cv.addEventListener('pointerup', e=>{ if(flick){ const f=flick; flick=null; flickLaunch(f); } });
+  cv.addEventListener('pointercancel', ()=>{ flick=null; });
+  window.addEventListener('keydown', e=>{ if(e.code==='Space' && mode==='timing'){ e.preventDefault(); if(!pitch && !ball) newPitch(); else swing(); } });
+  document.getElementById('pitch').addEventListener('click', newPitch);
+  cdEl.addEventListener('input', ()=>{ cdv.textContent=(+cdEl.value).toFixed(2); });
+  const mt=document.getElementById('modeTiming'), mf=document.getElementById('modeFlick');
+  function setMode(m){ mode=m; mt.setAttribute('aria-pressed', String(m==='timing')); mf.setAttribute('aria-pressed', String(m==='flick'));
+    hint.innerHTML = m==='timing' ? 'Timing mode: tap the field or press <kbd>space</kbd> as the pitch reaches the plate. Early lifts it, late tops it.' : 'Flick mode: drag on the field like g0lf. Direction sets launch angle, length sets exit velocity (60 to 115 mph).';
+    newPitch(); }
+  mt.addEventListener('click', ()=>setMode('timing')); mf.addEventListener('click', ()=>setMode('flick'));
+  newPitch();
+})();
+</script>

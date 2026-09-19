@@ -1,0 +1,16 @@
+# Swift / Xcode
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.moved-aside
+*.swp
+.swiftpm/xcode/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Scratch
+/tmp/
