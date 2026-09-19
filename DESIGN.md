@@ -203,7 +203,7 @@ The batter is a stamp, not scaled art, and is off screen here.
   | Pitcher | at-bat | 12×24 | set, leg kick, release |
   | Batter, rear ¾ | at-bat | 32×56 | stance, contact, follow-through |
   | Batter, side | wide / close | to the field's scale: 6.5 ft, never under 6 px | stance, contact, follow-through. He is the yardstick for the wall (most real walls are a man tall or more); a 42 px batter was 57 ft at the wide scale and made every fence look knee-high (2026-09-19) |
-  | Ball | both | 2, 4, 6, 8 px | one highlight pixel at 6 px and up, no rotation |
+  | Ball | both | 2, 4, 6, 8 px | red laces (`cap`, borrowed by role) from 4 px up: one pixel, then a three-pixel and a five-pixel ")" seam. One highlight pixel at 6 px and up. No rotation (2026-09-19, `PixelCanvas.baseball`) |
   | Zone, plate, mound, wall, scoreboard | — | rects | static |
   | 3×5 and 5×7 bitmap faces | both | — | from the prototype bit strings |
 
@@ -457,15 +457,27 @@ exactly. Scenes only draw.
 - **Where:** in the sky, which "never moves" (§8), so they are screen-space and identical in the
   close and wide framings: the right 45 % of the screen, bursting between y = 20 and y = 110,
   behind the field and behind all text. The landing number is always drawn on top.
-- **How big** follows the hit, on the same 0…1 size as the cheer (feet past the wall):
+- **How big follows the streak, not the hit** (Dwight, 2026-09-19: "maybe we build up to fireworks
+  after a few homers"; the numbers are Claude's). One home run does not get fireworks. The sky is
+  something you build, and it goes dark the moment the streak does, which is the streak's whole
+  point: the one number that can go back to 0 now has something to lose on screen.
 
-  | Home run | Shells |
+  | HR streak | The sky |
   |---|---|
-  | wall scraper | 1 |
-  | ordinary | 3 |
-  | no-doubter | 5 |
-  | HR streak of 3+ | +1 per streak home run, to 8 |
-  | the call-up | a finale: 10, overlapping |
+  | 1 | nothing. The cheer, the crowd bounce, the lights chase at night |
+  | 2 | nothing, but the crowd is a size louder: something is starting |
+  | 3 | **the first firework:** one shell |
+  | 4 | 2 shells |
+  | 5 | 3 shells |
+  | 6–9 | 4, 5, 6, 7 shells |
+  | 10, and every 5 after | a finale: 10, overlapping |
+  | between finales past 10 | 8 shells |
+  | the call-up, whatever the streak | a finale, once per career |
+
+  Two separate dials, so neither muddies the other: **distance drives the crowd** (the cheer's
+  size, §11) and **the streak drives the sky**. A no-doubter adds one shell, but only once the
+  streak has earned fireworks at all; a lone 450-footer gets the loudest cheer there is and a
+  quiet sky. When a streak of 3+ ends, the three notes down (§11) play under an empty sky.
 
 - **A shell:** a 1 px `chalk` streak climbs for 0.25 s, then 28–40 particles burst on a ring with
   seeded jitter, fall under gravity with drag (closed form, so there is no particle state: every
@@ -549,11 +561,12 @@ exactly. Scenes only draw.
   stats, with #5.
 
 **Open:**
-1. Fireworks on every home run, scaled as above, or only on the notable ones (no-doubters, streaks,
-   the call-up)? Every home run already clears a park, so there is no "ordinary" one to skip.
+1. ~~Fireworks on every home run or only notable ones?~~ Answered 2026-09-19: they build with the
+   streak, first shell on the third straight. Still open: is 3 the right place to start, or 2?
+   Judge it once it is on a phone; a streak of 3 in The Show is rare, in Single-A it is not.
 2. Daytime fireworks at all, or night parks only with something else by day (streamers, a
    scoreboard light show)?
-3. Does the ball vanishing into the stands feel right, or should home runs stay visible all the way
-   to the ground as now?
+3. ~~Should a home run vanish into the stands?~~ Answered 2026-09-19: yes ("ball vanish sounds
+   good"). The landing number is a projected distance.
 4. Crowd murmur as ambience between pitches would add life and break "silence is the tension".
    Claude says no; worth hearing once before deciding.

@@ -120,11 +120,11 @@ final class WideScene: CanvasScene {
             case .wide:
                 canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
                 canvas.px(X, Y, scheme.sky3)
+                canvas.px(X + 1, Y + 1, Palette.cap)        // all the lace a 4 px ball has room for
             case .close:
                 // The 6 px ball with its one highlight pixel (DESIGN.md §9), and its shadow.
                 canvas.rect(X - 3, ground + 1, 6, 2, Palette.shade)
-                canvas.disc(X, Y, 3, Palette.chalk)
-                canvas.px(X - 1, Y - 1, scheme.sky3)
+                canvas.baseball(X, Y, radius: 3, highlight: scheme.sky3)
             }
 
             if let launch = machine.launch {
