@@ -265,8 +265,27 @@ The batter is a stamp, not scaled art, and is off screen here.
 
 ## 11. Audio and haptics (M5)
 
-One contact sound, one wall sound, one landing thud, and a soft "took it" tick. Haptic on contact
-(`.rigid`) and on a home run (`.success`). Nothing during the pitch: silence is the tension.
+First pass built 2026-09-19 at Dwight's request ("simple beeps and boops will work for now… a
+crack of the bat, an ump grunting, and crowds cheering"). **No audio files.** Every sound is
+arithmetic in `Synth` (noise, oscillators, biquads: the spirit of an FM chip and a noise channel),
+rendered to buffers at launch and fired by `SoundBoard`. Placeholders by design; replace them one
+at a time.
+
+| Moment | Cue from Core | Sound | Haptic |
+|---|---|---|---|
+| Bat on ball | `slice` | crack, 9 steps by exit velo: a weak one is a low *tock*, a barrel is bright with the stands' slap coming back | `.rigid`, harder the better it is hit |
+| Swing and miss | `sliceMissed` | a whiff of air | — |
+| Taken strike / ball | `.called` | the ump: a two-beat bark for a strike, one low short grunt for a ball | — |
+| Clears the wall | `.clearedWall` | crowd cheer, 5 sizes by how far past the wall it lands; whistles in the big ones | `.success` |
+| Off the wall | `.hitWall` | wall thump, then the crowd's *ohh* | `.heavy` |
+| Lands in the park | `.landed` | ground thud (a home run lands out of earshot) | — |
+| A streak of 3+ ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
+| Called up | `.calledUp` | a major arpeggio, up | — |
+
+The cues are `Transition`s that fire as playback reaches the moment, so the crowd reacts when the
+ball clears the wall, not when the bat meets it. **Nothing sounds during the pitch: silence is the
+tension.** The audio session is `.ambient`: the ring/silent switch mutes the game and the
+player's own music or podcast keeps playing underneath. `-mute` silences it for simulator runs.
 
 ## 12. Tuning knobs
 

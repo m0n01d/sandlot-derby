@@ -92,23 +92,81 @@ final class GameController {
             case .cutToAtBat:
                 if flash { atBatScene.flashNextFrame = true }
                 view?.presentScene(atBatScene)
-            case .pitchThrown, .parkChanged, .calledUp, .flash:
+            case .pitchThrown:
+                streakAtThePitch = machine.tally.homeRunStreak
+                haptics.prepare()            // and then silence: nothing sounds during the pitch
+            case .called(let call):
+                if call == .strike {
+                    sound.calledStrike()
+                    mournStreak(after: 0.5)
+                } else {
+                    sound.calledBall()
+                }
+            case .clearedWall:
+                sound.homeRun(size: homeRunSize)
+                haptics.homeRun()
+            case .hitWall:
+                sound.offTheWall()
+                haptics.offTheWall()
+            case .landed:
+                if machine.flight?.homeRun != true { sound.landed() }     // a home run lands out of earshot
+            case .calledUp:
+                sound.calledUp()
+            case .parkChanged, .flash:
                 break
             }
         }
+        // The streak is already 0 in the tally from the moment of contact; the sad notes wait for
+        // the landing number, so they cannot spoil the flight.
+        if machine.beat == .result, beatBefore != .result, machine.flight?.homeRun != true { mournStreak(after: 0.35) }
+    }
+
+    // MARK: - Sound and haptics (DESIGN.md §11)
+
+    private let sound = SoundBoard()
+    private let haptics = Haptics()
+    private var streakAtThePitch = 0
+
+    /// How well the ball was hit, 0…1, from its exit velocity: what the bat should sound like.
+    private var contactStrength: Double {
+        guard let launch = machine.launch else { return 0 }
+        return (launch.exitVelocityMPH - machine.sliceRules.exitVelocityBase) / machine.sliceRules.exitVelocitySpan
+    }
+
+    /// How far past the wall a home run is going to land, 0…1 over 100 ft: how loud the crowd gets.
+    private var homeRunSize: Double {
+        guard let flight = machine.flight else { return 0 }
+        return (flight.distanceFeet - machine.park.wallDistanceFeet) / 100
+    }
+
+    /// Three notes down, only for a streak worth mourning.
+    private func mournStreak(after seconds: Double) {
+        guard streakAtThePitch >= 3 else { return }
+        streakAtThePitch = 0
+        sound.streakOver(after: seconds)
     }
 
     // MARK: - Slice input entry points, used by AtBatScene.
 
     /// `DerbyMachine.slice` itself ignores calls made outside `.pitch`.
     func recordSlice(_ crossing: SliceCrossing) {
+        let wasPitch = machine.beat == .pitch
         machine.slice(crossing)
+        if wasPitch {
+            sound.crack(strength: contactStrength)
+            haptics.contact(strength: contactStrength)
+        }
         persist()
     }
 
     /// `DerbyMachine.sliceMissed` itself ignores calls made outside `.pitch`.
     func recordMissedSlice() {
+        let wasPitch = machine.beat == .pitch
         machine.sliceMissed()
+        if wasPitch {
+            sound.whiff()
+            mournStreak(after: 0.3)
+        }
         persist()
     }
 

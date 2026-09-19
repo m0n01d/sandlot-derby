@@ -1,0 +1,229 @@
+import Foundation
+
+/// Every sound in the game, as arithmetic. No audio files: a noise source, a few oscillators and
+/// a few filters, in the spirit of a console that had an FM chip and a noise channel (DESIGN.md
+/// §11). Placeholders by design, to be replaced one at a time if something better comes along.
+/// All functions are pure and return mono samples in −1…1 at `sampleRate`.
+enum Synth {
+    static let sampleRate = 44_100.0
+
+    // MARK: - Parts
+
+    /// xorshift white noise. Seeded, so a sound is the same every launch.
+    struct Noise {
+        var state: UInt32
+        init(seed: UInt32 = 0x9E37_79B9) { state = seed == 0 ? 1 : seed }
+        mutating func next() -> Double {
+            state ^= state << 13; state ^= state >> 17; state ^= state << 5
+            return Double(state) / Double(UInt32.max) * 2 - 1
+        }
+    }
+
+    /// RBJ cookbook biquad, transposed direct form II.
+    struct Biquad {
+        private let b0, b1, b2, a1, a2: Double
+        private var z1 = 0.0, z2 = 0.0
+
+        private init(_ b0: Double, _ b1: Double, _ b2: Double, _ a0: Double, _ a1: Double, _ a2: Double) {
+            self.b0 = b0 / a0; self.b1 = b1 / a0; self.b2 = b2 / a0; self.a1 = a1 / a0; self.a2 = a2 / a0
+        }
+
+        static func bandpass(_ hz: Double, q: Double) -> Biquad {
+            let w = 2 * Double.pi * hz / sampleRate, alpha = sin(w) / (2 * q)
+            return Biquad(alpha, 0, -alpha, 1 + alpha, -2 * cos(w), 1 - alpha)
+        }
+
+        static func lowpass(_ hz: Double, q: Double = 0.707) -> Biquad {
+            let w = 2 * Double.pi * hz / sampleRate, alpha = sin(w) / (2 * q), c = cos(w)
+            return Biquad((1 - c) / 2, 1 - c, (1 - c) / 2, 1 + alpha, -2 * c, 1 - alpha)
+        }
+
+        static func highpass(_ hz: Double, q: Double = 0.707) -> Biquad {
+            let w = 2 * Double.pi * hz / sampleRate, alpha = sin(w) / (2 * q), c = cos(w)
+            return Biquad((1 + c) / 2, -(1 + c), (1 + c) / 2, 1 + alpha, -2 * c, 1 - alpha)
+        }
+
+        mutating func process(_ x: Double) -> Double {
+            let y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            return y
+        }
+    }
+
+    private static func count(_ seconds: Double) -> Int { Int(seconds * sampleRate) }
+
+    /// Soft clip and scale, so stacked parts never wrap.
+    private static func finish(_ samples: [Double], gain: Double) -> [Float] {
+        samples.map { Float(tanh($0 * 1.4) * gain) }
+    }
+
+    // MARK: - The bat
+
+    /// Bat on ball. `strength` 0…1 is how well it was hit: a weak one is a dull low *tock*, a
+    /// barrelled one is a bright crack with the park's slap coming back off the stands.
+    static func crack(strength s: Double) -> [Float] {
+        let n = count(0.30)
+        var out = [Double](repeating: 0, count: n)
+        var noise = Noise(seed: 0x0BA7_0000 &+ UInt32(s * 1000))
+        var edge = Biquad.highpass(900 + 2_800 * s)
+        var phase = 0.0
+        for i in 0..<n {
+            let t = Double(i) / sampleRate
+            let click = edge.process(noise.next()) * exp(-t / (0.009 + 0.020 * s)) * (0.5 + 0.4 * s)
+            let hz = (240 + 840 * s) * (0.35 + 0.65 * exp(-t / 0.016))       // the pitch drops as it rings
+            phase += 2 * Double.pi * hz / sampleRate
+            let knock = sin(phase) * exp(-t / (0.020 + 0.022 * s)) * 0.85
+            out[i] = click + knock
+        }
+        var stands = Biquad.lowpass(1_700)
+        let delay = count(0.085)
+        for i in delay..<n { out[i] += stands.process(out[i - delay]) * (0.10 + 0.24 * s) }
+        return finish(out, gain: 0.5 + 0.45 * s)
+    }
+
+    /// A swing through air.
+    static func whiff() -> [Float] {
+        let dur = 0.20, n = count(dur)
+        var noise = Noise(seed: 0x5717_F00D)
+        var out = [Double](repeating: 0, count: n)
+        var low = 0.0
+        for i in 0..<n {
+            let p = Double(i) / Double(n)
+            // One-pole band that slides down as the bat goes by.
+            let k = 0.35 - 0.27 * p
+            low += k * (noise.next() - low)
+            out[i] = low * pow(sin(Double.pi * p), 2)
+        }
+        return finish(out, gain: 0.30)
+    }
+
+    // MARK: - The umpire
+
+    private struct Formant { let hz: Double, q: Double, gain: Double }
+
+    /// One syllable of a voice: a buzzy source through a few resonances.
+    private static func syllable(_ dur: Double, from f0: Double, to f1: Double, growl: Double, breath: Double,
+                                 seed: UInt32, formants: [Formant]) -> [Double] {
+        let n = count(dur)
+        var filters = formants.map { Biquad.bandpass($0.hz, q: $0.q) }
+        var noise = Noise(seed: seed)
+        var phase = 0.0
+        var out = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            let t = Double(i) / sampleRate, p = t / dur
+            let hz = f0 + (f1 - f0) * p
+            phase += hz / sampleRate
+            let saw = 2 * (phase - phase.rounded(.down)) - 1
+            let rough = 1 - growl + growl * (0.5 + 0.5 * sin(2 * Double.pi * 31 * t))
+            let source = (saw + breath * noise.next()) * rough
+            var voiced = 0.0
+            for k in filters.indices { voiced += filters[k].process(source) * formants[k].gain }
+            let attack = min(1, t / 0.012), release = min(1, (dur - t) / 0.05)
+            out[i] = voiced * attack * release
+        }
+        return out
+    }
+
+    /// The call on a taken strike: a two-beat bark, *HEE-YAH*.
+    static func umpStrike() -> [Float] {
+        let hee = syllable(0.085, from: 170, to: 190, growl: 0.25, breath: 0.35, seed: 0x5781_0001,
+                           formants: [Formant(hz: 330, q: 5, gain: 1), Formant(hz: 2_250, q: 7, gain: 0.7)])
+        let yah = syllable(0.27, from: 195, to: 105, growl: 0.5, breath: 0.3, seed: 0x5781_0002,
+                           formants: [Formant(hz: 760, q: 4, gain: 1), Formant(hz: 1_220, q: 5, gain: 0.8),
+                                      Formant(hz: 2_500, q: 7, gain: 0.3)])
+        return finish(hee + [Double](repeating: 0, count: count(0.03)) + yah, gain: 0.8)
+    }
+
+    /// The call on a taken ball: one low, short, unimpressed grunt.
+    static func umpBall() -> [Float] {
+        finish(syllable(0.16, from: 122, to: 98, growl: 0.3, breath: 0.25, seed: 0xBA11_0001,
+                        formants: [Formant(hz: 420, q: 4, gain: 1), Formant(hz: 980, q: 5, gain: 0.5)]), gain: 0.5)
+    }
+
+    // MARK: - The crowd
+
+    /// A few thousand people finding out at once. `size` 0…1: a wall-scraper gets a cheer, a
+    /// no-doubter gets a longer, louder one with whistles in it.
+    static func cheer(size: Double) -> [Float] {
+        let dur = 1.8 + 1.5 * size, n = count(dur)
+        var noise = Noise(seed: 0xC40D_0000 &+ UInt32(size * 100))
+        var body = Biquad.bandpass(880, q: 0.7), air = Biquad.bandpass(2_400, q: 0.9)
+        var out = [Double](repeating: 0, count: n)
+        let hold = dur * 0.42, tail = 0.45 + 0.55 * size
+        for i in 0..<n {
+            let t = Double(i) / sampleRate
+            let x = noise.next()
+            let roar = body.process(x) + 0.6 * air.process(x)
+            let rise = min(1, t / 0.22), swell = rise * rise * (3 - 2 * rise)
+            let fall = t < hold ? 1 : exp(-(t - hold) / tail)
+            let flutter = 1 + 0.22 * sin(2 * Double.pi * 5.3 * t) + 0.13 * sin(2 * Double.pi * 8.1 * t + 1)
+            out[i] = roar * swell * fall * flutter
+        }
+        // Whistles: short upward glides, more of them the bigger the hit.
+        for w in 0..<Int((size * 4).rounded()) {
+            let start = count(0.25 + 0.3 * Double(w)), length = count(0.22)
+            var phase = 0.0
+            for j in 0..<length where start + j < n {
+                let p = Double(j) / Double(length)
+                phase += 2 * Double.pi * (1_500 + 300 * Double(w) + 900 * p) / sampleRate
+                out[start + j] += sin(phase) * pow(sin(Double.pi * p), 2) * 0.10
+            }
+        }
+        return finish(out, gain: 0.32 + 0.42 * size)
+    }
+
+    /// Off the wall: the same people, let down. A short low *ohh*.
+    static func groan() -> [Float] {
+        let n = count(0.95)
+        var noise = Noise(seed: 0x0440_0001)
+        var low = Biquad.bandpass(500, q: 1.3), mid = Biquad.bandpass(930, q: 1.1)
+        var out = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            let p = Double(i) / Double(n), x = noise.next()
+            out[i] = (low.process(x) + 0.7 * mid.process(x)) * pow(sin(Double.pi * pow(p, 0.6)), 2)
+        }
+        return finish(out, gain: 0.34)
+    }
+
+    // MARK: - The field
+
+    /// A falling sine with a knock on the front: the wall (`deep` false) or the ground (`deep` true).
+    static func thump(deep: Bool) -> [Float] {
+        let n = count(0.16)
+        var noise = Noise(seed: deep ? 0x7D00_0001 : 0x7D00_0002)
+        var soft = Biquad.lowpass(deep ? 500 : 1_100)
+        var phase = 0.0
+        var out = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            let t = Double(i) / sampleRate
+            let hz = (deep ? 92 : 150) * (0.55 + 0.45 * exp(-t / 0.03))
+            phase += 2 * Double.pi * hz / sampleRate
+            out[i] = sin(phase) * exp(-t / 0.05) + soft.process(noise.next()) * exp(-t / 0.008) * 0.6
+        }
+        return finish(out, gain: deep ? 0.42 : 0.6)
+    }
+
+    // MARK: - Beeps and boops
+
+    /// Square-wave notes played one after another.
+    static func boops(_ notes: [(hz: Double, seconds: Double)], gain: Double = 0.22) -> [Float] {
+        var out: [Double] = []
+        for note in notes {
+            var phase = 0.0
+            for i in 0..<count(note.seconds) {
+                phase += note.hz / sampleRate
+                let square = (phase - phase.rounded(.down)) < 0.5 ? 1.0 : -1.0
+                let t = Double(i) / sampleRate
+                out.append(square * min(1, t / 0.004) * min(1, (note.seconds - t) / 0.012))
+            }
+        }
+        return finish(out, gain: gain)
+    }
+
+    /// A streak of three or more just ended: three steps down.
+    static func streakOver() -> [Float] { boops([(392, 0.09), (294, 0.09), (220, 0.18)]) }
+
+    /// Called up to The Show: a major arpeggio, up.
+    static func calledUp() -> [Float] { boops([(523, 0.09), (659, 0.09), (784, 0.09), (1_047, 0.28)], gain: 0.26) }
+}

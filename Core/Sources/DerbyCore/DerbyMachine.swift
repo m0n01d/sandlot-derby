@@ -183,6 +183,16 @@ public enum Transition: Equatable {
     case parkChanged(Park)
     /// Triple-A cleared: the next pitch is in The Show. Once per career.
     case calledUp
+    // Moments worth a sound or a haptic. They fire as playback reaches them, once each, so the
+    // crowd reacts when the ball clears the wall and not when the bat meets it.
+    /// A pitch was taken: the umpire's call.
+    case called(Call)
+    /// The ball crossed the wall above it.
+    case clearedWall
+    /// The ball met the wall below the top.
+    case hitWall
+    /// First touch of the ground.
+    case landed
 }
 
 /// Pure game state. Scenes call `tick`, `slice`, `sliceMissed`, and draw from the properties.
@@ -205,6 +215,8 @@ public struct DerbyMachine: Equatable {
     public var statRules: StatRules
     public var ladder: Ladder
     private var rng: SplitMix64
+    private var wallCueIndex: Int? = nil
+    private var landCueIndex: Int? = nil
 
     /// The rules in force in this park. Scenes read these, never the majors' ones.
     public var sliceRules: SliceRules { ladder.sliceRules(majorsSliceRules, for: park.league) }
@@ -282,6 +294,11 @@ public struct DerbyMachine: Equatable {
         countContact(l, f)
         launch = l
         flight = f
+        // Where in the playback the wall and the ground are met, found once. A wall hit is reset
+        // to just inside the wall, so look a fraction short of it.
+        wallCueIndex = (f.homeRun || f.wallHit)
+            ? f.points.firstIndex(where: { $0.xFeet >= park.wallDistanceFeet - 0.2 }) : nil
+        landCueIndex = f.hangTime.flatMap { hang in f.points.firstIndex(where: { $0.time >= hang }) }
         playbackIndex = 0
         lastCall = nil
         enter(.contact)
@@ -374,7 +391,9 @@ public struct DerbyMachine: Equatable {
                     tally.add(.ballsTaken)
                     if !statRules.takenBallKeepsStreak { endStreaks() }
                 }
-                lastCall = pitch.isStrike ? .strike : .ball
+                let call: Call = pitch.isStrike ? .strike : .ball
+                lastCall = call
+                out.append(.called(call))
                 enter(.miss)
             }
         case .miss:
@@ -383,7 +402,11 @@ public struct DerbyMachine: Equatable {
             if elapsed > timings.contactHold { enter(.flight); out.append(.flash); out.append(.cutToWide) }
         case .flight:
             guard let f = flight else { enter(.result); break }
+            let before = Int(playbackIndex)
             playbackIndex += dt * (1.0 / FlightParams.calibrated.timestep) * timings.flightSpeed
+            let after = min(f.points.count - 1, Int(playbackIndex))
+            if let i = wallCueIndex, before < i, i <= after { out.append(f.homeRun ? .clearedWall : .hitWall) }
+            if let i = landCueIndex, before < i, i <= after { out.append(.landed) }
             if playbackIndex >= Double(f.points.count - 1) {
                 playbackIndex = Double(max(0, f.points.count - 1))
                 enter(.result)
