@@ -84,7 +84,7 @@ final class AtBatScene: CanvasScene {
         canvas.rect(wx(128), 80, 64, 16, Palette.wall)
         canvas.rect(wx(128), 80, 64, 1, Palette.chalk)
         canvas.t3(wx(134), 84, "\(Int(machine.park.wallDistanceFeet)) FT", Palette.score)
-        canvas.t3(wx(134), 91, "PARK \(machine.park.number)", Palette.chalk)
+        canvas.t3(wx(134), 91, machine.park.displayName, Palette.chalk)
 
         canvas.line(wx(160), 196, wx(40), 104, Palette.chalk)
         canvas.line(wx(160), 196, wx(280), 104, Palette.chalk)
@@ -109,6 +109,8 @@ final class AtBatScene: CanvasScene {
             canvas.px(wx(z.x + z.width), z.y + zj, Palette.chalk)
             zj += 3
         }
+
+        drawMinorLeagueHelp(canvas: canvas, wx: wx, machine: machine)
 
         let batterFrame: Int
         switch machine.beat {
@@ -139,7 +141,8 @@ final class AtBatScene: CanvasScene {
 
         // HUD anchors to the true edges of the canvas, not the centred column.
         // The headline: where you are and what it has cost (DESIGN.md §10).
-        canvas.t3(8, 8, "PARK \(machine.park.number)  \(machine.tally.pitches) PITCHES", Palette.chalk)
+        let pitches = machine.tally.pitches
+        canvas.t3(8, 8, "\(machine.park.displayName)  \(pitches) \(pitches == 1 ? "PITCH" : "PITCHES")", Palette.chalk)
         // Not during the contact freeze: the tally already knows how the ball lands, and a
         // streak line appearing or vanishing here would spoil the cut.
         if machine.tally.homeRunStreak >= 2, machine.beat != .contact {
@@ -147,6 +150,38 @@ final class AtBatScene: CanvasScene {
         }
 
         drawLiveTrail(canvas: canvas, wx: wx)
+    }
+
+    /// The help a minor-league `Rung` gives (DESIGN.md §10). No words: a line for *where and
+    /// which way*, a closing ring for *when*. Both sit on the pitch's target, which the minors
+    /// give away before the throw on purpose.
+    private func drawMinorLeagueHelp(canvas: PixelCanvas, wx: (Double) -> Double, machine: DerbyMachine) {
+        guard let rung = machine.rung, machine.beat == .windup || machine.beat == .pitch else { return }
+        let t = machine.pitch.target
+
+        if rung.swingGuide {
+            let a = machine.ladder.guideAngleDegrees * Double.pi / 180
+            let dx = cos(a), dy = -sin(a), reach = 34.0
+            let tipX = t.x + dx * reach, tipY = t.y + dy * reach
+            var d = -reach                                    // 4 px on, 4 px off, 2 px thick
+            while d < reach {
+                canvas.line(wx(t.x + dx * d), t.y + dy * d, wx(t.x + dx * (d + 4)), t.y + dy * (d + 4),
+                            Palette.chalk, thickness: 2)
+                d += 8
+            }
+            for wing in [-0.5, 0.5] {                         // arrowhead: slice up and through
+                let b = a + Double.pi + wing
+                canvas.line(wx(tipX), tipY, wx(tipX + cos(b) * 9), tipY - sin(b) * 9, Palette.chalk, thickness: 2)
+            }
+        }
+
+        if rung.timingRing {
+            canvas.ring(wx(t.x), t.y, 5, Palette.chalk, gap: 2)
+            if machine.beat == .pitch {
+                let remaining = max(0, 1 - machine.pitchProgress)
+                canvas.ring(wx(t.x), t.y, 5 + remaining * 30, Palette.score)
+            }
+        }
     }
 
     private func drawPitcher(canvas: PixelCanvas, wx: (Double) -> Double, beat: Beat, elapsed: Double) {

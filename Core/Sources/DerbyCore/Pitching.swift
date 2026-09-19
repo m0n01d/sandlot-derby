@@ -62,6 +62,8 @@ public struct PitchingRules: Equatable {
     /// Oversized for thumbs. The real zone would be about 24×32 at this scale.
     public var strikeZone = Rect(x: 150, y: 136, width: 40, height: 50)
     public var releasePoint = Point(x: 166, y: 108)
+    /// The pitch table. The minors throw a shorter, slower one (`Ladder`).
+    public var types: [PitchType] = PitchType.all
     /// Share of pitches that end inside the zone.
     public var strikeProbability = 0.65
     /// How far outside the zone a ball can miss, in design pixels.
@@ -73,17 +75,19 @@ public struct PitchingRules: Equatable {
 }
 
 public enum Pitching {
-    public static func pickType<G: RandomNumberGenerator>(using g: inout G) -> PitchType {
-        var r = Double.random(in: 0..<1, using: &g)
-        for t in PitchType.all {
+    /// Weights are relative to the table given, so a minor-league table need not sum to 1.
+    public static func pickType<G: RandomNumberGenerator>(using g: inout G, from types: [PitchType] = PitchType.all) -> PitchType {
+        let total = types.reduce(0) { $0 + $1.weight }
+        var r = Double.random(in: 0..<1, using: &g) * total
+        for t in types {
             if r < t.weight { return t }
             r -= t.weight
         }
-        return PitchType.all[0]
+        return types.first ?? PitchType.fastball
     }
 
     public static func generate<G: RandomNumberGenerator>(using g: inout G, rules: PitchingRules = .standard) -> Pitch {
-        let type = pickType(using: &g)
+        let type = pickType(using: &g, from: rules.types)
         let speed = Double.random(in: type.speedRange, using: &g)
         let strike = Double.random(in: 0..<1, using: &g) < rules.strikeProbability
         let z = rules.strikeZone

@@ -26,8 +26,12 @@ public struct Park: Equatable {
         self.wallHeightFeet = wallHeightFeet; self.isNight = isNight
     }
 
-    /// Park 1 is always the same friendly park.
-    public static let first = Park(number: 1, wallDistanceFeet: 380, wallHeightFeet: 10, isNight: false)
+    /// Park 1 is always the same friendly park: Single-A, the bottom of the ladder.
+    public static let first = Park.generate(number: 1)
+
+    public var league: League { League(parkNumber: number) }
+    /// What the scoreboard calls it: the league in the minors, `PARK n` from The Show on.
+    public var displayName: String { league.isMinors ? league.name : "PARK \(number)" }
 
     public struct Rules: Equatable {
         public var wallDistance: ClosedRange<Double> = 330...410
@@ -38,8 +42,18 @@ public struct Park: Equatable {
     }
 
     /// Park N is a pure function of N. Anyone on park 1,000 sees the same wall.
-    public static func generate(number: Int, rules: Rules = .standard) -> Park {
-        if number <= 1 { return .first }
+    /// Parks 1–3 are the ladder's rungs and park 4 is The Show; all four are day games.
+    public static func generate(number: Int, rules: Rules = .standard, ladder: Ladder = .standard) -> Park {
+        let number = max(1, number)
+        let league = League(parkNumber: number)
+        if let rung = ladder.rung(for: league) {
+            return Park(number: number, wallDistanceFeet: rung.wallDistanceFeet,
+                        wallHeightFeet: rung.wallHeightFeet, isNight: false)
+        }
+        if number == League.theShow.rawValue {
+            return Park(number: number, wallDistanceFeet: ladder.theShowWallDistanceFeet,
+                        wallHeightFeet: ladder.theShowWallHeightFeet, isNight: false)
+        }
         var g = SplitMix64(seed: UInt64(number) &* 0x2545_F491_4F6C_DD1D)
         let dist = Double(Int(Double.random(in: rules.wallDistance, using: &g)))
         let height = Double(Int(Double.random(in: rules.wallHeight, using: &g)))

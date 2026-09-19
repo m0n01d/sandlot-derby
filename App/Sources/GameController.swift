@@ -92,7 +92,7 @@ final class GameController {
             case .cutToAtBat:
                 if flash { atBatScene.flashNextFrame = true }
                 view?.presentScene(atBatScene)
-            case .pitchThrown, .parkChanged, .flash:
+            case .pitchThrown, .parkChanged, .calledUp, .flash:
                 break
             }
         }

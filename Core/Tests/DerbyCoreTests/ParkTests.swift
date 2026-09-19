@@ -5,8 +5,8 @@ final class ParkTests: XCTestCase {
     func testParkOneIsAlwaysTheFriendlyPark() {
         XCTAssertEqual(Park.generate(number: 1), .first)
         XCTAssertEqual(Park.generate(number: 0), .first)
-        XCTAssertEqual(Park.first.wallDistanceFeet, 380)
-        XCTAssertEqual(Park.first.wallHeightFeet, 10)
+        XCTAssertEqual(Park.first.wallDistanceFeet, 280)     // Single-A; the ladder is LadderTests'
+        XCTAssertEqual(Park.first.wallHeightFeet, 6)
     }
 
     func testParksAreDeterministic() {
@@ -18,7 +18,7 @@ final class ParkTests: XCTestCase {
 
     func testParksStayInRange() {
         let rules = Park.Rules.standard
-        for n in 2...500 {
+        for n in 5...500 {                                   // 1–4 are the ladder and The Show
             let p = Park.generate(number: n)
             XCTAssertEqual(p.number, n)
             XCTAssertTrue(rules.wallDistance.contains(p.wallDistanceFeet), "park \(n) wall \(p.wallDistanceFeet)")

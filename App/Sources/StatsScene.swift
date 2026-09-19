@@ -19,7 +19,7 @@ final class StatsScene: CanvasScene {
 
         let left = safeLeft + 8, right = width - safeRight - 8
         canvas.t3(left, 8, "CAREER", Palette.score, scale: 2)
-        let park = "PARK \(controller.machine.park.number)"
+        let park = controller.machine.park.displayName
         canvas.t3(right - Double(park.count) * 8, 8, park, Palette.chalk, scale: 2)
 
         let columns = max(2, Int((right - left) / 130))
@@ -70,6 +70,7 @@ final class StatsScene: CanvasScene {
                 ("PARKS CLEARED", n(.parksCleared)),
                 ("PITCHES THIS PARK", n(.pitchesThisPark)),
                 ("FEWEST TO CLEAR", fewest),
+                ("PITCHES TO THE SHOW", t.value(ifRecorded: .pitchesToTheShow).map { grouped(Int($0)) } ?? "-"),
                 ("TIME AT THE PLATE", clock(t[.secondsPlayed])),
             ]),
             Section(title: "STREAKS", rows: [

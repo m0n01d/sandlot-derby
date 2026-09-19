@@ -40,6 +40,8 @@ public struct Stat: Hashable {
     /// Absent until the first park is cleared.
     public static let fewestPitchesToClearPark = Stat("fewestPitchesToClearPark")
     public static let secondsPlayed = Stat("secondsPlayed")
+    /// Career pitches at the moment of the call-up. Absent in the minors.
+    public static let pitchesToTheShow = Stat("pitchesToTheShow")
 
     // Plate discipline.
     public static let swings = Stat("swings")
@@ -179,6 +181,8 @@ public enum Transition: Equatable {
     case cutToAtBat
     case flash
     case parkChanged(Park)
+    /// Triple-A cleared: the next pitch is in The Show. Once per career.
+    case calledUp
 }
 
 /// Pure game state. Scenes call `tick`, `slice`, `sliceMissed`, and draw from the properties.
@@ -195,25 +199,49 @@ public struct DerbyMachine: Equatable {
     public private(set) var tally = Tally()
     public private(set) var lastCall: Call? = nil
     public var timings: Timings
-    public var sliceRules: SliceRules
-    public var pitchingRules: PitchingRules
+    /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
+    public var majorsSliceRules: SliceRules
+    public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
+    public var ladder: Ladder
     private var rng: SplitMix64
+
+    /// The rules in force in this park. Scenes read these, never the majors' ones.
+    public var sliceRules: SliceRules { ladder.sliceRules(majorsSliceRules, for: park.league) }
+    public var pitchingRules: PitchingRules { ladder.pitchingRules(majorsPitchingRules, for: park.league) }
+    /// The help this park gives, nil from The Show on.
+    public var rung: Rung? { ladder.rung(for: park.league) }
 
     /// `park` and `tally` are what a save restores; everything else starts fresh.
     public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
                 sliceRules: SliceRules = .standard, pitchingRules: PitchingRules = .standard,
-                statRules: StatRules = .standard) {
+                statRules: StatRules = .standard, ladder: Ladder = .standard) {
         var g = SplitMix64(seed: seed)
-        let first = Pitching.generate(using: &g, rules: pitchingRules)
+        let first = Pitching.generate(using: &g, rules: ladder.pitchingRules(pitchingRules, for: park.league))
         self.park = park
         self.tally = tally
         self.statRules = statRules
+        self.ladder = ladder
         self.timings = timings
-        self.sliceRules = sliceRules
-        self.pitchingRules = pitchingRules
+        self.majorsSliceRules = sliceRules
+        self.majorsPitchingRules = pitchingRules
         self.rng = g
         self.pitch = first
+    }
+
+    /// One word for a ball that stayed in the park, minors only, result hold only. Aim first,
+    /// then power: a grounder hit harder is still a grounder.
+    public var coachingWord: String? {
+        guard beat == .result, rung?.coaching == true, let f = flight, !f.homeRun, let l = launch else { return nil }
+        if l.launchAngleDegrees < ladder.coachLowAngle { return "SWING UP" }
+        if l.launchAngleDegrees > ladder.coachHighAngle { return "LEVEL OUT" }
+        if l.exitVelocityMPH < ladder.coachWeakExitVelocity { return "FASTER" }
+        return nil
+    }
+
+    /// True through the result hold of the home run that clears Triple-A.
+    public var isBeingCalledUp: Bool {
+        beat == .result && park.league == .tripleA && (flight?.homeRun ?? false)
     }
 
     /// Pitch progress, 0 at release and 1 at the plate. Only meaningful during `.pitch`.
@@ -366,8 +394,13 @@ public struct DerbyMachine: Equatable {
                     tally.add(.parksCleared)
                     tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
                     tally.set(.pitchesThisPark, 0)
-                    park = Park.generate(number: park.number + 1)
+                    let wasMinors = park.league.isMinors
+                    park = Park.generate(number: park.number + 1, ladder: ladder)
                     out.append(.parkChanged(park))
+                    if wasMinors && !park.league.isMinors {
+                        tally.set(.pitchesToTheShow, tally[.pitches])
+                        out.append(.calledUp)
+                    }
                 }
                 flight = nil
                 launch = nil

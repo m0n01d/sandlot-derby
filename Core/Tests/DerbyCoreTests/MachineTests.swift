@@ -126,7 +126,7 @@ final class MachineTests: XCTestCase {
     }
 
     func testFlightCameraStaysWideForABallThatNeverNearsTheWall() {
-        var m = DerbyMachine(seed: 3)
+        var m = DerbyMachine(seed: 3, park: Park.generate(number: 4))    // 380 ft: a pop-up is nowhere near
         run(&m, seconds: 0.6)
         m.slice(SliceCrossing(quality: 0, progress: 1, swingAngleDegrees: 60, power: 0.3,
                               ball: m.ballNow, crossingPoint: m.ballNow.position))   // a soft pop-up

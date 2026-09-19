@@ -14,7 +14,8 @@ enum SaveStore {
     private static let key = "save.v1"
 
     /// A `-autoslice` run is a robot's career, not the player's: it neither reads nor writes.
-    private static let isEnabled = !ProcessInfo.processInfo.arguments.contains("-autoslice")
+    /// `-nosave` does the same for a human: a fresh Single-A every launch.
+    private static let isEnabled = !ProcessInfo.processInfo.arguments.contains { $0 == "-autoslice" || $0 == "-nosave" }
 
     static func load() -> SaveState? {
         guard isEnabled, let data = UserDefaults.standard.data(forKey: key) else { return nil }

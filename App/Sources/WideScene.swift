@@ -127,10 +127,20 @@ final class WideScene: CanvasScene {
                 if flightResult.wallHit {
                     canvas.t3(fullWidth / 2 - 30, 90, "OFF THE WALL", Palette.chalk)
                 }
+                // Minors only: one word on a ball that stayed in (DerbyMachine.coachingWord).
+                if let word = machine.coachingWord {
+                    canvas.t3(fullWidth / 2 - Double(word.count) * 4, 102, word, Palette.chalk, scale: 2)
+                }
+                // Once per career, on the home run that clears Triple-A.
+                if machine.isBeingCalledUp, Int(machine.elapsed * 6) % 2 == 1 {
+                    // The 5×7 face only has digits and F T H R, so this is the 3×5 at 3×.
+                    canvas.t3(fullWidth / 2 - 9 * 4 * 3 / 2, 134, "CALLED UP", Palette.score, scale: 3)
+                }
             }
         }
 
-        canvas.t3(fullWidth - 42, H - 12, "PARK \(machine.park.number)", Palette.chalk)
+        let parkName = machine.park.displayName
+        canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
     }
 
     /// A stamp, not scaled art: the same size in either framing (and off screen up close).
