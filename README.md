@@ -16,15 +16,15 @@ No outs. No menus. No timers. Parks are seeded and endless. The score is total f
 
 ## Status
 
-Design and core spec complete; no Xcode project yet. `Core/` was written in a Linux sandbox with no
-Swift toolchain and has **not been compiled**. First task on a Mac:
+M0 is done: `Core/` compiles and `cd Core && swift test` is green. A first runnable app covers the
+bones of M1–M2: both cameras, the slice, the hard cut, flight playback and the landing number, drawn
+from a port of the prototype. Milestones are in `DESIGN.md` §13.
 
 ```sh
-cd Core && swift test
+cd App && xcodegen generate && open SandlotDerby.xcodeproj
 ```
 
-Fix whatever the compiler says, keep the calibration tests green, then build the app around the core
-(milestones in `DESIGN.md` §13).
+The generated project is git-ignored; `App/project.yml` is the source of truth.
 
 ## Research trail
 
