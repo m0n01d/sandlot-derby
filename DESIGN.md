@@ -278,10 +278,16 @@ at a time.
 | Swing and miss | `sliceMissed` | a whiff of air | — |
 | Taken strike / ball | `.called` | the ump: a two-beat bark for a strike, one low short grunt for a ball | — |
 | Clears the wall | `.clearedWall` | crowd cheer, 5 sizes by how far past the wall it lands; whistles in the big ones | `.success` |
-| Off the wall | `.hitWall` | wall thump, then the crowd's *ohh* | `.heavy` |
+| Off the wall | `.hitWall` | wall thump, the crowd's *ohh*, then the sad trombone: *womp, wommmp* | `.heavy` |
+| Two straight home runs | — | the organ runs up the scale over the landing number and the crowd answers *CHARGE!*: one more starts the fireworks (§17). The pitch cuts the organ off mid-note if it is still playing, and then nobody answers | — |
 | Lands in the park | `.landed` | ground thud (a home run lands out of earshot) | — |
 | A streak of 3+ ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
 | Called up | `.calledUp` | a major arpeggio, up | — |
+
+**The organ** (#17) is a synthesized drawbar organ with its own player node. It lives in the gaps
+and **stops dead when the pitch is thrown**, as a real organist does when the pitcher comes set.
+The rally prompt is a run up the major scale, deliberately **not** the famous six-note "Charge!"
+fanfare, which was written in 1946 and is still under copyright; license it or leave it.
 
 The cues are `Transition`s that fire as playback reaches the moment, so the crowd reacts when the
 ball clears the wall, not when the bat meets it. **Nothing sounds during the pitch: silence is the
