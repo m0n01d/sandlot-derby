@@ -190,7 +190,8 @@ headroom). 6 px ball with its highlight pixel and a `shade` shadow on the grass;
 foot ticks are drawn in world space, so they are twice as wide. Same readouts and distance ticker.
 The batter is a stamp, not scaled art, and is off screen here.
 
-**Night parks.** Sky swaps per `docs/palette.md`, 40 fixed stars, a light tower behind the wall.
+**Night parks.** Sky swaps per `docs/palette.md`. Stars, moon and stadium lights are specced in
+§17 and not built yet.
 
 ## 9. Art
 
@@ -429,3 +430,130 @@ what keeps a non-payer around, so ship it first.
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
 2. Fallback if the paywall tests badly: paid upfront at $1.99, smaller audience, lean on press.
+
+## 17. Life: fireworks, sky and backdrops
+
+Asked for by Dwight 2026-09-19 ("fireworks celebration on HR and add a bit of life like clouds and
+birds and background elements"). **Spec only, nothing built; the choices are Claude's and
+unreviewed.** Folds in the unbuilt night kit from §8 and the plain green band behind the wall (#5).
+
+**The rules it lives inside.** One palette line: every new thing borrows a colour by role, no new
+hex. No alpha, so nothing fades: it blinks, shrinks or stops. Whole pixels only. The motion budget
+(§9) holds: the ball and its trail are the only smooth things on screen, so everything here steps
+at 10 Hz or slower and animates in two frames. Nothing new moves in the strike zone's
+neighbourhood, and nothing new makes a sound during the pitch.
+
+**Everything is a pure function.** What a park looks like is seeded data in Core
+(`Park.scenery`, a pure function of N like the wall, tested the same way), and what moves is a
+function of that seed and a clock the machine already owns (`secondsPlayed`), so park 87 looks the
+same on every phone and the replay clip (#4) reproduces the sky, the birds and the fireworks
+exactly. Scenes only draw.
+
+### Fireworks
+
+- **When:** on `.clearedWall`, the same cue as the cheer. They run through the rest of the flight
+  and the result hold and **stop dead at the cut back to the plate**. About two seconds. The next
+  pitch gets a clean sky and silence.
+- **Where:** in the sky, which "never moves" (§8), so they are screen-space and identical in the
+  close and wide framings: the right 45 % of the screen, bursting between y = 20 and y = 110,
+  behind the field and behind all text. The landing number is always drawn on top.
+- **How big** follows the hit, on the same 0…1 size as the cheer (feet past the wall):
+
+  | Home run | Shells |
+  |---|---|
+  | wall scraper | 1 |
+  | ordinary | 3 |
+  | no-doubter | 5 |
+  | HR streak of 3+ | +1 per streak home run, to 8 |
+  | the call-up | a finale: 10, overlapping |
+
+- **A shell:** a 1 px `chalk` streak climbs for 0.25 s, then 28–40 particles burst on a ring with
+  seeded jitter, fall under gravity with drag (closed form, so there is no particle state: every
+  particle's position is `f(seed, t)`), and live 0.7 s. They die without alpha: 2 px for the first
+  half, 1 px after, blinking on alternate frames for the last 0.15 s. Shells launch 0.18 s apart.
+- **Colour:** one per shell, borrowed by role: `score`, `cap`, `chalk`, `skin`, and `sky3` at
+  night. By day they sit in the dark top sky band where they read; at night they are the show.
+- **Sound:** a soft pop per burst (short noise burst, then a crackle tail), mixed under the cheer.
+  Synthesized like the rest (§11). No extra haptic: `.success` already fired.
+- **Seed:** park number and career pitch count, so no two are alike and a replay matches.
+
+### Sky
+
+- **Clouds.** Two to four per view, seeded per park: blocky stamps of three or four `chalk`
+  rectangles with a `sky3` underside. They drift in whole pixels at the park's **breeze** (seeded,
+  −3…+3 px/s, stepping at most 4 times a second) and wrap. Night: `#446688` stamps, dimmer. The
+  at-bat view and the side view look in different directions, so each has its own clouds; wide and
+  close share one sky. The breeze is cosmetic today and is the tell for **wind** when §14 ships it:
+  the same number will push the ball, and the clouds and flags will already be showing it.
+- **Birds.** Every 20–40 s (seeded) a flock of one to five crosses high, y < 60, well above the
+  scoreboard and nowhere near the zone: 3 px `ink` marks, two flap frames at 4 Hz, with the breeze.
+  *Later, with #5:* in the side view a bird can be on the flight path; a ball passing within 2 px
+  bursts it into `chalk` feathers, counts `birdsHit`, and changes nothing about the flight. Rarity
+  comes free from the geometry.
+- **Night kit (§8, still unbuilt).** Forty fixed stars, one in eight blinking on a slow seeded
+  period, and a `chalk` moon with a night-coloured bite, in a seeded place in one park in four.
+- **Stadium lights at night** (Dwight, 2026-09-19). Every night park has them, two to four towers,
+  seeded. A tower is an `ink` lattice pole carrying a lamp bank: a grid of `chalk` lamps with
+  `score` centres. With no alpha, the glow is a **dithered halo**: a checkerboard of `chalk` on the
+  night sky, three or four rings thinning outward, which the "dither only in the sky" rule already
+  allows. Side view: the towers stand behind the stands and rise out of frame in the close camera,
+  so the bank is what you see in the wide one. At-bat view: they flank the scoreboard above the
+  wall, well clear of the zone. Stars are not drawn inside a halo: the lights wash them out. The
+  field does not change colour (night swaps the sky and nothing else, `docs/palette.md`).
+  The lamps are steady during the pitch. On a home run they **chase**, bank to bank, in two frames
+  for as long as the cheer plays, with the fireworks going off between them. The minors and The
+  Show are day games, so the first lights a player sees are a seeded park's: something to arrive
+  at. *Later, with #5:* a no-doubter that reaches a bank puts it out in a shower of `score` sparks
+  and counts `lightsOut`. One per career would be enough.
+
+### Backdrops
+
+- **Side view: stands instead of the green band.** Behind the wall, a stepped bleacher profile in
+  `ink` and `wall` rising to about 60 ft at 150 ft back; a `score` foul pole on the wall; flags
+  (`cap`, `chalk`) in two flutter frames pointing with the breeze; towers at night. The crowd is a
+  `chalk` / `skin` / `cap` speckle that **bounces two frames while the cheer plays** and sits still
+  otherwise. The stands draw in front of the ball, so a home run drops into the crowd and is gone,
+  with a little `chalk` pop where it went in.
+- **That makes the landing number a projection, and says so by being honest about it:** the flight
+  is still integrated to the ground as if nothing were in the way, exactly what Statcast's
+  "projected distance" is. No physics changes; wall hits and balls in play are untouched.
+- **At-bat view: a horizon.** A low band above the wall, y 86–96, and two small flags on the
+  scoreboard. Far things are `sky2` on the `sky3` band (distance with no new colour), near things
+  `wall` and `shade`, night silhouettes `ink`.
+- **The ladder has its own backdrops**, so moving up looks like moving up:
+
+  | Park | At-bat horizon | Side view behind the wall |
+  |---|---|---|
+  | SINGLE-A | a treeline, one house | a chain-link fence, trees, no stands |
+  | DOUBLE-A | trees, a water tower | one low bleacher |
+  | TRIPLE-A | bleachers, light poles | bleachers, flags |
+  | The Show | an upper deck, flags | full stands, flags, towers |
+
+  From park 5 the backdrop is drawn from a kit, a pure function of N: skyline, mountains, treeline,
+  water tower, smokestacks, bridge, palms, ferris wheel. One far piece and one near piece per park.
+
+### Building it
+
+- **`Park.scenery`** in Core: backdrop pieces, cloud seeds, breeze, moon, flags. Seeded, Equatable,
+  tested for determinism and for the ladder's fixed entries. No drawing knowledge.
+- **A backdrop cache** in the app: everything that does not move is drawn once per (park, canvas
+  width, camera) into a `PixelCanvas` and copied each frame. Only clouds, birds, flags, the crowd
+  and fireworks are drawn per frame, a few hundred pixel writes.
+- **`Fireworks`**: a pure `particles(seed:time:) → [(x, y, size, colour)]` in the app, unit-testable
+  without a scene.
+- **Draw order, side view:** sky → stars / moon → light halos → clouds → fireworks → birds → towers
+  → field and wall face → trail and ball → stands and crowd → text.
+- **Order of work:** (1) backdrop cache, stands in the side view, horizon in the at-bat view;
+  (2) clouds and breeze; (3) fireworks and pops; (4) night kit: stars, moon, stadium lights and
+  their chase; (5) birds, flags, crowd bounce; (6) the bird strike, the lights-out shot and their
+  stats, with #5.
+
+**Open:**
+1. Fireworks on every home run, scaled as above, or only on the notable ones (no-doubters, streaks,
+   the call-up)? Every home run already clears a park, so there is no "ordinary" one to skip.
+2. Daytime fireworks at all, or night parks only with something else by day (streamers, a
+   scoreboard light show)?
+3. Does the ball vanishing into the stands feel right, or should home runs stay visible all the way
+   to the ground as now?
+4. Crowd murmur as ambience between pitches would add life and break "silence is the tension".
+   Claude says no; worth hearing once before deciding.
