@@ -2,6 +2,7 @@ import XCTest
 @testable import DerbyCore
 
 final class MachineTests: XCTestCase {
+    @discardableResult
     private func run(_ m: inout DerbyMachine, seconds: Double, dt: Double = 1.0 / 60) -> [Transition] {
         var out: [Transition] = []
         var t = 0.0
@@ -59,9 +60,13 @@ final class MachineTests: XCTestCase {
         XCTAssertEqual(m.beat, .flight)
         XCTAssertTrue(t1.contains(.cutToWide))
         XCTAssertTrue(t1.contains(.flash))
-        let t2 = run(&m, seconds: 12)       // 2× playback of a ≤12 s flight, plus holds
-        XCTAssertEqual(m.beat, .windup)
+        // 2× playback of a ≤12 s flight, plus holds. Stop on the cut back: the machine never idles,
+        // so a fixed 12 s run lands in whatever beat the next pitches have reached.
+        var t2: [Transition] = []
+        var waited = 0.0
+        while !t2.contains(.cutToAtBat) && waited < 12 { t2 += m.tick(1.0 / 60); waited += 1.0 / 60 }
         XCTAssertTrue(t2.contains(.cutToAtBat))
+        XCTAssertEqual(m.beat, .windup)
         XCTAssertNil(m.flight)
     }
 
