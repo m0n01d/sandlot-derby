@@ -123,8 +123,7 @@ final class AtBatScene: CanvasScene {
         switch machine.beat {
         case .pitch:
             let b = machine.ballNow
-            canvas.disc(wx(b.x), b.y, b.radius, Palette.chalk)
-            if b.radius >= 3 { canvas.px(wx(b.x - 1), b.y - 1, scheme.sky3) }
+            canvas.baseball(wx(b.x), b.y, radius: b.radius, highlight: scheme.sky3)
             if b.radius >= 2 { canvas.px(wx(b.x + b.radius), b.y, Palette.ink) }
             canvas.t3(wx(8), H - 12, "\(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk)
         case .contact:
@@ -232,7 +231,7 @@ final class AtBatScene: CanvasScene {
         let x1 = c.ball.x + c.dir.x * 16, y1 = c.ball.y + c.dir.y * 16
         canvas.line(wx(x0), y0, wx(x1), y1, Palette.chalk, thickness: 3)
         canvas.line(wx(x0), y0, wx(x1), y1, Palette.score, thickness: 1)
-        canvas.disc(wx(c.ball.x), c.ball.y, max(2, c.radius), Palette.chalk)
+        canvas.baseball(wx(c.ball.x), c.ball.y, radius: max(2, c.radius), highlight: Palette.sky3)
         for a in 0..<8 {
             let ang = Double(a) / 8 * 2 * Double.pi + 0.39
             let l = (a % 2 == 1 ? 4.0 : 8.0) + min(8, elapsed * 40)

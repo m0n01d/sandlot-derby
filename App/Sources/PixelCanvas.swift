@@ -87,6 +87,22 @@ final class PixelCanvas {
         }
     }
 
+    /// The ball: `chalk`, red laces (`cap`, borrowed by role) from 2 px of radius up, and one
+    /// highlight pixel from 3. The laces are a ")" seam right of centre; they do not rotate.
+    func baseball(_ cx: Double, _ cy: Double, radius r: Double, highlight: Palette.RGBA8) {
+        disc(cx, cy, r, Palette.chalk)
+        let x = cx.rounded(.down), y = cy.rounded(.down)
+        let seam: [(Double, Double)]
+        switch Int(r) {
+        case ..<2: seam = []
+        case 2: seam = [(1, 0)]
+        case 3: seam = [(1, -1), (2, 0), (1, 1)]
+        default: seam = [(1, -2), (2, -1), (2, 0), (2, 1), (1, 2)]
+        }
+        for (dx, dy) in seam { px(x + dx, y + dy, Palette.cap) }
+        if r >= 3 { px(x - 1, y - 1, highlight) }
+    }
+
     /// A circle of single pixels about `gap` apart. The only outline shape there is.
     func ring(_ cx: Double, _ cy: Double, _ r: Double, _ color: Palette.RGBA8, gap: Double = 3) {
         let n = max(8, Int((2 * Double.pi * r / gap).rounded()))
