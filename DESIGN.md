@@ -169,8 +169,13 @@ grass from 104 with 6-row stripes every 12; foul lines from `(160,196)` to `(40,
 Pitcher at `(160,117)` foot point, 12×24. Batter foot point `(104,222)`, rear three-quarter,
 32×56. Zone and release point per §4. `PARK n` top-left, pitch speed bottom-left.
 
-**Wide view (320×224).** Side view, batter at x = 0 ft, wall to the right. Scale `320/540`
-px per foot, view starts at −24 ft, ground at y = 176. Sky bands `0–70 / 70–130 / 130–176`.
+**Wide view (320×224).** Side view, batter at x = 0 ft, wall to the right. The field gets the
+screen: each park is framed so its wall sits two thirds of the way across, and what is behind the
+wall is the last third and no more (2026-09-19; it was a fixed `320/540` px per foot, which put a
+280 ft wall halfway across). It pulls back only as far as this ball needs: its first landing stays
+20 ft inside the right edge and its apex 16 px under the top. A pure function of the park and the
+flight, so it holds still from the cut to the end of the result. Batter, mowing stripes (16 ft)
+and foot ticks all follow the scale. View starts at −24 ft, ground at y = 176. Sky bands `0–70 / 70–130 / 130–176`.
 Wall drawn at its real height. Foot ticks every 100 ft. Readouts top-left in the 3×5 face at 2×:
 exit velo, angle; pitch type and power in 1×. Distance ticks beside the ball in flight. Result
 number centred at y = 52 in the 5×7 face at 3×; `HR` below it, blinking at 3 Hz.
@@ -196,7 +201,7 @@ The batter is a stamp, not scaled art, and is off screen here.
   |---|---|---|---|
   | Pitcher | at-bat | 12×24 | set, leg kick, release |
   | Batter, rear ¾ | at-bat | 32×56 | stance, contact, follow-through |
-  | Batter, side | wide | 32×48 | contact hold, follow-through |
+  | Batter, side | wide / close | to the field's scale: 6.5 ft, never under 6 px | stance, contact, follow-through. He is the yardstick for the wall (most real walls are a man tall or more); a 42 px batter was 57 ft at the wide scale and made every fence look knee-high (2026-09-19) |
   | Ball | both | 2, 4, 6, 8 px | one highlight pixel at 6 px and up, no rotation |
   | Zone, plate, mound, wall, scoreboard | — | rects | static |
   | 3×5 and 5×7 bitmap faces | both | — | from the prototype bit strings |
