@@ -102,6 +102,43 @@ final class MachineTests: XCTestCase {
         XCTAssertGreaterThan(b, a)
     }
 
+    func testFlightCameraCutsCloseAtTheWallAndBackOutForTheResult() {
+        var m = DerbyMachine(seed: 3)
+        run(&m, seconds: 0.6)
+        m.slice(perfectCrossing(m))
+        XCTAssertEqual(m.flightCamera, .wide)               // contact freeze
+        run(&m, seconds: 0.4)
+        XCTAssertEqual(m.beat, .flight)
+        XCTAssertEqual(m.flightCamera, .wide)               // the ball leaves the bat wide
+        var waited = 0.0
+        while m.flightCamera == .wide && m.beat == .flight && waited < 12 { m.tick(1.0 / 60); waited += 1.0 / 60 }
+        XCTAssertEqual(m.flightCamera, .close)
+        let x = m.playbackPoint?.xFeet ?? 0
+        let cutAt = m.park.wallDistanceFeet - m.cameraRules.closeLeadFeet
+        XCTAssertGreaterThanOrEqual(x, cutAt)
+        XCTAssertLessThan(x, cutAt + 15)                    // cut on arrival, not late
+        while m.beat == .flight && waited < 24 {
+            XCTAssertEqual(m.flightCamera, .close)          // once close, close until it lands
+            m.tick(1.0 / 60); waited += 1.0 / 60
+        }
+        XCTAssertEqual(m.beat, .result)
+        XCTAssertEqual(m.flightCamera, .wide)
+    }
+
+    func testFlightCameraStaysWideForABallThatNeverNearsTheWall() {
+        var m = DerbyMachine(seed: 3)
+        run(&m, seconds: 0.6)
+        m.slice(SliceCrossing(quality: 0, progress: 1, swingAngleDegrees: 60, power: 0.3,
+                              ball: m.ballNow, crossingPoint: m.ballNow.position))   // a soft pop-up
+        run(&m, seconds: 0.4)
+        var waited = 0.0
+        while m.beat == .flight && waited < 12 {
+            XCTAssertEqual(m.flightCamera, .wide)
+            m.tick(1.0 / 60); waited += 1.0 / 60
+        }
+        XCTAssertLessThan(m.flight?.points.map(\.xFeet).max() ?? 999, m.park.wallDistanceFeet - 60)
+    }
+
     func testDeterministicForSeed() {
         var a = DerbyMachine(seed: 99), b = DerbyMachine(seed: 99)
         run(&a, seconds: 5); run(&b, seconds: 5)

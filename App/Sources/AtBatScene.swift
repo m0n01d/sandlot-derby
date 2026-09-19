@@ -138,7 +138,13 @@ final class AtBatScene: CanvasScene {
         }
 
         // HUD anchors to the true edges of the canvas, not the centred column.
-        canvas.t3(8, 8, "PARK \(machine.park.number)", Palette.chalk)
+        // The headline: where you are and what it has cost (DESIGN.md §10).
+        canvas.t3(8, 8, "PARK \(machine.park.number)  \(machine.tally.pitches) PITCHES", Palette.chalk)
+        // Not during the contact freeze: the tally already knows how the ball lands, and a
+        // streak line appearing or vanishing here would spoil the cut.
+        if machine.tally.homeRunStreak >= 2, machine.beat != .contact {
+            canvas.t3(8, 16, "HR STREAK \(machine.tally.homeRunStreak)", Palette.score)
+        }
 
         drawLiveTrail(canvas: canvas, wx: wx)
     }
@@ -415,7 +421,19 @@ final class AtBatScene: CanvasScene {
         endDrag()
     }
 
+    /// A tap that starts here and goes nowhere opens the stats board. The scoreboard
+    /// `(128, 80, 64×16)` grown to thumb size; a slice is never this short.
+    private func isScoreboardTap() -> Bool {
+        guard let start = dragStart, (112...208).contains(start.x), (70...106).contains(start.y) else { return false }
+        return (trail ?? []).allSatisfy { hypot($0.point.x - start.x, $0.point.y - start.y) < 6 }
+    }
+
     private func endDrag() {
+        if isScoreboardTap() {
+            trail = nil; dragStart = nil; closest = nil
+            controller?.showStats()     // not a swing: nothing is counted
+            return
+        }
         if let trail, trail.count > 1 {
             fadeTrail = (points: trail.suffix(18).map { $0.point }, time: CACurrentMediaTime())
         }

@@ -48,7 +48,9 @@ routing, PR screenshot and grooming rules do.
   anti-aliasing. Dither only in the sky.
 - **No outs, no menus, no timers.** A miss brings the next pitch. If a feature needs a menu, it is
   probably the wrong feature.
-- **The cut is hard.** `presentScene` with no transition. Never a wipe, fade or zoom.
+- **The cut is hard.** `presentScene` with no transition. Never a wipe, fade or zoom. The same goes
+  for wide ↔ close inside `WideScene`: the framing changes between one frame and the next, chosen
+  by `DerbyMachine.flightCamera`. No tweened camera, ever.
 
 ## Verification
 

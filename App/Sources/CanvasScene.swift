@@ -21,8 +21,12 @@ class CanvasScene: SKScene {
     private var spriteNode: SKSpriteNode?
     private var lastUpdateTime: TimeInterval?
 
+    /// False for a scene the game stands still behind (the stats board).
+    var ticksMachine: Bool { true }
+
     override func didMove(to view: SKView) {
         backgroundColor = .black
+        lastUpdateTime = nil    // time spent off screen is not game time
         rebuildCanvasIfNeeded()
     }
 
@@ -34,7 +38,7 @@ class CanvasScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = lastUpdateTime.map { currentTime - $0 } ?? 0
         lastUpdateTime = currentTime
-        controller?.tick(dt)
+        if ticksMachine { controller?.tick(dt) }
 
         rebuildCanvasIfNeeded()
         guard let canvas else { return }
