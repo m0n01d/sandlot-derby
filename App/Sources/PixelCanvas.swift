@@ -87,6 +87,15 @@ final class PixelCanvas {
         }
     }
 
+    /// A circle of single pixels about `gap` apart. The only outline shape there is.
+    func ring(_ cx: Double, _ cy: Double, _ r: Double, _ color: Palette.RGBA8, gap: Double = 3) {
+        let n = max(8, Int((2 * Double.pi * r / gap).rounded()))
+        for i in 0..<n {
+            let a = 2 * Double.pi * Double(i) / Double(n)
+            px(cx + cos(a) * r, cy + sin(a) * r, color)
+        }
+    }
+
     func dashed(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double, _ color: Palette.RGBA8) {
         let length = ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)).squareRoot()
         let n = max(1, Int((length / 2).rounded(.down)))

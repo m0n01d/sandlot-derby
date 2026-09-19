@@ -208,9 +208,30 @@ The batter is a stamp, not scaled art, and is off screen here.
 
 ## 10. Parks and score
 
-- Park N is a pure function of N (SplitMix64 seeded by N). Park 1 is always 380 ft / 10 ft, day.
-  Park N ≥ 2: wall 330–410 ft, height 6–26 ft, night with p = 0.25. Wind is reserved for later.
+- Park N is a pure function of N (SplitMix64 seeded by N). Parks 1–4 are fixed day games (the
+  minors and The Show, below). Park N ≥ 5: wall 330–410 ft, height 6–26 ft, night with p = 0.25.
+  Wind is reserved for later.
 - A home run advances to the next park at the end of the result hold. Anything else stays.
+- **The minors** (decided 2026-09-19, issue #7). Park 1 at 380 ft needed ~97 mph, so a first-timer
+  could not hit the home run that is the hook. Parks 1–3 are now a ladder (`Ladder`, `Rung`,
+  `League`), park 4 is The Show (the old park 1), park 5 on is seeded as above. Each rung takes one
+  thing away, which is how the mechanics get uncovered without a tutorial (§15):
+
+  | Park | Scoreboard | Wall | Clears at | Pitches | Strikes | Reach / timing | Help |
+  |---|---|---|---|---|---|---|---|
+  | 1 | `SINGLE-A` | 280 / 6 | ~80 mph | fastball 68–76 | all | 14 px / 0.40 | swing guide, timing ring, coaching |
+  | 2 | `DOUBLE-A` | 320 / 8 | ~88 mph | fastball 80–88, changeup 68–76 | 85 % | 12 px / 0.34 | timing ring, coaching |
+  | 3 | `TRIPLE-A` | 350 / 10 | ~93 mph | full table | 75 % | 10 px / 0.30 | coaching |
+  | 4 | `PARK 4` | 380 / 10 | ~97 mph | full table | 65 % | 9 px / 0.28 | none, ever again |
+
+  **Swing guide:** a 2 px dashed chalk arrow through the pitch's target at 28°, during windup and
+  pitch. **Timing ring:** a chalk dotted ring on the target and a `score` ring that closes onto it as
+  the ball arrives. Both give the target away before the throw, on purpose. **Coaching:** one word
+  under the landing number for a ball that stayed in: `SWING UP` (< 12°), `LEVEL OUT` (> 42°),
+  `FASTER` (< 88 mph), aim before power. Clearing Triple-A blinks `CALLED UP` once per career and
+  records `pitchesToTheShow`. The minors count toward every stat and the streak. A one-way door:
+  nobody is sent down. These are a trial: judge the guide and ring on a phone and cut what
+  hand-holds (Fruit Ninja teaches with no overlays at all; its menu *is* the slice).
 - **Headline:** `PARK n  p PITCHES`, top-left of the at-bat view. Pitches are the cost and never
   reset.
 - **Home run streak:** consecutive home runs. Shown under the headline from 2 up (hidden during
@@ -262,6 +283,8 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `contactHold` | `Timings` | 0.35 s | the slash freeze |
 | `liftCoefficient` | `FlightParams` | 0.15 | under-rewards high spinny hits on purpose |
 | wall ranges | `Park.Rules` | 330–410 / 6–26 | park variety |
+| every column of the minors table (§10) | `Ladder` → `Rung` | table | how gentle each rung is, and what help it shows |
+| `guideAngleDegrees`, `coachLowAngle` / `coachHighAngle` / `coachWeakExitVelocity` | `Ladder` | 28°, 12° / 42° / 88 mph | the swing guide's angle and when each coaching word fires |
 | `closeReachFeet` / `closeLeadFeet` | `CameraRules` | 60 / 100 ft | which balls earn the close camera, and how early it cuts in |
 | `takenBallKeepsStreak` | `StatRules` | true | whether a taken ball ends the HR streak |
 | `barrelMinExitVelocity` / `barrelWindow` | `StatRules` | 98 mph / 26–30° | barrel call, window widens 1.1° a side per mph |
