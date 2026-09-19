@@ -331,7 +331,8 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
   Retune `fullPowerSpeed` and `hitMarginPixels` on a real phone.
 - **M4 — parks and score.** Seeded parks, night swap, tally persistence, park advance on HR.
 - **M5 — ship.** Audio, haptics, app icon (a ball on a chalk line), Game Center, TestFlight,
-  screenshots, store listing. Name decision.
+  screenshots, store listing. Name decision. The contract card and the one purchase (§16), which
+  wants the daily card (#3) shipped first.
 
 ## 14. Open questions
 
@@ -344,4 +345,87 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
 
 ## 15. Non-goals
 
-Fielders, pitching, base running, teams, licences, multiplayer, ads, IAP, seasons, a tutorial.
+Fielders, pitching, base running, teams, licences, multiplayer, seasons, a tutorial. Ads of any
+kind. Any purchase other than the one in §16: no consumables, currencies, energy, upgrades,
+subscriptions, loot, store screen or nag prompts, and nothing money can buy ever changes how the
+ball flies.
+
+## 16. Pricing: free to start, pay once at the call-up
+
+Decided by Dwight 2026-09-19 (issue #11): free to start, **$1.99** ("easy impulse buy, still
+leaves room for discounts"), and the three minor-league parks are the whole trial ("try before
+you buy for sure, that should be enough"). Not freemium: one purchase, once, no ads. Nothing here
+applies to TestFlight, which is free.
+
+**Why this and not the others.** Paid upfront (Desert Golfing) puts a price tag at the end of
+every shared link for a game nobody has heard of. Ads only pay at a scale a solo launch will not
+reach, would wreck the pitch → cut rhythm and the 16-colour canvas, and throw away "no ads, no
+tricks", which is the pitch to players and press. At ~10k installs all three earn about the same
+small money, so price for reach and brand.
+
+**What is free, forever:** the minors (parks 1–3), the daily card (#3, played in a Show-league
+park so it is a taste of what is sold), replay sharing (#4), the stats board and every stat, the
+daily and HR-streak leaderboards. A paywalled share loop is a dead share loop.
+
+**What the purchase buys:** The Show, meaning park 4 and every park after it, and with them the
+career (the "fewest pitches to park 100" board). One non-consumable, `show.contract`, Family
+Sharing on, **$1.99**. Discounts are store-side price changes (a launch week, Opening Day, the
+Home Run Derby): the card simply shows whatever the store charges today. The game itself never
+announces a sale, counts one down or strikes a price through.
+
+**The moment.** The home run that clears Triple-A plays out as now: result hold, `CALLED UP`. If
+the player is not entitled, the cut back goes to the **contract card** instead of park 4:
+
+- A scoreboard-styled card in the bitmap face: `THE SHOW`, the price, `ONE TIME`, `NO ADS  NO
+  SUBSCRIPTION`, and a dotted line ending in `X`. **Slicing the dotted line signs it**, because a
+  slice is the only input the game has. That opens the system purchase sheet.
+- Success: one white frame, hard cut to the windup in park 4. Pending (Ask to Buy): `PENDING`, back
+  to Triple-A, and the cut to park 4 happens when the transaction lands. Cancel or failure: the
+  card stays, with one plain word (`CANCELLED`, `NO CONNECTION`).
+- `RESTORE` in the corner calls `AppStore.sync()`. Entitlements are also read silently at every
+  launch, so a reinstall or a new phone just works; the word is there because App Review requires it.
+- A tap anywhere off the line declines. **Declining is never punished and never nagged:** the
+  player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
+  automatically exactly once per career. After that it lives on the stats board as one row
+  (`THE SHOW  $1.99  SLICE TO SIGN`). No timers, sale banners, badges or reminders.
+- The price is the store's localized `displayPrice`. The 3×5 face gains `$ € £ ¥`; any other
+  currency is shown as its ISO code (`BRL 14.90`), which the face already has.
+
+**Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
+not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
+every other way. Core knows nothing about money; the app sets the ceiling from the entitlement.
+Tested like everything else.
+
+**App.** StoreKit 2 only, no server: `Product.products`, `purchase()`,
+`Transaction.currentEntitlements` at launch, `Transaction.updates` for purchases made elsewhere and
+for refunds. A cached flag in `UserDefaults` lets an entitled player start offline. On a refund
+the ceiling becomes the park the player is standing in: nothing is taken away, they just stop
+advancing. A `.storekit` configuration file in the project so the whole flow runs in the simulator.
+
+**Grandfathering.** Any save already at park 4 or beyond on the first launch of the paywalled
+build is entitled for good. Only beta testers can be in that state, since a new save cannot pass
+park 3 without the purchase.
+
+**Cosmetics.** Earned, not sold, at launch. A theme is another 16-colour palette line (Game Boy
+green, CGA, night-only, cream throwbacks) and a uniform is two colours, so they are cheap to make
+and are rewards for the long game (park 100, a 10-HR streak, `pitchesToTheShow` under some
+number). Chosen on the stats board. They are screenshots and retention, not revenue.
+
+**Store listing says it straight:** "Free to start. One purchase unlocks The Show. No ads, no
+subscription." Privacy label: Data Not Collected, because there is no SDK to collect any. Enrol in
+the App Store Small Business Program (15 %).
+
+**If it ever gets big**, the only ad that fits is diegetic: a sponsor board on the outfield wall,
+direct-sold or swapped with other indies, drawn in the palette. Never an interstitial, a banner
+or a rewarded video.
+
+**Build order (M5):** `parkCeiling` + tests → contract card scene → StoreKit 2 with the local
+configuration file → sandbox on TestFlight → grandfathering → listing copy.
+
+**Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
+the trial can be short. Median pitches-to-call-up says how short, and the free daily card (#3) is
+what keeps a non-payer around, so ship it first.
+
+**Open:**
+1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
+2. Fallback if the paywall tests badly: paid upfront at $1.99, smaller audience, lean on press.
