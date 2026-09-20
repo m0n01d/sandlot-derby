@@ -27,7 +27,11 @@ routing, PR screenshot and grooming rules do.
   Wave 2 (2026-09-19) added `WarmUp.swift` (`WarmUp.generate(day:)` — the day's ten pitches, a
   pure function of the date, §18), `Replay.swift` (`Replay` — the record a clip is re-rendered
   from, §19) and `SkyLife.swift` (`SkyLifeRules` — star blink, the lights' chase, crowd bounce,
-  flag flutter and the bird flock, §17).
+  flag flutter and the bird flock, §17). Wave 3 (2026-09-20) added `RareEvents.swift`
+  (`RareEvents.detect` — finds every rare thing a batted ball passes through: a bird, the blimp,
+  the out-of-town board and its lit pane, the light standard over the wall, §17 step 6, #5) and
+  `SideView.swift` (`SideViewRules` / `SideView.framing` — the side view's wide and close framing,
+  hoisted out of `WideScene` so a rare event can be judged against where the ball is drawn).
 - `App/` — the iOS app. The Xcode project is generated and git-ignored:
   `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
   scenes (`AtBatScene`, `WideScene`, `ContractScene`, `WarmUpCardScene`) driven by `DerbyMachine`
@@ -66,6 +70,7 @@ overrides whatever StoreKit itself would say.
 | `-warmupcard` | jump straight to the Warm Up's result card with a made-up ten, the way `-streak` fakes a streak (§18) | yes | yes |
 | `-replay <path>` | with `-autoslice`, write the first home run's clip to `<path>` (absolute) or a filename in Documents, and log where it went (§19) | yes | yes |
 | `-skyclock <seconds>` | winds the sky's clock forward so a screenshot can reach a bird flock without waiting; moves scenery only and fakes no career state, so it is on **neither** list (§17) | no | no |
+| `-autoloft` | with `-autoslice`, the dev swing takes a steep 53° stroke instead of 27°, so it puts up a towering fly the birds and the blimp can be pinned against; like `-autobarrel` it changes only the stroke and fakes no career state, so it is on **neither** list (§17, #5) | no | no |
 | `-mute` | mutes all sound | no | no |
 | `-nosave` | a human run that never reads or writes the real save | yes (itself) | yes |
 
@@ -97,7 +102,7 @@ overrides whatever StoreKit itself would say.
   ```sh
   FRAMES=30 GAP=0.2 scripts/shots.sh /path/to/checkout-or-worktree "iPhone 17" /tmp/out -autoslice -showstats
   ```
-  Five lessons from waves 1–2:
+  Six lessons from waves 1–3:
   - `simctl`'s screenshot capture lags the game clock, so landing a frame inside a beat's ~1 s
     window takes dense bursts (short `GAP`, high `FRAMES`) and retries, not one lucky shot.
   - A `.storekit` configuration only applies when the app is launched from Xcode (or an
@@ -113,6 +118,20 @@ overrides whatever StoreKit itself would say.
     be wrong together (wave 2: a replay clip made during a Warm Up would have been labelled with
     the career's park, #33). The conductor builds one integration tree and screenshots the
     *combination*, not just each feature alone, before merging a wave.
+  - `simctl io screenshot` stills are too lossy to catch a rare event's ~0.5 s two-frame burst
+    (wave 3): the shutter and the game clock are not synced tightly enough to land inside a window
+    that short, even with a dense `GAP`/`FRAMES` sweep. Record video instead and pull frames:
+    ```sh
+    xcrun simctl io <udid> recordVideo --codec h264 out.mp4   # stop it with Ctrl-C (SIGINT)
+    ffmpeg -i out.mp4 -vf fps=30 v%03d.png
+    ```
+
+  `SURVEY=1 swift test --filter RareEventSurvey` un-skips `RareEventTests`' two rarity-survey
+  tests, which sweep every park (and, for the sky, every half-second of the clock) against the
+  `-autoslice -autobarrel` robot's *whole* launch envelope, not one idealised swing, and print the
+  parks most robust for a screenshot: `ROBUST <kind>: park N (X%), ...` for the board dent, the
+  broken window and lights-out, and `ROBUST birdStrike` / `ROBUST blimpHit: park N -skyclock S, ...`
+  for the sky.
 
 ## Milestones
 
@@ -121,10 +140,12 @@ See DESIGN.md §13. M0–M4 are done. Wave 1 of M5 merged 2026-09-19: #22 (Warm 
 #24 (the rest of the organ), #25 (contract card + StoreKit 2), #27 (backdrops/sky/clouds), #26
 (fireworks). Wave 2 merged the same day: #30 (the replay clip, §19), #31 (the Warm Up itself,
 §18), #32 (the night kit, birds, flag flutter, crowd bounce and the at-bat foul poles — §17 steps
-4–5, #28). Audio, haptics, the organ tunes, `parkCeiling`, the contract card, StoreKit 2 wiring (a
-local `.storekit` file), the Warm Up and the replay clip are all in; the purchase/pending/refund/
-restore paths have not been exercised for real, since a `.storekit` configuration only works
-launched from Xcode. Next: park variety (#5) is in flight this wave; §17 step 6 (the bird strike,
-the lights-out shot) waits on it. #11 (pricing, §16) waits on Dwight to decide and then, once
-decided, to exercise the purchase paths from Xcode. `docs/watch.md` is a proposal for an Apple
-Watch version and waits on hardware.
+4–5, #28). Wave 3 merged 2026-09-20: #34 (the replay-during-Warm-Up fix, #33, and the wave 2 docs
+batch) and #37 (park variety, #5, §17 step 6). Audio, haptics, the organ tunes, `parkCeiling`, the
+contract card, StoreKit 2 wiring (a local `.storekit` file), the Warm Up, the replay clip and park
+variety are all in; the purchase/pending/refund/restore paths have not been exercised for real,
+since a `.storekit` configuration only works launched from Xcode. Next: every buildable issue is
+closed; what remains is Dwight's — #11 (pricing, §16) needs the purchase, pending, refund and
+restore paths run from Xcode, and the review of every decision still marked unreviewed; then the
+rest of M5 (the app icon, Game Center, TestFlight, the store listing). `docs/watch.md` is a
+proposal for an Apple Watch version and waits on hardware.
