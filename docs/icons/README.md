@@ -12,6 +12,11 @@ Pick one with `scripts/pick-icon.sh 01` (or `02`…`08`); it copies that candida
 
 ![contact sheet](contact-sheet.png)
 
+The shipping icon where it actually has to work — a booted simulator's home screen, at real size,
+next to Apple's own:
+
+![on the home screen](on-the-home-screen.png)
+
 ## The rules the icons obey
 
 The same ones the game does, because an icon that breaks them is advertising a different game:
