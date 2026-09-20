@@ -111,6 +111,52 @@ public struct Replay: Codable, Equatable {
         }
     }
 
+    /// The Warm Up in progress the instant before `slice(_:)` ran, nil for a career swing (#33,
+    /// DESIGN.md §18/§19). Optional so records written before this field existed still decode —
+    /// `Replay` has always been forward-compatible that way (see `testRecordWithoutWarmUpKeyStillDecodes`).
+    ///
+    /// The **whole card** travels by value, not the day alone. `WarmUp.generate(day:)` is a pure
+    /// function of `WarmUpRules`, `PitchingRules` and `Ladder`, every one of which can move later
+    /// the same way `Park.Rules` can move the wall — which is exactly why `ParkRecord` above
+    /// already keeps the park's numbers rather than regenerating them from `park.number`.
+    /// Regenerating the card from `day` alone would silently swap in a different ten pitches (or
+    /// even a different park) the moment any of those tables changed under a shipped clip. `park`
+    /// and `pitches` here reuse the same `ParkRecord`/`PitchRecord` wrappers the rest of this file
+    /// already carries, so nothing new travels on the wire that has not already been proven.
+    public struct WarmUpRecord: Codable, Equatable {
+        /// The local calendar day, `YYYYMMDD` — kept for the corner label and the card, even
+        /// though the card itself is not regenerated from it.
+        public var day: Int
+        public var park: ParkRecord
+        /// All ten of the day's pitches, in order, so `DerbyMachine.newPitch()` can find the next
+        /// one exactly as the live game would, whatever `PitchingRules` looks like by the time the
+        /// clip is replayed.
+        public var pitches: [PitchRecord]
+        /// One entry per pitch spent before and including this one — the last is `.taken`, the
+        /// placeholder `slice(_:)` is about to overwrite (DESIGN.md §18: "a pitch is spent at
+        /// `.pitchThrown`"). Its count is the pitch index; no separate field carries it.
+        public var results: [WarmUpPitch]
+        /// Consecutive home runs inside this Warm Up, before this swing.
+        public var homeRunStreak: Int
+
+        public init(_ run: WarmUpRun) {
+            day = run.card.day
+            park = ParkRecord(run.card.park)
+            pitches = run.card.pitches.map(PitchRecord.init)
+            results = run.pitches
+            homeRunStreak = run.homeRunStreak
+        }
+
+        /// Rebuilds the `WarmUpRun` `DerbyMachine.atPitch` needs. `rules` is not carried: nothing
+        /// downstream of a replayed swing reads `WarmUp.rules` (only `WarmUpResult.number(rules:)`
+        /// and `.shareText(rules:)` do, and neither is reachable from a rebuilt machine), so the
+        /// default is exactly as good as the original.
+        public var run: WarmUpRun {
+            let card = WarmUp(day: day, park: park.park, pitches: pitches.map(\.pitch))
+            return WarmUpRun(card: card, pitches: results, homeRunStreak: homeRunStreak)
+        }
+    }
+
     /// Bumped if the shape ever changes under a clip that has been shared as data rather than as
     /// a file. 1 is the first.
     public var version: Int
@@ -122,6 +168,8 @@ public struct Replay: Codable, Equatable {
     /// frames read for the clouds and the fireworks.
     public var tally: Tally
     public var marks: Marks
+    /// Nil for a career swing; see `WarmUpRecord` (#33).
+    public var warmUp: WarmUpRecord?
 
     /// Takes the record at the moment of contact. `machine` must be the machine as it stood
     /// **before** `slice(_:)` ran — `GameController.recordSlice` captures it on the line above
@@ -134,14 +182,18 @@ public struct Replay: Codable, Equatable {
         swing = SwingRecord(crossing)
         tally = machine.tally
         marks = Marks(slash: slash, trail: trail)
+        warmUp = machine.warmUp.map(WarmUpRecord.init)
     }
 
     /// A machine standing at the very start of the contact beat, with the swing already counted.
     /// Tick it at a fixed `dt` and it walks the same beats, chooses the same `flightCamera`, puts
-    /// on the same fireworks show and stops on the same landing number as the original.
+    /// on the same fireworks show and stops on the same landing number as the original — and, if
+    /// this swing was made during a Warm Up, `warmUp` is restored too, so `streakNow`, the
+    /// fireworks seed and the on-screen labels all read the Warm Up rather than falling back to
+    /// the career (#33).
     public static func machine(from replay: Replay) -> DerbyMachine {
         var m = DerbyMachine.atPitch(park: replay.park.park, tally: replay.tally,
-                                     pitch: replay.pitch.pitch)
+                                     pitch: replay.pitch.pitch, warmUp: replay.warmUp?.run)
         m.slice(replay.swing.crossing)
         return m
     }

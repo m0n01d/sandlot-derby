@@ -48,6 +48,14 @@ final class ReplayTests: XCTestCase {
         var totalFeet: Int
         var longestFeet: Int
 
+        /// Whichever streak is live (§18): the career's, or the Warm Up's while one is running.
+        var streakNow: Int
+        /// `warmUp`'s visible fields (#33) — nil outside a Warm Up on both sides alike.
+        var warmUpDay: Int?
+        var warmUpSpent: Int?
+        var warmUpTotal: Int?
+        var warmUpHomeRunStreak: Int?
+
         init(_ m: DerbyMachine) {
             beat = m.beat
             elapsed = m.elapsed
@@ -87,6 +95,12 @@ final class ReplayTests: XCTestCase {
             homeRuns = m.tally.homeRuns
             totalFeet = m.tally.totalFeet
             longestFeet = m.tally.longestFeet
+
+            streakNow = m.streakNow
+            warmUpDay = m.warmUp?.card.day
+            warmUpSpent = m.warmUp?.spent
+            warmUpTotal = m.warmUp?.total
+            warmUpHomeRunStreak = m.warmUp?.homeRunStreak
         }
     }
 
@@ -105,6 +119,22 @@ final class ReplayTests: XCTestCase {
     private func perfectCrossing(_ m: DerbyMachine) -> SliceCrossing {
         SliceCrossing(quality: 1, progress: 1, swingAngleDegrees: 28, power: 1,
                       ball: m.ballNow, crossingPoint: m.ballNow.position)
+    }
+
+    /// The same as `machineAtThePitch`, but mid a Warm Up (#33): a career that has cleared a park
+    /// queues the day's ten, the queue takes the field at the next windup, and the walk continues
+    /// from there. `resuming` defaults to none, so the captured pitch is the day's first — never
+    /// the tenth — which is what proves a clip does not spend the pitch it merely shows again.
+    private func warmUpMachineAtThePitch(day: Int = 20260919, seed: UInt64 = 99,
+                                         resuming: [WarmUpPitch] = []) -> DerbyMachine {
+        var tally = Tally()
+        tally.set(.parksCleared, 1)
+        var m = DerbyMachine(seed: seed, park: .first, tally: tally)
+        m.beginWarmUp(WarmUp.generate(day: day), resuming: resuming)
+        while m.warmUp == nil { m.tick(dt) }              // takes the field at the next windup
+        while m.beat != .pitch { m.tick(dt) }
+        while m.pitchProgress < 0.9 { m.tick(dt) }
+        return m
     }
 
     private let marksSlash = Point(x: 0.891, y: -0.454)
@@ -178,6 +208,90 @@ final class ReplayTests: XCTestCase {
             if out.contains(.cutToAtBat) { break }
         }
         XCTAssertTrue(sawFireworks, "a streak of 5 must earn a show")
+    }
+
+    // MARK: - A Warm Up home run (#33)
+
+    /// The bug this fixes: a clip made during a Warm Up used to rebuild as a career swing, because
+    /// `Replay` carried no idea a Warm Up was running. Same walk as
+    /// `testRebuiltMachineMatchesFrameForFrameThroughResult`, but mid the day's ten — the rebuild
+    /// must agree with the original on `warmUp`'s own fields too, and, since a clip is a recording
+    /// and not a pitch, must never end the Warm Up it is only showing again.
+    func testRebuiltMachineMatchesFrameForFrameThroughResultDuringWarmUp() {
+        var live = warmUpMachineAtThePitch()
+        XCTAssertNotNil(live.warmUp, "fixture must actually be mid Warm Up")
+        let crossing = perfectCrossing(live)
+        let replay = record(live, crossing)
+        live.slice(crossing)
+
+        var rebuilt = Replay.machine(from: replay)
+
+        XCTAssertEqual(live.flight?.homeRun, true, "the fixture swing must be a home run")
+        XCTAssertNotNil(rebuilt.warmUp, "the rebuild must know it is in a Warm Up (#33)")
+        XCTAssertEqual(Observed(rebuilt), Observed(live), "the two differ before the first tick")
+
+        var frames = 0
+        var sawWarmUpEnded = false
+        while true {
+            let liveOut = live.tick(dt)
+            let rebuiltOut = rebuilt.tick(dt)
+            frames += 1
+            XCTAssertEqual(rebuiltOut, liveOut, "transitions differ on frame \(frames)")
+            XCTAssertEqual(Observed(rebuilt), Observed(live), "state differs on frame \(frames)")
+            if rebuiltOut.contains(where: { if case .warmUpEnded = $0 { return true } else { return false } }) {
+                sawWarmUpEnded = true
+            }
+            if liveOut.contains(.cutToAtBat) { break }        // the result hold is over
+            XCTAssertLessThan(frames, 2_000, "the clip never ended")
+        }
+        XCTAssertNotNil(rebuilt.warmUp, "a clip is a recording, not a pitch: it must not end the Warm Up (#33)")
+        XCTAssertFalse(sawWarmUpEnded, "a Warm Up clip must never emit .warmUpEnded (#33)")
+        XCTAssertGreaterThan(frames, 100)
+    }
+
+    /// The record survives `Codable`, including the Warm Up it carries.
+    func testWarmUpRecordRoundTripsThroughJSON() throws {
+        var live = warmUpMachineAtThePitch(day: 20260919, seed: 4242)
+        let crossing = perfectCrossing(live)
+        let replay = record(live, crossing)
+        live.slice(crossing)
+        XCTAssertNotNil(replay.warmUp)
+
+        let data = try JSONEncoder().encode(replay)
+        let decoded = try JSONDecoder().decode(Replay.self, from: data)
+        XCTAssertEqual(decoded, replay)
+        XCTAssertNotNil(decoded.warmUp)
+
+        var fromJSON = Replay.machine(from: decoded)
+        var direct = Replay.machine(from: replay)
+        while true {
+            let out = direct.tick(dt)
+            fromJSON.tick(dt)
+            XCTAssertEqual(Observed(fromJSON), Observed(direct))
+            if out.contains(.cutToAtBat) { break }
+        }
+    }
+
+    /// A record written before #33 has no `warmUp` key at all — not even a null one, since a
+    /// career swing already encodes an absent optional by omitting the key. It must still decode,
+    /// into a replay that has never heard of a Warm Up.
+    func testRecordWithoutWarmUpKeyStillDecodes() throws {
+        var live = machineAtThePitch()
+        let crossing = perfectCrossing(live)
+        let replay = record(live, crossing)
+        live.slice(crossing)
+
+        let data = try JSONEncoder().encode(replay)
+        guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return XCTFail("the record did not encode as a JSON object")
+        }
+        XCTAssertNil(object["warmUp"], "a career swing already encodes with no warmUp key")
+        object.removeValue(forKey: "warmUp")   // belt and braces, in case that ever changes
+        let json = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(Replay.self, from: json)
+        XCTAssertNil(decoded.warmUp)
+        XCTAssertNil(Replay.machine(from: decoded).warmUp)
     }
 
     // MARK: - The record itself

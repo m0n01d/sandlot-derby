@@ -30,7 +30,7 @@ exactly as on the phone (§7 below).
 | `t3` 3×5 face | Not used. `t5` 5×7 is the smallest face (a `t3` glyph would be 1.1 mm tall) |
 | Stats board, dozens of lines | Same stats, eight to a page, Crown flips pages by hard cut |
 | 9 crack levels, 5 cheers pre-rendered at launch | 3 and 2, rendered after the first frame; organ, trombone and firework pops rendered on first use |
-| Daily card (#3), replay sharing (#4), leaderboards | Phone only in v1 |
+| The Warm Up (§18), the replay clip (§19), leaderboards | Phone only in v1 |
 | Contract card price glyphs (`$ € £ ¥`) | Already drawn in the `t5` face since #25 — the watch needs nothing new |
 | Coaching lines | Re-cut to ≤ 20 characters or two lines |
 | CoreHaptics-grade impacts | Four canned taps (§6) |
@@ -334,6 +334,6 @@ unchanged** (520 px/s, 9 px), so that gate is met: W2 now waits only on W1 and t
 
 ## 11. Non-goals (watch)
 
-Everything in §15, plus: Game Center, the daily card (#3), replay sharing (#4) and leaderboards in
+Everything in §15, plus: Game Center, the Warm Up (§18), the replay clip (§19) and leaderboards in
 v1, the double-tap pinch gesture (far too slow to time a pitch),
 Crown-as-swing, workout sessions, phone-to-watch connectivity, any settings screen.
