@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home, 16-bit — sketch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible&family=IBM+Plex+Mono&display=swap">
+<style>
+body{margin:0;padding:24px 20px 48px;background:#121816;color:#ECEFE9;font:16px/1.5 'Atkinson Hyperlegible',system-ui,sans-serif}
+.wrap{max-width:680px;margin:0 auto}
+h1{font:400 18px 'Silkscreen',monospace;margin:0 0 4px}
+p{max-width:64ch;margin:0 0 12px}
+.note{font-size:14px;color:#9AA8A2}
+.mono{font-family:'IBM Plex Mono',monospace}
+canvas{display:block;width:100%;max-width:640px;aspect-ratio:320/224;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;cursor:crosshair;background:#222244;border-radius:4px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:12px 0}
+.controls label{display:flex;align-items:center;gap:8px}
+button,select,input[type=number]{font:inherit;font-size:14px;padding:6px 12px;border:1px solid #4CCB72;background:#1F3A2A;color:#ECEFE9;border-radius:4px;cursor:pointer}
+input[type=range]{accent-color:#4CCB72;width:180px;max-width:50vw}
+a{color:#7EDD9A}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Home, 16-bit — sketch</h1>
+<p class="note">The playable sketch <a href="home-16-bit.md">home-16-bit.md</a> is written from. Self-contained: the flats are seeded stand-ins for a RoomPlan scan (walls, doors, windows and furniture boxes on a 25 cm tile grid), and the JavaScript below is the reference for the conversion and the three tilesets. Arrow keys or the buttons walk the figure; walls and furniture stop it.</p>
+<canvas id="homeCanvas" width="320" height="224" aria-label="A top-down pixel map of a flat with rooms, doors, windows, furniture and a small figure you can walk around"></canvas>
+<div class="controls">
+  <label for="homeStyle">Style <select id="homeStyle"><option value="overworld" selected>overworld</option><option value="dungeon">dungeon</option><option value="cottage">cottage</option></select></label>
+  <label for="homeSeed">Seed <input type="number" id="homeSeed" value="1987" style="width:110px"></label>
+  <button type="button" id="homeNew">Another flat</button>
+  <span class="note mono" id="homeOut"></span>
+</div>
+<div class="controls">
+  <button type="button" id="homeL">←</button><button type="button" id="homeU">↑</button><button type="button" id="homeD">↓</button><button type="button" id="homeR">→</button>
+  <span class="note">Tap the map on a side of the figure to step that way.</span>
+</div>
+</div>
+<script>
+(function(){
+'use strict';
+const PAL={sky1:'#4466CC',sky2:'#66AAEE',sky3:'#AACCEE',grassA:'#22AA44',grassB:'#228844',wall:'#226644',dirt:'#CC8844',dirtD:'#AA6622',chalk:'#EEEEEE',ink:'#222244',skin:'#EEAA88',cap:'#CC2222',bat:'#AA8844',score:'#EEDD22',shade:'#116633',night:'#221144'};
+function rng(seed){ let s=(seed>>>0)||0x9E3779B9; return function(){ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+function txt(ctx,t,x,y,color,size,align){ ctx.font=(size||8)+'px Silkscreen, monospace'; ctx.fillStyle=color; ctx.textBaseline='top'; ctx.textAlign=align||'left'; ctx.fillText(t,x,y); ctx.textAlign='left'; }
+function pt(c,e){ const r=c.getBoundingClientRect(); return {x:(e.clientX-r.left)*c.width/r.width, y:(e.clientY-r.top)*c.height/r.height}; }
+function fillDisc(ctx,cx,cy,r,color){ ctx.fillStyle=color; const rr=r*r; for(let dy=-r;dy<=r;dy++){ for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy<=rr) ctx.fillRect(Math.round(cx+dx),Math.round(cy+dy),1,1); } } }
+function linePx(ctx,x0,y0,x1,y1,color,dash){ ctx.fillStyle=color; const n=Math.max(1,Math.round(Math.hypot(x1-x0,y1-y0))); for(let i=0;i<=n;i++){ if(dash && (i%(dash*2))>=dash) continue; ctx.fillRect(Math.round(x0+(x1-x0)*i/n),Math.round(y0+(y1-y0)*i/n),1,1);} }
+function ditherBand(ctx,x,y,w,h,a,b){ for(let yy=y;yy<y+h;yy++){ for(let xx=x;xx<x+w;xx++){ ctx.fillStyle=((xx+yy)&1)?a:b; ctx.fillRect(xx,yy,1,1);} } }
+const reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const BAYER=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+async function askTilt(onOrient,note,okText){ try{ if(typeof DeviceOrientationEvent==='undefined'){ note.textContent='No motion sensors here; the other controls still work.'; return false; } if(typeof DeviceOrientationEvent.requestPermission==='function'){ const p=await DeviceOrientationEvent.requestPermission(); if(p!=='granted'){ note.textContent='Tilt permission was not granted; the other controls still work.'; return false; } } window.addEventListener('deviceorientation',onOrient); note.textContent=okText; return true; }catch(err){ note.textContent='Tilt is blocked in this viewer; the other controls still work.'; return false; } }
+function rollOf(ev){ let land=false; try{ land=((screen.orientation&&screen.orientation.type)||'').indexOf('landscape')===0; }catch(_){ } const a=land?ev.beta:ev.gamma; return a==null?null:a; }
+
+/* ---------------- Home, 16-bit ---------------- */
+(function home(){
+ const c=document.getElementById('homeCanvas'); if(!c) return; const ctx=c.getContext('2d'); const W=320,H=224,T=6,GW=52,GH=36,OX=4,OY=4;
+ const el=id=>document.getElementById(id); const styleSel=el('homeStyle'), seedIn=el('homeSeed'), newBtn=el('homeNew'), out=el('homeOut');
+ let r, grid, objs, rooms, you, envelope; const KINDS=['bed','sofa','table','chair','storage','refrigerator','stove','sink','toilet','bathtub','television','washerDryer'];
+ function rng2(seed){ let s=(seed>>>0)||7; return ()=>{ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+ function setWall(x,y){ if(x>=0&&x<GW&&y>=0&&y<GH) grid[y*GW+x]=2; }
+ function line(x0,y0,x1,y1){ for(let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++) for(let y=Math.min(y0,y1);y<=Math.max(y0,y1);y++) setWall(x,y); }
+ function free(x,y,w,h){ for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++){ if(xx<0||yy<0||xx>=GW||yy>=GH) return false; if(grid[yy*GW+xx]!==1) return false; if(objs.some(o=>xx>=o.x&&xx<o.x+o.w&&yy>=o.y&&yy<o.y+o.h)) return false; if(nearDoor(xx,yy)) return false; } return true; }
+ function nearDoor(x,y){ for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=GW||yy>=GH) continue; if(grid[yy*GW+xx]===3) return true; } return false; }
+ function place(room,kind,w,h,wallSide){ for(let tries=0;tries<40;tries++){ let x,y; const side=wallSide?['n','s','e','w'][Math.floor(r()*4)]:null; if(side==='n'){ y=room.y+1; x=room.x+1+Math.floor(r()*Math.max(1,room.w-1-w)); } else if(side==='s'){ y=room.y+room.h-h; x=room.x+1+Math.floor(r()*Math.max(1,room.w-1-w)); } else if(side==='w'){ x=room.x+1; y=room.y+1+Math.floor(r()*Math.max(1,room.h-1-h)); } else if(side==='e'){ x=room.x+room.w-w; y=room.y+1+Math.floor(r()*Math.max(1,room.h-1-h)); } else { x=room.x+2+Math.floor(r()*Math.max(1,room.w-3-w)); y=room.y+2+Math.floor(r()*Math.max(1,room.h-3-h)); } if(free(x,y,w,h)){ objs.push({kind,x,y,w,h,room:room.name}); return true; } } return false; }
+ function generate(seed){ r=rng2(seed); grid=new Uint8Array(GW*GH); objs=[]; rooms=[];
+  const ew=30+Math.floor(r()*14), eh=20+Math.floor(r()*10); const x0=Math.floor((GW-ew)/2), y0=Math.floor((GH-eh)/2); envelope={x:x0,y:y0,w:ew,h:eh};
+  for(let y=y0;y<y0+eh;y++) for(let x=x0;x<x0+ew;x++) grid[y*GW+x]=1;
+  const sx=x0+Math.floor(ew*(0.45+r()*0.15)); const syL=y0+Math.floor(eh*(0.5+r()*0.2)); const syR=y0+Math.floor(eh*(0.55+r()*0.2));
+  rooms.push({name:'living',x:x0,y:y0,w:sx-x0+1,h:syL-y0+1}); rooms.push({name:'kitchen',x:x0,y:syL,w:sx-x0+1,h:y0+eh-syL}); rooms.push({name:'bedroom',x:sx,y:y0,w:x0+ew-sx,h:syR-y0+1}); rooms.push({name:'bath',x:sx,y:syR,w:x0+ew-sx,h:y0+eh-syR});
+  line(x0,y0,x0+ew-1,y0); line(x0,y0+eh-1,x0+ew-1,y0+eh-1); line(x0,y0,x0,y0+eh-1); line(x0+ew-1,y0,x0+ew-1,y0+eh-1); line(sx,y0,sx,y0+eh-1); line(x0,syL,sx,syL); line(sx,syR,x0+ew-1,syR);
+  const door=(x,y)=>{ grid[y*GW+x]=3; }; door(x0+2+Math.floor(r()*(sx-x0-4)),syL); door(sx,y0+2+Math.floor(r()*(syL-y0-4))); door(sx+2+Math.floor(r()*(x0+ew-sx-4)),syR); door(sx,syL+1+Math.floor(r()*Math.max(1,(y0+eh-syL-3)))); const ex=x0+3+Math.floor(r()*(sx-x0-6)); door(ex,y0+eh-1);
+  const win=(x,y)=>{ if(grid[y*GW+x]===2) grid[y*GW+x]=4; }; for(const rm of rooms){ const n=1+Math.floor(r()*2); for(let k=0;k<n;k++){ if(rm.y===y0){ const wx=rm.x+2+Math.floor(r()*(rm.w-4)); win(wx,y0); win(wx+1,y0); } if(rm.x===x0){ const wy=rm.y+2+Math.floor(r()*(rm.h-4)); win(x0,wy); } if(rm.x+rm.w-1===x0+ew-1){ const wy=rm.y+2+Math.floor(r()*(rm.h-4)); win(x0+ew-1,wy); } } }
+  const L=rooms[0],K=rooms[1],B=rooms[2],Ba=rooms[3];
+  place(L,'sofa',3,1,true); place(L,'television',2,1,true); place(L,'storage',1,3,true); if(place(L,'table',2,2,false)){ const t=objs[objs.length-1]; for(const [dx,dy] of [[-1,0],[2,0],[0,-1],[0,2]]){ if(free(t.x+dx,t.y+dy,1,1)) objs.push({kind:'chair',x:t.x+dx,y:t.y+dy,w:1,h:1,room:'living'}); } }
+  place(K,'refrigerator',1,1,true); place(K,'stove',1,1,true); place(K,'sink',1,1,true); place(K,'washerDryer',1,1,true); if(place(K,'table',2,1,false)){ const t=objs[objs.length-1]; if(free(t.x,t.y-1,1,1)) objs.push({kind:'chair',x:t.x,y:t.y-1,w:1,h:1,room:'kitchen'}); if(free(t.x+1,t.y+1,1,1)) objs.push({kind:'chair',x:t.x+1,y:t.y+1,w:1,h:1,room:'kitchen'}); }
+  place(B,'bed',3,2,true)||place(B,'bed',2,3,true); place(B,'storage',1,3,true); place(B,'chair',1,1,false);
+  place(Ba,'bathtub',3,1,true)||place(Ba,'bathtub',1,3,true); place(Ba,'toilet',1,1,true); place(Ba,'sink',1,1,true);
+  you={x:ex,y:y0+eh-2}; if(!free(you.x,you.y,1,1)){ for(let yy=y0+1;yy<y0+eh-1&&!free(you.x,you.y,1,1);yy++) you.y=yy; }
+  out.textContent='flat '+(ew/4).toFixed(1)+' × '+(eh/4).toFixed(1)+' m at 25 cm a tile · '+objs.length+' objects · seed '+seed; }
+ const STY={
+  overworld:{out:PAL.ink,floor:[PAL.grassA,PAL.grassB],hall:PAL.dirt,wall:[PAL.shade,PAL.wall],door:PAL.dirt,win:PAL.sky3,label:'OVERWORLD'},
+  dungeon:{out:PAL.ink,floor:[PAL.bat,PAL.dirtD],hall:PAL.bat,wall:[PAL.night,PAL.ink],door:PAL.night,win:PAL.sky1,label:'DUNGEON'},
+  cottage:{out:PAL.grassB,floor:[PAL.dirt,PAL.bat],hall:PAL.dirt,wall:[PAL.dirtD,PAL.bat],door:PAL.bat,win:PAL.sky3,label:'COTTAGE'} };
+ function px(x,y,col){ ctx.fillStyle=col; ctx.fillRect(x,y,1,1); }
+ function tile(gx,gy,col){ ctx.fillStyle=col; ctx.fillRect(OX+gx*T,OY+gy*T,T,T); }
+ function glyph(o,st){ const x=OX+o.x*T, y=OY+o.y*T, w=o.w*T, h=o.h*T; const s=styleSel.value; ctx.fillStyle=PAL.ink;
+  const box=(col,inset)=>{ ctx.fillStyle=col; ctx.fillRect(x+inset,y+inset,w-2*inset,h-2*inset); };
+  switch(o.kind){
+   case 'bed': if(s==='overworld'){ box(PAL.grassB,0); for(let k=0;k<w;k+=3) for(let j=0;j<h;j+=3) px(x+k+1,y+j+1,PAL.cap); } else if(s==='dungeon'){ box(PAL.bat,0); box(PAL.chalk,2); px(x+2,y+2,PAL.ink); } else { box(PAL.chalk,0); ctx.fillStyle=PAL.cap; ctx.fillRect(x+1,y+Math.floor(h/2),w-2,Math.floor(h/2)-1); ctx.fillStyle=PAL.sky3; ctx.fillRect(x+1,y+1,4,3); } break;
+   case 'sofa': if(s==='overworld'){ box(PAL.dirtD,0); box(PAL.bat,1); } else if(s==='dungeon'){ box(PAL.dirtD,0); box(PAL.bat,2); } else { box(PAL.cap,0); ctx.fillStyle=PAL.dirtD; ctx.fillRect(x,y,w,2); } break;
+   case 'table': if(s==='overworld'){ box(PAL.bat,1); box(PAL.dirtD,2); } else if(s==='dungeon'){ box(PAL.dirtD,0); box(PAL.score,2); } else { box(PAL.bat,1); } break;
+   case 'chair': if(s==='overworld'){ box(PAL.wall,1); px(x+2,y+2,PAL.shade); } else if(s==='dungeon'){ box(PAL.dirtD,2); } else { box(PAL.dirtD,1); px(x+2,y+1,PAL.bat); } break;
+   case 'storage': if(s==='overworld'){ box(PAL.wall,0); ctx.fillStyle=PAL.dirtD; ctx.fillRect(x+2,y+h-3,2,3); } else if(s==='dungeon'){ box(PAL.dirtD,0); for(let j=1;j<h;j+=3){ px(x+1,y+j,PAL.cap); px(x+2,y+j,PAL.sky1); px(x+3,y+j,PAL.score); } } else { box(PAL.dirtD,0); ctx.fillStyle=PAL.bat; ctx.fillRect(x+1,y+1,w-2,h-2); } break;
+   case 'refrigerator': if(s==='overworld'){ box(PAL.dirtD,0); box(PAL.bat,1); px(x+3,y+3,PAL.score); } else if(s==='dungeon'){ box(PAL.dirtD,0); box(PAL.score,2); } else { box(PAL.chalk,0); px(x+1,y+3,PAL.ink); } break;
+   case 'stove': if(s==='overworld'||s==='dungeon'){ box(PAL.ink,0); px(x+2,y+2,PAL.cap); px(x+3,y+2,PAL.score); px(x+2,y+3,PAL.score); px(x+3,y+3,PAL.cap); } else { box(PAL.ink,0); px(x+1,y+1,PAL.cap); px(x+4,y+1,PAL.cap); px(x+1,y+4,PAL.cap); px(x+4,y+4,PAL.cap); } break;
+   case 'sink': box(s==='cottage'?PAL.sky3:PAL.sky2,0); px(x+2,y+2,PAL.chalk); break;
+   case 'toilet': if(s==='cottage'){ box(PAL.chalk,0); px(x+2,y+2,PAL.sky3); px(x+3,y+2,PAL.sky3); } else { box(PAL.sky2,1); } break;
+   case 'bathtub': box(s==='cottage'?PAL.chalk:PAL.sky3,0); ctx.fillStyle=PAL.sky2; ctx.fillRect(x+1,y+1,w-2,h-2); break;
+   case 'television': if(s==='overworld'){ box(PAL.bat,1); px(x+2,y+1,PAL.chalk); } else if(s==='dungeon'){ box(PAL.sky3,1); } else { box(PAL.ink,0); box(PAL.sky2,1); } break;
+   case 'washerDryer': if(s==='overworld'){ box(PAL.dirtD,0); box(PAL.bat,2); } else if(s==='dungeon'){ box(PAL.ink,0); box(PAL.sky1,2); } else { box(PAL.chalk,0); box(PAL.sky2,2); } break; } }
+ function draw(){ const st=STY[styleSel.value]; ctx.fillStyle=st.out; ctx.fillRect(0,0,W,H);
+  if(styleSel.value==='overworld'){ for(let k=0;k<60;k++){ const sx=(k*53)%W, sy=(k*37)%H; if(grid[Math.min(GH-1,Math.floor((sy-OY)/T))*GW+Math.min(GW-1,Math.floor((sx-OX)/T))]===0) px(sx,sy,PAL.night); } }
+  for(let gy=0;gy<GH;gy++) for(let gx=0;gx<GW;gx++){ const t=grid[gy*GW+gx]; if(t===0) continue; const X=OX+gx*T, Y=OY+gy*T;
+   if(t===1){ tile(gx,gy,((gx+gy)&1)?st.floor[0]:st.floor[1]); if(styleSel.value==='overworld' && ((gx*7+gy*3)%11===0)) px(X+2,Y+3,PAL.wall); }
+   else if(t===2){ tile(gx,gy,st.wall[0]); ctx.fillStyle=st.wall[1]; if(styleSel.value==='dungeon'){ ctx.fillRect(X,Y+2,T,1); ctx.fillRect(X+((gy&1)?3:0),Y,1,T); } else if(styleSel.value==='overworld'){ ctx.fillRect(X+1,Y+1,2,2); ctx.fillRect(X+3,Y+3,2,2); } else { ctx.fillRect(X,Y+1,T,1); ctx.fillRect(X,Y+4,T,1); } }
+   else if(t===3){ tile(gx,gy,st.door); if(styleSel.value==='dungeon'){ px(X,Y+1,PAL.score); px(X+5,Y+1,PAL.score); } }
+   else if(t===4){ tile(gx,gy,st.wall[0]); ctx.fillStyle=st.win; ctx.fillRect(X+1,Y+2,T-2,2); if(styleSel.value==='dungeon'){ px(X+3,Y+2,st.wall[0]); px(X+3,Y+3,st.wall[0]); } } }
+  for(const o of objs) glyph(o,st);
+  { const X=OX+you.x*T, Y=OY+you.y*T; ctx.fillStyle=PAL.cap; ctx.fillRect(X+1,Y,4,2); ctx.fillStyle=PAL.skin; ctx.fillRect(X+1,Y+2,4,2); ctx.fillStyle=PAL.ink; ctx.fillRect(X+1,Y+4,4,2); px(X+2,Y+2,PAL.ink); px(X+4,Y+2,PAL.ink); }
+  ctx.fillStyle=PAL.ink; ctx.fillRect(0,H-10,W,10); txt(ctx,'HOME 16-BIT · '+st.label+' · '+(envelope.w/4).toFixed(1)+'×'+(envelope.h/4).toFixed(1)+' M',3,H-9,PAL.chalk); txt(ctx,'YOU ARE HERE',W-3,H-9,PAL.score,8,'right'); }
+ function move(dx,dy){ const nx=you.x+dx, ny=you.y+dy; if(nx<0||ny<0||nx>=GW||ny>=GH) return; const t=grid[ny*GW+nx]; if(t===2||t===4) return; if(objs.some(o=>nx>=o.x&&nx<o.x+o.w&&ny>=o.y&&ny<o.y+o.h)) return; you.x=nx; you.y=ny; draw(); }
+ window.addEventListener('keydown',e=>{ if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='SELECT')) return; const k=e.key; if(k==='ArrowLeft'||k==='a'){ move(-1,0); e.preventDefault(); } if(k==='ArrowRight'||k==='d'){ move(1,0); e.preventDefault(); } if(k==='ArrowUp'||k==='w'){ move(0,-1); e.preventDefault(); } if(k==='ArrowDown'||k==='s'){ move(0,1); e.preventDefault(); } });
+ for(const [id,dx,dy] of [['homeL',-1,0],['homeR',1,0],['homeU',0,-1],['homeD',0,1]]){ const b=el(id); if(b) b.addEventListener('click',()=>move(dx,dy)); }
+ c.addEventListener('pointerdown',e=>{ const p=pt(c,e); const dx=p.x-(OX+you.x*T+3), dy=p.y-(OY+you.y*T+3); if(Math.abs(dx)>Math.abs(dy)) move(dx>0?1:-1,0); else move(0,dy>0?1:-1); e.preventDefault(); });
+ styleSel.addEventListener('change',draw); newBtn.addEventListener('click',()=>{ generate(parseInt(seedIn.value,10)||1); draw(); }); seedIn.addEventListener('keydown',e=>{ if(e.key==='Enter') newBtn.click(); });
+ generate(parseInt(seedIn.value,10)||1); draw();
+})();
+
+})();
+</script>
+</body>
+</html>

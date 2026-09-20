@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formicarium — sketch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible&family=IBM+Plex+Mono&display=swap">
+<style>
+body{margin:0;padding:24px 20px 48px;background:#121816;color:#ECEFE9;font:16px/1.5 'Atkinson Hyperlegible',system-ui,sans-serif}
+.wrap{max-width:680px;margin:0 auto}
+h1{font:400 18px 'Silkscreen',monospace;margin:0 0 4px}
+p{max-width:64ch;margin:0 0 12px}
+.note{font-size:14px;color:#9AA8A2}
+.mono{font-family:'IBM Plex Mono',monospace}
+canvas{display:block;width:100%;max-width:640px;aspect-ratio:320/224;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;cursor:crosshair;background:#222244;border-radius:4px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:12px 0}
+.controls label{display:flex;align-items:center;gap:8px}
+button,select,input[type=number]{font:inherit;font-size:14px;padding:6px 12px;border:1px solid #4CCB72;background:#1F3A2A;color:#ECEFE9;border-radius:4px;cursor:pointer}
+input[type=range]{accent-color:#4CCB72;width:180px;max-width:50vw}
+a{color:#7EDD9A}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Formicarium — sketch</h1>
+<p class="note">The playable sketch <a href="formicarium.md">formicarium.md</a> is written from. Self-contained: the JavaScript below is the reference for the core's sand automaton, dig plan, ants, brood, starvation and catch-up. Time runs at ×1200 by default so a farm-day passes in about a minute; the app runs at ×1.</p>
+<canvas id="farmCanvas" width="320" height="224" aria-label="A cross-section ant farm: sand, tunnels, a queen and workers digging in real time"></canvas>
+<div class="controls">
+  <label for="farmSpeed">Clock <select id="farmSpeed"><option value="0.01667">×1, real time</option><option value="1">×60</option><option value="20" selected>×1200</option></select></label>
+  <label for="farmWeather">Weather <select id="farmWeather"><option value="clear" selected>clear, warm</option><option value="rain">rain</option><option value="cold">cold snap</option></select></label>
+  <label for="farmRegion">Region <select id="farmRegion"><option value="temperate" selected>temperate</option><option value="desert">desert</option><option value="tropical">tropical</option></select></label>
+  <label for="farmSeed">Seed <input type="number" id="farmSeed" value="20260920" style="width:120px"></label>
+  <button type="button" id="farmNew">New farm</button>
+</div>
+<div class="controls">
+  <button type="button" id="farmFeed">Feed them</button>
+  <button type="button" id="farmAway">Away 8 hours</button>
+  <button type="button" id="farmShake">Shake it</button>
+  <label for="farmGrav">Gravity <input type="range" id="farmGrav" min="-90" max="270" value="90" step="5"> <span class="mono" id="farmGravOut">90°</span></label>
+  <button type="button" id="farmMotion">Gravity follows the phone</button>
+  <label><input type="checkbox" id="farmDie" checked> the colony can die</label>
+  <button type="button" id="farmQueen">A new queen</button>
+  <span class="note mono" id="farmStat"></span>
+</div>
+<p class="note" id="farmNote">Feed them and watch a forager carry the crumb down to the store. Drag the gravity slider and the sand pours to whichever side is down; on a phone, gravity follows how you hold it. Starve them and the timeline is real ant keeping: the workers eat the eggs first, then die one a day, then the queen; the sand keeps the tunnels for the next queen.</p>
+</div>
+<script>
+(function(){
+'use strict';
+const PAL={sky1:'#4466CC',sky2:'#66AAEE',sky3:'#AACCEE',grassA:'#22AA44',grassB:'#228844',wall:'#226644',dirt:'#CC8844',dirtD:'#AA6622',chalk:'#EEEEEE',ink:'#222244',skin:'#EEAA88',cap:'#CC2222',bat:'#AA8844',score:'#EEDD22',shade:'#116633',night:'#221144'};
+function rng(seed){ let s=(seed>>>0)||0x9E3779B9; return function(){ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+function txt(ctx,t,x,y,color,size,align){ ctx.font=(size||8)+'px Silkscreen, monospace'; ctx.fillStyle=color; ctx.textBaseline='top'; ctx.textAlign=align||'left'; ctx.fillText(t,x,y); ctx.textAlign='left'; }
+function pt(c,e){ const r=c.getBoundingClientRect(); return {x:(e.clientX-r.left)*c.width/r.width, y:(e.clientY-r.top)*c.height/r.height}; }
+function fillDisc(ctx,cx,cy,r,color){ ctx.fillStyle=color; const rr=r*r; for(let dy=-r;dy<=r;dy++){ for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy<=rr) ctx.fillRect(Math.round(cx+dx),Math.round(cy+dy),1,1); } } }
+function linePx(ctx,x0,y0,x1,y1,color,dash){ ctx.fillStyle=color; const n=Math.max(1,Math.round(Math.hypot(x1-x0,y1-y0))); for(let i=0;i<=n;i++){ if(dash && (i%(dash*2))>=dash) continue; ctx.fillRect(Math.round(x0+(x1-x0)*i/n),Math.round(y0+(y1-y0)*i/n),1,1);} }
+function ditherBand(ctx,x,y,w,h,a,b){ for(let yy=y;yy<y+h;yy++){ for(let xx=x;xx<x+w;xx++){ ctx.fillStyle=((xx+yy)&1)?a:b; ctx.fillRect(xx,yy,1,1);} } }
+const reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const BAYER=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+async function askTilt(onOrient,note,okText){ try{ if(typeof DeviceOrientationEvent==='undefined'){ note.textContent='No motion sensors here; the other controls still work.'; return false; } if(typeof DeviceOrientationEvent.requestPermission==='function'){ const p=await DeviceOrientationEvent.requestPermission(); if(p!=='granted'){ note.textContent='Tilt permission was not granted; the other controls still work.'; return false; } } window.addEventListener('deviceorientation',onOrient); note.textContent=okText; return true; }catch(err){ note.textContent='Tilt is blocked in this viewer; the other controls still work.'; return false; } }
+function rollOf(ev){ let land=false; try{ land=((screen.orientation&&screen.orientation.type)||'').indexOf('landscape')===0; }catch(_){ } const a=land?ev.beta:ev.gamma; return a==null?null:a; }
+
+function skyBands(ctx,x,top,w,hz,m){ if(m==='night'){ ctx.fillStyle=PAL.night; ctx.fillRect(x,top,w,hz-top); } else if(m==='dusk'){ const a=top, b=hz; const h=b-a; ctx.fillStyle=PAL.sky1; ctx.fillRect(x,a,w,Math.round(h*0.35)); ditherBand(ctx,x,a+Math.round(h*0.35),w,4,PAL.sky1,PAL.cap); ctx.fillStyle=PAL.cap; ctx.fillRect(x,a+Math.round(h*0.35)+4,w,Math.round(h*0.22)); ditherBand(ctx,x,a+Math.round(h*0.57)+4,w,4,PAL.cap,PAL.dirt); ctx.fillStyle=PAL.dirt; ctx.fillRect(x,a+Math.round(h*0.57)+8,w,Math.round(h*0.2)); ditherBand(ctx,x,a+Math.round(h*0.77)+8,w,4,PAL.dirt,PAL.score); ctx.fillStyle=PAL.score; ctx.fillRect(x,a+Math.round(h*0.77)+12,w,Math.max(0,b-(a+Math.round(h*0.77)+12))); } else if(m==='golden'){ const a=top,b=hz,h=b-a; ctx.fillStyle=PAL.sky2; ctx.fillRect(x,a,w,Math.round(h*0.4)); ditherBand(ctx,x,a+Math.round(h*0.4),w,4,PAL.sky2,PAL.sky3); ctx.fillStyle=PAL.sky3; ctx.fillRect(x,a+Math.round(h*0.4)+4,w,Math.round(h*0.4)); ditherBand(ctx,x,a+Math.round(h*0.8)+4,w,4,PAL.sky3,PAL.score); ctx.fillStyle=PAL.score; ctx.fillRect(x,a+Math.round(h*0.8)+8,w,Math.max(0,b-(a+Math.round(h*0.8)+8))); } else { const a=top,b=hz,h=b-a; ctx.fillStyle=PAL.sky1; ctx.fillRect(x,a,w,Math.round(h*0.35)); ditherBand(ctx,x,a+Math.round(h*0.35),w,4,PAL.sky1,PAL.sky2); ctx.fillStyle=PAL.sky2; ctx.fillRect(x,a+Math.round(h*0.35)+4,w,Math.round(h*0.4)); ditherBand(ctx,x,a+Math.round(h*0.75)+4,w,4,PAL.sky2,PAL.sky3); ctx.fillStyle=PAL.sky3; ctx.fillRect(x,a+Math.round(h*0.75)+8,w,Math.max(0,b-(a+Math.round(h*0.75)+8))); } }
+function modeOf(h){ return (h>=21||h<5)?'night':(h<7||h>=19)?'dusk':(h<9||h>=17)?'golden':'day'; }
+
+/* ---------------- Formicarium ---------------- */
+(function farm(){
+ const c=document.getElementById('farmCanvas'); if(!c) return; const ctx=c.getContext('2d');
+ const W=320,H=224,GW=160,GH=112, FX0=4,FX1=155,FY0=4,FY1=107, SURF=34, N=GW*GH;
+ const el=id=>document.getElementById(id);
+ const dieIn=el('farmDie'), queenBtn=el('farmQueen'); const gravIn=el('farmGrav'), gravOut=el('farmGravOut'), motionBtn=el('farmMotion'); const speedSel=el('farmSpeed'), weatherSel=el('farmWeather'), regionSel=el('farmRegion'), seedIn=el('farmSeed'), newBtn=el('farmNew'), feedBtn=el('farmFeed'), shakeBtn=el('farmShake'), awayBtn=el('farmAway'), tiltBtn=el('farmTilt'), note=el('farmNote'), statOut=el('farmStat');
+ const REGIONS={temperate:{ant:PAL.ink,sand:[PAL.dirt,PAL.bat,PAL.dirtD,PAL.dirt],temp:{clear:24,rain:16,cold:4}},desert:{ant:PAL.cap,sand:[PAL.skin,PAL.dirt,PAL.bat,PAL.skin],temp:{clear:34,rain:22,cold:8}},tropical:{ant:PAL.dirtD,sand:[PAL.dirtD,PAL.wall,PAL.dirt,PAL.dirtD],temp:{clear:29,rain:24,cold:14}}};
+ const cell=new Uint8Array(N), strat=new Uint8Array(N), loose=new Uint8Array(N), claimed=new Uint8Array(N), wasDug=new Uint8Array(N); const collapsed=[];
+ const prev=new Int32Array(N), queue=new Int32Array(N);
+ let starve=0, queenAlive=true, midden=[], gone=false, broodEatT=0, workerDieT=0; let caveGrains=0, gravA=Math.PI/2, lastK=2, motionOn=false, motionZero=null, shakeLevel=0; let r, ants=[], brood=[], queen={x:0,y:0,w:0}, plan=[], planIdx=0, ex=80, entrance=0, foundCells=[], storeCells=[], farmMin=9*60, stepAcc=0, foodStore=0, grains=0, caveIns=0, emerged=0, eggTimer=120, wet=0, tilt=0, tiltOn=false, zero=null, msg='', msgT=0, t=0, last=performance.now(), surface=new Int16Array(GW), planR=null, awayStats=null;
+ const idx=(x,y)=>y*GW+x; const inFrame=(x,y)=>x>=FX0&&x<=FX1&&y>=FY0&&y<=FY1;
+ const isSolid=(x,y)=>inFrame(x,y)&&(cell[idx(x,y)]===1||cell[idx(x,y)]===3);
+ function passable(x,y){ if(!inFrame(x,y)) return false; const tt=cell[idx(x,y)]; if(tt===2||tt===3) return true; if(tt===0 && y>=surface[x]) return true; if(tt===0){ if(isSolid(x,y+1)||isSolid(x-1,y+1)||isSolid(x+1,y+1)) return true; if(isSolid(x,y+2)) return true; if(inFrame(x,y+1)&&cell[idx(x,y+1)]===2) return true; } return false; }
+ function activity(){ const w=weatherSel.value; return w==='cold'?0.15:w==='rain'?0.7:1; }
+ function tempC(){ return REGIONS[regionSel.value].temp[weatherSel.value]; }
+ function chamber(cx,cy,w,h){ const out=[]; for(let dy=-h;dy<=h;dy++) for(let dx=-w;dx<=w;dx++){ if(Math.abs(dx)<=w-(Math.abs(dy)===h&&h>0?1:0)) out.push([clampX(cx+dx),Math.min(FY1-1,cy+dy)]); } return out; }
+ function clampX(x){ return Math.max(FX0+5,Math.min(FX1-5,x)); }
+ function extendPlan(){ const rr=planR; for(let attempt=0;attempt<12;attempt++){ let x,y; const dug=plan.filter(q=>cell[idx(q[0],q[1])]!==1); if(dug.length){ const p=dug[Math.floor(rr()*dug.length)]; x=p[0]; y=p[1]; } else { x=ex; y=surface[ex]; }
+   const before=plan.length; const canDown=y<FY1-16; const dir=rr()<0.5?-1:1; const canSide=(dir<0?x-FX0:FX1-x)>16; const kind=(plan.length<40&&canDown)?'shaft':(canDown&&rr()<0.5?'shaft':(canSide?'gallery':(canDown?'shaft':null))); if(!kind) continue;
+   if(kind==='shaft'){ const d=Math.min(FY1-3,y+14+Math.floor(rr()*12)); while(y<d){ if(rr()<0.25){ x=clampX(x+(rr()<0.5?-1:1)); plan.push([x,y]); } y++; plan.push([x,y]); if(rr()<0.12) plan.push([clampX(x+(rr()<0.5?-1:1)),y]); } const ch=chamber(clampX(x),Math.min(FY1-2,y+2),3+Math.floor(rr()*2),1); plan.push(...ch); if(!storeCells.length) storeCells=ch.slice(); }
+   else { const L=10+Math.floor(rr()*12); for(let i=0;i<L;i++){ x=clampX(x+dir); plan.push([x,y]); if(rr()<0.25 && y<FY1-3){ y=y+1; plan.push([x,y]); } } const ch=chamber(clampX(x+dir*2),Math.min(FY1-2,y+1),2,1); plan.push(...ch); }
+   let fresh=0; for(let k=before;k<plan.length;k++){ if(cell[idx(plan[k][0],plan[k][1])]===1) fresh++; } if(fresh>=6) return; plan.length=before; } }
+ function newFarm(){ const s=parseInt(seedIn.value,10)||1; r=rng(s); planR=rng(s*31+7); cell.fill(0); strat.fill(0); loose.fill(0); claimed.fill(0); wasDug.fill(0); collapsed.length=0; ants=[]; brood=[]; plan=[]; planIdx=0; storeCells=[]; foodStore=2; starve=0; queenAlive=true; midden=[]; gone=false; broodEatT=0; workerDieT=0; grains=0; caveIns=0; emerged=0; eggTimer=120; wet=0; farmMin=9*60; msg=''; awayStats=null;
+  const ph=r()*6.28; for(let x=0;x<GW;x++) surface[x]=SURF+Math.round(2*Math.sin(x/13+ph)+Math.sin(x/5+ph*2));
+  const bands=[0,0.22,0.48,0.75]; for(let y=FY0;y<=FY1;y++) for(let x=FX0;x<=FX1;x++){ if(y>=surface[x]){ const i=idx(x,y); cell[i]=1; const depth=(y-SURF)/(FY1-SURF)+0.06*Math.sin(x/9+y/4)+0.04*(r()-0.5); let b=0; for(let k=0;k<4;k++) if(depth>=bands[k]) b=k; strat[i]=(r()<0.06)?(b+1)%4:b; } }
+  ex=clampX(60+Math.floor(r()*40)); let y=surface[ex]-1; entrance=idx(ex,y);
+  for(let k=0;k<8;k++){ y++; plan.push([ex,y]); } foundCells=chamber(ex,y+2,3,1); plan.push(...foundCells); queen={x:ex-1,y:y+2,w:0};
+  for(let k=0;k<plan.length;k++){ const p=plan[k]; cell[idx(p[0],p[1])]=2; wasDug[idx(p[0],p[1])]=1; } planIdx=plan.length; extendPlan(); extendPlan();
+  for(let k=0;k<8;k++) ants.push({x:foundCells[k%foundCells.length][0],y:foundCells[k%foundCells.length][1],state:'idle',carry:0,path:[],move:0,timer:0,target:-1,dir:1,wait:0,buried:0,st:0});
+  for(let k=0;k<3;k++) brood.push({x:ex+k-1,y:y+1,age:0,stage:0});
+ }
+ function bfs(from,to){ if(from===to) return []; prev.fill(-1); let qh=0,qt=0; queue[qt++]=from; prev[from]=from; while(qh<qt){ const cur=queue[qh++]; const cx=cur%GW, cy=(cur/GW)|0; const nb=[cur-1,cur+1,cur-GW,cur+GW]; for(let k=0;k<4;k++){ const n=nb[k]; if(prev[n]!==-1) continue; const nx=n%GW, ny=(n/GW)|0; if(Math.abs(nx-cx)+Math.abs(ny-cy)!==1) continue; if(!passable(nx,ny)) continue; prev[n]=cur; if(n===to){ const path=[]; let p=n; while(p!==from){ path.push(p); p=prev[p]; } path.reverse(); return path; } queue[qt++]=n; } } return null; }
+ function nearestPassableTo(tx,ty){ const nb=[[tx-1,ty],[tx+1,ty],[tx,ty-1],[tx,ty+1]]; for(const [x,y] of nb){ if(passable(x,y) && cell[idx(x,y)]!==1) return idx(x,y); } return -1; }
+ function freeCellIn(list){ const free=list.filter(p=>cell[idx(p[0],p[1])]!==1 && cell[idx(p[0],p[1])]!==3 && !brood.some(b=>b.x===p[0]&&b.y===p[1])); if(!free.length) return null; return free[Math.floor(Math.random()*free.length)]; }
+ function surfaceFood(){ const out=[]; for(let x=FX0;x<=FX1;x++) for(let y=FY0;y<surface[x]+3;y++){ if(cell[idx(x,y)]===3) out.push(idx(x,y)); } return out; }
+ function feed(){ for(let k=0;k<3;k++){ const x=clampX(ex+Math.floor((Math.random()-0.5)*24)); let y=surface[x]-1; while(y>FY0 && isSolid(x,y)) y--; if(cell[idx(x,y)]===0){ cell[idx(x,y)]=3; } } }
+ function isVoid(i){ return cell[i]===0||cell[i]===2; }
+ function loosenNear(p){ for(let y=FY0;y<=FY1;y++) for(let x=FX0;x<=FX1;x++){ const i=idx(x,y); if(cell[i]!==1) continue; if(isVoid(i+GW)||isVoid(i-GW)||isVoid(i-1)||isVoid(i+1)){ if(Math.random()<p) loose[i]=30; } } }
+ const DIRS=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+ function gravK(){ return ((Math.round(gravA/(Math.PI/4))%8)+8)%8; }
+ function avalanche(i,pav){ const nb=[i-1,i+1,i-GW,i+GW]; for(const q of nb){ if(cell[q]===1 && loose[q]===0 && Math.random()<pav) loose[q]=30; } }
+ function ca(){ const k=gravK(); if(k!==lastK){ lastK=k; loosenNear(0.9); } const [dx,dy]=DIRS[k]; const s1=DIRS[(k+1)%8], s2=DIRS[(k+7)%8]; const tipped=Math.abs(Math.atan2(Math.sin(gravA-Math.PI/2),Math.cos(gravA-Math.PI/2))); const pav=0.12+0.8*Math.min(1,tipped/(Math.PI/2));
+  const ys=[]; if(dy>0){ for(let y=FY1;y>=FY0;y--) ys.push(y); } else { for(let y=FY0;y<=FY1;y++) ys.push(y); }
+  const xs=[]; if(dx>0){ for(let x=FX1;x>=FX0;x--) xs.push(x); } else { for(let x=FX0;x<=FX1;x++) xs.push(x); }
+  for(let pass=0;pass<6;pass++){ let moved=false; for(const y of ys){ for(const x of xs){ const i=idx(x,y); if(cell[i]!==1||loose[i]===0) continue;
+     const tx=x+dx, ty=y+dy; if(inFrame(tx,ty)){ const ti=idx(tx,ty); if(cell[ti]===0||cell[ti]===2){ if(cell[ti]===2 && wasDug[ti]){ caveGrains++; collapsed.push(ti); } cell[ti]=1; strat[ti]=strat[i]; loose[ti]=loose[i]; const ui=idx(x-dx,y-dy); cell[i]=(inFrame(x-dx,y-dy)&&(cell[ui]===1||cell[ui]===2))?2:0; loose[i]=0; if(y>=surface[x]) avalanche(i,pav); moved=true; continue; } }
+     let done=false; const order=Math.random()<0.5?[s1,s2]:[s2,s1]; for(const sd of order){ const sx=x+sd[0], sy=y+sd[1]; if(!inFrame(sx,sy)) continue; const si=idx(sx,sy); if(cell[si]!==0) continue; cell[si]=1; strat[si]=strat[i]; loose[si]=loose[i]; const ui=idx(x-dx,y-dy); cell[i]=(inFrame(x-dx,y-dy)&&(cell[ui]===1||cell[ui]===2))?2:0; loose[i]=0; if(y>=surface[x]) avalanche(i,pav*0.5); moved=true; done=true; break; }
+     if(!done) loose[i]--; } } if(!moved) break; } }
+ function countCaveIns(){ /* a grain entering a tunnel cell counts once per step */ }
+ function stepAnt(a,act){ if(a.buried>0){ a.buried-=1; if(a.buried<=0){ cell[idx(a.x,a.y)]=2; } return; } if(cell[idx(a.x,a.y)]===1){ a.buried=25; a.path=[]; return; }
+  a.move+=3.5*act; while(a.move>=1 && a.path.length){ a.move-=1; const n=a.path[0]; const nx=n%GW, ny=(n/GW)|0; if(!passable(nx,ny)){ a.path=[]; a.state='idle'; if(a.target>=0){ claimed[a.target]=0; a.target=-1; } break; } a.path.shift(); a.dir=nx>a.x?1:nx<a.x?-1:a.dir; a.x=nx; a.y=ny; }
+  if(a.path.length) return; if(a.wait>0){ a.wait-=1; return; }
+  const raining=weatherSel.value==='rain';
+  switch(a.state){
+   case 'idle': { const sf=surfaceFood(); const foragers=ants.filter(q=>q.state==='toFood'||q.state==='toStore').length; if(sf.length && foragers<4 && !raining){ a.state='toFood'; a.target=sf[Math.floor(Math.random()*sf.length)]; const p=bfs(idx(a.x,a.y),a.target); if(p){ a.path=p; } else { a.state='idle'; a.wait=5; a.target=-1; } break; }
+     if(a.st===1){ a.state='nurse'; break; }
+     if(collapsed.length && !raining){ let found=false; for(let k=collapsed.length-1;k>=0 && !found;k--){ const ti=collapsed[k]; if(cell[ti]!==1){ collapsed.splice(k,1); continue; } if(claimed[ti]) continue; const dest=nearestPassableTo(ti%GW,(ti/GW)|0); if(dest<0) continue; const path=bfs(idx(a.x,a.y),dest); if(!path) continue; claimed[ti]=1; a.target=ti; a.path=path; a.state='toDig'; found=true; } if(found) break; }
+     if(planIdx>=plan.length-8){ extendPlan(); }
+     if(planIdx<plan.length && !raining){ let found=false; for(let k=planIdx;k<Math.min(plan.length,planIdx+14);k++){ const p=plan[k]; const ti=idx(p[0],p[1]); if(cell[ti]!==1){ if(k===planIdx) planIdx++; continue; } if(claimed[ti]) continue; const dest=nearestPassableTo(p[0],p[1]); if(dest<0) continue; const path=bfs(idx(a.x,a.y),dest); if(!path) continue; claimed[ti]=1; a.target=ti; a.path=path; a.state='toDig'; found=true; break; } if(!found){ if(planIdx>=plan.length-8) extendPlan(); a.state='wander'; a.wait=3; } }
+     else { a.state='wander'; a.wait=raining?8:3; }
+     if(a.state==='wander' && cell[idx(a.x,a.y)]===0){ const home=freeCellIn(foundCells); if(home){ const p=bfs(idx(a.x,a.y),idx(home[0],home[1])); if(p){ a.path=p; a.state='idle'; a.wait=0; } } } break; }
+   case 'toDig': { const tx=a.target%GW, ty=(a.target/GW)|0; if(Math.abs(tx-a.x)+Math.abs(ty-a.y)===1){ a.state='digging'; a.timer=16; } else { claimed[a.target]=0; a.target=-1; a.state='idle'; } break; }
+   case 'digging': { a.timer-=act; if(a.timer<=0){ const i=a.target; if(cell[i]===1){ cell[i]=2; loose[i]=0; wasDug[i]=1; a.st=0; const nb=[i-1,i+1,i-GW,i+GW,i-GW-1,i-GW+1,i+GW-1,i+GW+1]; for(const n of nb){ if(cell[n]===1 && Math.random()<0.04) loose[n]=30; } grains++; a.carry=1+strat[i]; } claimed[i]=0; a.target=-1; while(planIdx<plan.length && cell[idx(plan[planIdx][0],plan[planIdx][1])]!==1) planIdx++; const p=bfs(idx(a.x,a.y),entrance); if(p){ a.path=p; a.state='toSurface'; } else { a.state='dump'; } } break; }
+   case 'toSurface': { if(raining){ a.wait=6; break; } const dx=(Math.random()<0.5?-1:1)*(3+Math.floor(Math.random()*8)); const x=clampX(ex+dx); let y=surface[x]-1; while(y>FY0 && isSolid(x,y)) y--; const dest=idx(x,y); const p=bfs(idx(a.x,a.y),dest); if(p){ a.path=p; a.state='toDrop'; } else { a.state='dump'; } break; }
+   case 'toDrop': case 'dump': { const i=idx(a.x,a.y); if(cell[i]===0||cell[i]===2){ if(a.carry>0 && cell[i]===0){ cell[i]=1; strat[i]=a.carry-1; loose[i]=30; if(passable(a.x,a.y-1)){ a.y-=1; } } } a.carry=0; a.state='idle'; a.wait=2; break; }
+   case 'toFood': { const i=a.target; if(cell[i]===3 && Math.abs(a.x-i%GW)+Math.abs(a.y-((i/GW)|0))<=1){ cell[i]=0; a.carry=9; const dest=freeCellIn(storeCells.length?storeCells:foundCells); if(dest){ const p=bfs(idx(a.x,a.y),idx(dest[0],dest[1])); if(p){ a.path=p; a.state='toStore'; break; } } foodStore++; a.carry=0; a.state='idle'; } else { a.state='idle'; a.wait=2; } break; }
+   case 'toStore': { foodStore++; a.carry=0; a.state='idle'; a.wait=4; break; }
+   case 'nurse': { const dest=freeCellIn(foundCells); if(dest && Math.random()<0.5){ const p=bfs(idx(a.x,a.y),idx(dest[0],dest[1])); if(p) a.path=p; } a.wait=4+Math.floor(Math.random()*6); if(Math.random()<0.1) a.st=0; a.state=a.st===1?'nurse':'idle'; break; }
+   case 'wander': { const nb=[[a.x-1,a.y],[a.x+1,a.y],[a.x,a.y-1],[a.x,a.y+1]].filter(p=>passable(p[0],p[1])&&cell[idx(p[0],p[1])]!==0); if(nb.length){ const p=nb[Math.floor(Math.random()*nb.length)]; a.path=[idx(p[0],p[1])]; } a.wait=2; if(Math.random()<0.3) a.state='idle'; break; }
+   default: a.state='idle';
+  } }
+ function stepBrood(act){ eggTimer-=act; const workers=ants.length; if(eggTimer<=0){ eggTimer=110+Math.random()*60; if(queenAlive && foodStore>0 && starve<1 && brood.length<12 && workers<40){ const cellp=freeCellIn(foundCells); if(cellp) brood.push({x:cellp[0],y:cellp[1],age:0,stage:0}); } }
+  for(let i=brood.length-1;i>=0;i--){ const b=brood[i]; if(b.stage===1){ if(Math.random()<act/1440*1.0){ if(foodStore>0) foodStore--; else continue; } } b.age+=act; if(b.stage===0 && b.age>3*1440) b.stage=1; else if(b.stage===1 && b.age>7*1440) b.stage=2; else if(b.stage===2 && b.age>12*1440){ brood.splice(i,1); emerged++; ants.push({x:b.x,y:b.y,state:'idle',carry:0,path:[],move:0,timer:0,target:-1,dir:1,wait:0,buried:0,st:Math.random()<0.25?1:0}); } } }
+ function simStep(){ const act=activity(); farmMin+=1; if(weatherSel.value==='rain') wet=1; else wet=Math.max(0,wet-1/300);
+  if(shakeLevel>0.5){ loosenNear(Math.min(0.5,shakeLevel*0.08)); } shakeLevel*=0.6;
+  caveGrains=0; ca(); if(caveGrains>=3) caveIns+=1;
+  for(const a of ants) stepAnt(a,act); stepBrood(act); stepHunger(act); }
+ function corpse(){ const x=clampX(ex+(Math.random()<0.5?-1:1)*(4+Math.floor(Math.random()*6))); let y=surface[x]-1; while(y>FY0&&isSolid(x,y)) y--; midden.push({x,y}); if(midden.length>60) midden.shift(); }
+ function stepHunger(act){ if(foodStore===0){ starve+=act/1440; } else if(foodStore>=2){ starve=Math.max(0,starve-3/1440); }
+  if(!dieIn.checked) return;
+  if(starve>2 && brood.some(b=>b.stage<2)){ broodEatT+=act; if(broodEatT>=720){ broodEatT=0; const k=brood.findIndex(b=>b.stage<2); brood.splice(k,1); starve=Math.max(2.01,starve-0.5); msg='THE WORKERS ATE AN EGG'; msgT=2; } }
+  if(starve>6 && ants.length>0){ workerDieT+=act; if(workerDieT>=1440){ workerDieT=0; const a=ants.shift(); if(a&&a.target>=0) claimed[a.target]=0; corpse(); msg='A WORKER DIED'; msgT=2; } }
+  if(starve>12 && queenAlive){ queenAlive=false; corpse(); msg='THE QUEEN DIED \u00b7 DAY '+(Math.floor(farmMin/1440)+1); msgT=5; }
+  if(!queenAlive && ants.length===0 && !gone){ gone=true; } }
+ function countTunnel(){ let n=0; for(let i=0;i<N;i++) if(cell[i]===2) n++; return n; }
+ function fmt(){ const d=Math.floor(farmMin/1440)+1; const m=Math.floor(farmMin%1440); const hh=Math.floor(m/60), mm=m%60; return {d,clock:(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm,hour:hh+mm/60}; }
+ function draw(){ const f=fmt(); const w=weatherSel.value; const m=(f.hour>=21||f.hour<5)?'night':(f.hour<7||f.hour>=19)?'dusk':(f.hour<9||f.hour>=17)?'golden':'day'; const reg=REGIONS[regionSel.value];
+  ctx.fillStyle=PAL.grassA; ctx.fillRect(0,0,W,H); ctx.fillStyle=PAL.grassB; ctx.fillRect(0,0,W,2); ctx.fillRect(0,0,2,H);
+  skyBands(ctx,FX0*2,FY0*2,(FX1-FX0+1)*2,SURF*2+10,w==='cold'&&m==='day'?'golden':m);
+  if(m==='night'){ ctx.fillStyle=PAL.chalk; for(let k=0;k<30;k++){ const sx=FX0*2+((k*53)%((FX1-FX0)*2)), sy=FY0*2+((k*37)%50); if(Math.sin(t*1.5+k)>-0.5) ctx.fillRect(sx,sy,1,1);} }
+  for(let y=FY0;y<=FY1;y++) for(let x=FX0;x<=FX1;x++){ const i=idx(x,y); const tt=cell[i]; if(tt===0) continue; let col; if(tt===1){ col=reg.sand[strat[i]]; if(wet>0.3 && y<surface[x]+4) col=PAL.dirtD; if(loose[i]>0 && ((x+y)&1)) col=reg.sand[(strat[i]+1)%4]; } else if(tt===2) col=PAL.wall; else col=PAL.score; ctx.fillStyle=col; ctx.fillRect(x*2,y*2,2,2); }
+  if(w==='rain'){ ctx.fillStyle=PAL.chalk; for(let k=0;k<40;k++){ const sx=FX0*2+((k*41+((t*90)|0))%((FX1-FX0)*2)); const sy=FY0*2+((k*29+((t*160)|0))%(SURF*2-FY0*2)); if(sy<surface[(sx/2)|0]*2) ctx.fillRect(sx,sy,1,3); } }
+  for(const b of brood){ if(cell[idx(b.x,b.y)]!==2) continue; if(b.stage===0){ ctx.fillStyle=PAL.chalk; ctx.fillRect(b.x*2,b.y*2+1,1,1); } else if(b.stage===1){ ctx.fillStyle=PAL.skin; ctx.fillRect(b.x*2,b.y*2+1,2,1); } else { ctx.fillStyle=PAL.bat; ctx.fillRect(b.x*2,b.y*2,2,2); } }
+  for(const m of midden){ ctx.fillStyle=reg.ant; ctx.fillRect(m.x*2,m.y*2+1,2,1); ctx.fillRect(m.x*2+1,m.y*2,1,1); }
+  if(queenAlive){ const qx=queen.x*2, qy=queen.y*2+(Math.sin(t*2)>0.9?1:0); ctx.fillStyle=PAL.dirtD; ctx.fillRect(qx,qy,4,2); ctx.fillStyle=PAL.cap; ctx.fillRect(qx+4,qy,2,2); ctx.fillStyle=PAL.ink; ctx.fillRect(qx+1,qy+2,1,1); ctx.fillRect(qx+3,qy+2,1,1); }
+  for(const a of ants){ if(a.buried>0) continue; ctx.fillStyle=reg.ant; ctx.fillRect(a.x*2,a.y*2,2,2); const hx=a.x*2+(a.dir>0?2:-2); ctx.fillRect(hx,a.y*2,2,1); if(a.carry>0){ ctx.fillStyle=a.carry===9?PAL.score:reg.sand[(a.carry-1)&3]; ctx.fillRect(hx,a.y*2-1,2,1); } }
+  ctx.fillStyle=PAL.chalk; ctx.fillRect(FX0*2,FY0*2,1,(FY1-FY0)*2); ctx.fillRect(FX0*2,FY0*2,(FX1-FX0)*2,1);
+  ctx.fillStyle=PAL.ink; ctx.fillRect(0,0,W,10); txt(ctx,'DAY '+f.d+' · '+f.clock+' · '+ants.length+' WORKERS · '+brood.length+' BROOD',3,1,PAL.chalk); txt(ctx,tempC()+'°C · '+w.toUpperCase(),W-3,1,w==='cold'?PAL.sky3:PAL.score,8,'right');
+  ctx.fillStyle=PAL.ink; ctx.fillRect(0,H-10,W,10); { const hd=starve>=0.5?(' · '+(starve>12?'NO QUEEN':starve>6?'STARVING '+Math.floor(starve)+' D':'HUNGRY '+Math.floor(starve)+' D')):(foodStore===0?' · HUNGRY':''); txt(ctx,'FOOD '+foodStore+' · GRAINS '+grains+' · CAVE-INS '+caveIns+hd,3,H-9,starve>=0.5||foodStore===0?PAL.cap:PAL.chalk); } { const d=Math.round(gravA*180/Math.PI-90); const tip=d===0?'':('TIPPED '+(d<0?'RIGHT ':'LEFT ')+Math.abs(d)+'° · '); txt(ctx,tip+'×'+Math.round(+speedSel.value*60),W-3,H-9,tip?PAL.cap:PAL.score,8,'right'); }
+  if(gone){ const g='THE COLONY IS GONE · DAY '+(Math.floor(farmMin/1440)+1)+' · SEED '+seedIn.value; const wdt=Math.min(W-8,g.length*9+8); ctx.fillStyle=PAL.ink; ctx.fillRect(Math.round(W/2-wdt/2),40,wdt,16); txt(ctx,g,W/2,43,PAL.cap,10,'center'); }
+  if(msgT>0 && msg){ const wdt=Math.min(W-8,msg.length*9+8); ctx.fillStyle=PAL.ink; ctx.fillRect(Math.round(W/2-wdt/2),20,wdt,16); txt(ctx,msg,W/2,23,PAL.score,10,'center'); }
+  statOut.textContent='day '+f.d+', '+ants.length+' workers, '+brood.length+' brood, '+grains+' grains moved, '+caveIns+' cave-ins'; }
+ function frame(){ const now=performance.now(); let dt=(now-last)/1000; last=now; if(dt>0.1) dt=0.1; t+=dt; if(msgT>0) msgT-=dt; stepAcc+=(+speedSel.value)*dt; let steps=0; while(stepAcc>=1 && steps<40){ stepAcc-=1; simStep(); steps++; } if(stepAcc>40) stepAcc=0; draw(); requestAnimationFrame(frame); }
+ newBtn.addEventListener('click',()=>{ newFarm(); msg='NEW FARM · SEED '+seedIn.value; msgT=2; });
+ feedBtn.addEventListener('click',()=>{ feed(); });
+ shakeBtn.addEventListener('click',()=>{ shakeLevel=6; msg='YOU SHOOK IT'; msgT=2; });
+ awayBtn.addEventListener('click',()=>{ const w0=ants.length, g0=grains, c0=caveIns, e0=emerged; const t0=performance.now(); for(let k=0;k<480;k++) simStep(); msg='AWAY 8 H · +'+(ants.length-w0)+' WORKERS · '+(grains-g0)+' GRAINS · '+(caveIns-c0)+' CAVE-INS'; msgT=4; note.textContent='Eight farm hours computed in '+Math.round(performance.now()-t0)+' ms. In the app this is what happens every time you open it: the elapsed time is simulated from the seed and the weather log, so the farm never needs to run in the background.'; });
+ gravIn.addEventListener('input',()=>{ if(motionOn) return; gravA=(+gravIn.value)*Math.PI/180; gravOut.textContent=gravIn.value+'°'; });
+ motionBtn.addEventListener('click',async()=>{ if(motionOn){ motionZero=null; note.textContent='Re-zeroed: the way you are holding it now is upright.'; return; } try{ if(typeof DeviceMotionEvent==='undefined'){ note.textContent='No motion sensors here; the gravity slider and Shake still work.'; return; } if(typeof DeviceMotionEvent.requestPermission==='function'){ const p=await DeviceMotionEvent.requestPermission(); if(p!=='granted'){ note.textContent='Motion permission was not granted; the slider and Shake still work.'; return; } } window.addEventListener('devicemotion',ev=>{ const g=ev.accelerationIncludingGravity; if(!g||g.x==null) return; const ang=Math.atan2(g.y,g.x); if(motionZero===null) motionZero=ang; let d=ang-motionZero; d=Math.atan2(Math.sin(d),Math.cos(d)); gravA=Math.PI/2-d; gravIn.value=String(Math.round(gravA*180/Math.PI)); gravOut.textContent=gravIn.value+'°'; const a=ev.acceleration; if(a&&a.x!=null){ const m=Math.hypot(a.x,a.y,a.z); if(m>4) shakeLevel=Math.max(shakeLevel,m/3); } }); motionOn=true; motionBtn.textContent='Re-zero upright'; note.textContent='Gravity follows the phone. Hold it upright, then tip it: the loose sand runs to the low side; turn it on its side and the farm pours. A sharp shake fluidises the grains near the tunnels. Lock rotation first. If the sand runs the wrong way on your device, tap again to re-zero while holding it upright.'; }catch(err){ note.textContent='Motion is blocked in this viewer; the gravity slider and Shake still work.'; } });
+ queenBtn.addEventListener('click',()=>{ if(queenAlive){ msg='SHE IS FINE'; msgT=2; return; } queenAlive=true; gone=false; starve=0; foodStore=Math.max(foodStore,2); brood.length=0; for(let k=0;k<4;k++){ const cp=foundCells[k%foundCells.length]; ants.push({x:cp[0],y:cp[1],state:'idle',carry:0,path:[],move:0,timer:0,target:-1,dir:1,wait:0,buried:0,st:0}); } msg='A NEW QUEEN \u00b7 THE OLD TUNNELS STAND'; msgT=3; });
+ seedIn.addEventListener('keydown',e=>{ if(e.key==='Enter') newBtn.click(); });
+ regionSel.addEventListener('change',()=>{ newFarm(); });
+ newFarm(); requestAnimationFrame(frame);
+})();
+
+})();
+</script>
+</body>
+</html>
