@@ -1,13 +1,13 @@
 # App icon candidates
 
-Five icons, one palette line. Each is drawn as 64×64 pixel art and scaled ×16 to the App Store's
+Eight icons, one palette line. Each is drawn as 64×64 pixel art and scaled ×16 to the App Store's
 1024, nearest-neighbour, so the pixel grid survives all the way to the home screen. Regenerate with:
 
 ```sh
 python3 scripts/icons.py
 ```
 
-Pick one with `scripts/pick-icon.sh 01` (or `02`…`05`); it copies that candidate into
+Pick one with `scripts/pick-icon.sh 01` (or `02`…`08`); it copies that candidate into
 `App/Assets.xcassets/AppIcon.appiconset/`. **01 CONTACT ships today.**
 
 ![contact sheet](contact-sheet.png)
@@ -65,6 +65,32 @@ as *baseball* a half-second later than the others do.
 **05 NIGHT GAME** — the outfield scoreboard read, yellow on wall green, under the light towers.
 The most nostalgic of the five and the one that most looks like a 1994 cartridge. Its `HR` is the
 5×7 face the game uses for the landing number, unchanged.
+
+## The wall family (03, 06, 07, 08)
+
+Four framings of the one objective: get it over the wall. They share a grammar — a `score`-yellow
+home-run line along the top of the fence, a chalk trail that crosses it, and a ball that is already
+past. Each answers the question at a different distance.
+
+**03 OVER THE WALL** — the establishing shot. Fence at the right, the arc coming up to meet it,
+the ball just clear. Reads as *home run* fastest of the four and keeps the most field in frame.
+
+**06 THE CLEARING** — the photo finish. The wall takes more than half the icon, seen from close
+enough that the panel joins show, and the ball sits a few feet over the yellow line with the trail
+still crossing it. The most dramatic, and the one that most looks like a *moment* rather than a
+diagram. Its ball is the biggest of the four, which is what carries it at 60 px.
+
+**07 LONG GONE** — pulled all the way back, so the answer is *how far*. The flight gets the whole
+frame and is still climbing when it leaves it; the fence is small and far, and the out-of-town
+board from park variety (#5) stands behind it on the stands — something for the ball to be past.
+The only one of the four where the arc, not the wall, is the subject. The board reads a little like
+a television on legs at 60 px; that is the honest cost of keeping it in.
+
+**08 THE TARGET** — the objective painted on the thing itself. `400` in the game's 5×7 face, white
+on wall green like every outfield marker since the 1930s, with the ball crossing the yellow line
+above it. This is the only icon of the eight that states a *goal* rather than showing an event,
+and the number survives 60 px intact, which nothing else in the set manages. Strongest of the
+four if the icon has to explain the game to someone who has never opened it.
 
 ## Notes
 

@@ -177,6 +177,18 @@ def grass(p, y):
         p.rect(0, j, GRID, 2, "grassB")
 
 
+def trail(p, x0, y0, run, rise, sag, n):
+    """The every-fourth-frame trail along a parabola, as discrete dots.
+
+    `rise` is how far it climbs over the run and `sag` bends it; the dots are
+    spaced far enough apart that they stay dots — a trail whose discs touch
+    reads as a smear, which is a different game's art.
+    """
+    for i in range(n):
+        t = i / (n - 1)
+        p.disc(int(x0 + t * run), int(y0 - (rise * t - sag * t * t)), 2 if i < n - 2 else 1, "chalk")
+
+
 def baseball(p, cx, cy, r, seam="cap"):
     """A chalk disc with the two classic seams. No shading — chalk has one job.
 
@@ -326,12 +338,77 @@ def icon_night_scoreboard():
     return p
 
 
+def icon_the_clearing():
+    """06 OVER THE WALL, CLOSE — the photo finish: the ball a foot above the rail.
+
+    The yellow line along the top of an outfield wall is the home-run line, and a
+    ball drawn above it needs no further explanation. So the wall takes most of
+    the frame and the ball is as big as the sky above it allows.
+    """
+    p = Pix(GRID, GRID)
+    sky(p, bottom=27)
+    p.rect(0, 30, GRID, GRID - 30, "wall")                    # the wall, most of the icon
+    p.rect(0, 30, GRID, 3, "score")                           # the home-run line
+    p.rect(0, 33, GRID, 1, "shade")
+    for jx in (16, 34, 52):                                   # panel joins, for scale
+        p.rect(jx, 34, 2, GRID - 34, "shade")
+    grass(p, 60)                                              # the warning track side, to ground it
+    trail(p, 4, 46, 18, 22, 4, 6)                             # in over the wall
+    baseball(p, 39, 16, 11)
+    return p
+
+
+def icon_long_gone():
+    """07 OVER THE WALL, LONG — the same event from far enough back to see how far.
+
+    The side view is the arc, and the arc is the information (mood board, §6). This
+    one gives the flight the whole frame and puts the out-of-town board behind the
+    fence so there is something for the ball to be past.
+    """
+    p = Pix(GRID, GRID)
+    sky(p, bottom=52)
+    grass(p, 52)
+    p.rect(38, 42, GRID - 38, 10, "wall")                     # the fence, small and far
+    p.rect(38, 42, GRID - 38, 1, "score")                     # its home-run line
+    p.rect(38, 43, 1, 9, "ink")
+    p.rect(42, 28, 17, 10, "ink")                             # the out-of-town board (#5)
+    p.rect(54, 29, 4, 3, "score")                             # its lit pane
+    p.rect(45, 38, 2, 4, "ink")                               # its legs, standing on the stands
+    p.rect(54, 38, 2, 4, "ink")
+    trail(p, 5, 55, 42, 64, 24, 10)                           # the whole flight, still climbing
+    baseball(p, 52, 13, 8)
+    return p
+
+
+def icon_the_target():
+    """08 OVER THE WALL, MARKED — the objective painted on it, 400 feet away.
+
+    The number on an outfield wall is the oldest way baseball states a distance,
+    and it turns the icon from a picture of an event into a picture of a goal.
+    Painted white, like a field marking; the rail stays scoreboard yellow.
+    """
+    p = Pix(GRID, GRID)
+    sky(p, bottom=32)
+    p.rect(0, 32, GRID, 24, "wall")                           # the wall
+    p.rect(0, 32, GRID, 3, "score")                           # the home-run line
+    p.rect(0, 35, GRID, 1, "shade")
+    grass(p, 56)
+    w = text5_width("400", 2)
+    text5(p, (GRID - w) // 2, 41, "400", "chalk", 2)          # the distance marker
+    trail(p, 3, 45, 29, 26, 4, 7)                             # up across the line and out
+    baseball(p, 44, 15, 9)
+    return p
+
+
 CANDIDATES = [
     ("01-contact", "CONTACT", icon_contact),
     ("02-the-ball", "THE BALL", icon_ball),
     ("03-over-the-wall", "OVER THE WALL", icon_over_the_wall),
     ("04-the-slash", "THE SLASH", icon_slash),
     ("05-night-game", "NIGHT GAME", icon_night_scoreboard),
+    ("06-the-clearing", "THE CLEARING", icon_the_clearing),
+    ("07-long-gone", "LONG GONE", icon_long_gone),
+    ("08-the-target", "THE TARGET", icon_the_target),
 ]
 
 
