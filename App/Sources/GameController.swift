@@ -228,6 +228,16 @@ final class GameController {
     private func finishWarmUp(_ result: WarmUpResult) {
         lastWarmUp = SavedWarmUp(day: result.day, pitches: result.pitches, done: true)
         persist()
+        #if DEBUG
+        // `-showstats` alongside a Warm Up goes to the board rather than the card: a robot has
+        // no finger to leave the card with, and the board is where the day's row and its
+        // counted stats can be seen together.
+        if Self.showStatsForScreenshots {
+            Self.showStatsForScreenshots = false
+            showStats()
+            return
+        }
+        #endif
         showWarmUpCard()
     }
 

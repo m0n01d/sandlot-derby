@@ -37,7 +37,9 @@ final class StatsScene: CanvasScene {
 
         let left = safeLeft + 8, right = width - safeRight - 8
         canvas.t3(left, 8, "CAREER", Palette.score, scale: 2)
-        let park = controller.machine.park.displayName
+        // The career's park, not the day's: this board is headed CAREER, and a Warm Up only
+        // ever borrows the field (DESIGN.md §18).
+        let park = controller.machine.careerPark.displayName
         canvas.t3(right - Double(park.count) * 8, 8, park, Palette.chalk, scale: 2)
 
         let columns = max(2, Int((right - left) / 130))

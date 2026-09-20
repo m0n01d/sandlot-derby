@@ -198,7 +198,9 @@ final class WideScene: CanvasScene {
                                  machine: machine, view: view, scenery: scenery)
         }
 
-        let parkName = machine.park.displayName
+        // The same word the outfield scoreboard carries: during a Warm Up this is the day's
+        // park, not a park anyone is trying to clear, and its number is a date (DESIGN.md §18).
+        let parkName = machine.warmUp == nil ? machine.park.displayName : "WARM UP"
         canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
     }
 

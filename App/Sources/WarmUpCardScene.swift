@@ -7,28 +7,30 @@ import DerbyCore
 struct WarmUpCardLayout {
     /// The panel the card is printed on, centred horizontally.
     var panelWidth = 264.0
-    var panelTop = 20.0
-    var panelHeight = 168.0
+    var panelTop = 24.0
+    /// Sized to the five lines it holds, so the card is a scoreboard and not a mostly-empty
+    /// board with writing at the top.
+    var panelHeight = 136.0
     /// The chalk rule drawn just inside the panel.
     var panelInset = 3.0
 
     /// `WARM UP 173`, the day's own number, as big as the scoreboard's heading.
-    var titleY = 30.0
+    var titleY = 34.0
     var titleScale = 3
 
     /// The ten cells, one per pitch, in a row.
-    var cellsY = 56.0
+    var cellsY = 60.0
     var cellWidth = 18.0
     var cellHeight = 16.0
     var cellGap = 3.0
 
     /// The day's feet, the one number the card is really about, in the 5×7 face.
-    var feetY = 84.0
+    var feetY = 88.0
     var feetScale = 3
     /// Home runs, and then the day's longest under it.
-    var homeRunsY = 118.0
+    var homeRunsY = 122.0
     var homeRunsScale = 2
-    var longestY = 136.0
+    var longestY = 140.0
     var longestScale = 1
 
     /// `SHARE`, out of the way in the bottom corner, at label size — where `RESTORE` sits on the
