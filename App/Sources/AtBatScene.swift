@@ -53,6 +53,15 @@ final class AtBatScene: CanvasScene {
 
     private var xOffset: Double { (Double(size.width) - 320) / 2 }
 
+    /// The foul lines, in the 320-wide design column (DESIGN.md §8): from the plate out to
+    /// where each meets the base of the wall. The foul poles (#28) stand on top of the wall at
+    /// the same two x's, so both read off these and can never drift apart.
+    private let foulLineApexX = 160.0
+    private let foulLineApexY = 196.0
+    private let foulLineLeftX = 40.0
+    private let foulLineRightX = 280.0
+    private let foulLineWallY = 104.0
+
     private let layout = BackdropLayout.standard
     /// The horizon above the wall, drawn once per park and canvas and copied after that
     /// (DESIGN.md §17). Only the clouds are redrawn per frame.
@@ -99,16 +108,37 @@ final class AtBatScene: CanvasScene {
         // The sky and the horizon (DESIGN.md §17). Both sit above y = 96; the strike zone
         // starts at y = 136, so nothing new here moves anywhere near it.
         let scenery = self.scenery(for: machine.park)
+        let now = SceneryClock.now(machine)
+        let towers = SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
+                                             chasing: machine.crowdIsUp, layout: layout)
+        if machine.park.isNight {
+            SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
+                            time: now, width: fullWidth, layout: layout)
+        }
         Clouds.draw(into: canvas, clouds: scenery.atBatClouds,
                     breeze: scenery.breezePixelsPerSecond,
-                    seconds: machine.tally[.secondsPlayed],
+                    seconds: now,
                     width: fullWidth, night: machine.park.isNight)
+        SkyArt.birds(into: canvas, scenery: scenery, view: .atBat, time: now,
+                     width: fullWidth, night: machine.park.isNight)
         backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat),
             height: canvas.height) { b, _ in
             BackdropArt.atBatHorizon(into: b.canvas, park: machine.park, scenery: scenery,
                                      width: fullWidth, xOffset: xOff, layout: self.layout)
+            // The foul poles stand in front of the horizon pieces and behind everything on the
+            // field (#28). Off the same two x's the foul lines are drawn from, so they stay
+            // married however wide the canvas is.
+            BackdropArt.atBatFoulPoles(into: b.canvas, league: machine.park.league,
+                                       xs: [xOff + self.foulLineLeftX, xOff + self.foulLineRightX],
+                                       layout: self.layout)
         }.behind.blit(onto: canvas)
+
+        // The towers flank the scoreboard, standing on the wall band, which is drawn next and
+        // covers their feet.
+        // `ink` here: this pole stands wholly in the `#446688` horizon band, where it reads.
+        SkyArt.towers(into: canvas, frames: towers, width: fullWidth,
+                      poleColour: Palette.ink, layout: layout)
 
         canvas.rect(0, 96, fullWidth, 8, Palette.wall)
         canvas.rect(0, 96, fullWidth, 1, Palette.chalk)
@@ -124,8 +154,12 @@ final class AtBatScene: CanvasScene {
         // (DESIGN.md §18). Same board, same place, one word swapped.
         canvas.t3(wx(134), 91, machine.warmUp == nil ? machine.park.displayName : "WARM UP", Palette.chalk)
 
-        canvas.line(wx(160), 196, wx(40), 104, Palette.chalk)
-        canvas.line(wx(160), 196, wx(280), 104, Palette.chalk)
+        // The two little flags on the scoreboard, fluttering in two frames (§17, step 5).
+        BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
+                                    frame: SkyLife.flutterFrame(at: now), layout: layout)
+
+        canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineLeftX), foulLineWallY, Palette.chalk)
+        canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineRightX), foulLineWallY, Palette.chalk)
         canvas.rect(wx(148), 116, 24, 5, Palette.dirt)
         canvas.rect(wx(150), 121, 20, 2, Palette.dirtD)
         canvas.rect(wx(120), 184, 80, 14, Palette.dirt)

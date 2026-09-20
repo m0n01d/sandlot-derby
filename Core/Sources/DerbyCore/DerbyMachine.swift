@@ -369,6 +369,24 @@ public struct DerbyMachine: Equatable {
         return playbackIndex >= Double(cut) ? .close : .wide
     }
 
+    /// True while the crowd is on its feet: from the instant the ball clears the wall to the cut
+    /// back to the plate. It opens on the `.clearedWall` cue — the cheer's own — and closes when
+    /// `.result` ends, which is the same window `fireworks` lives in and the same one DESIGN.md
+    /// §17 means by "for as long as the cheer plays". The stands' bounce and the night lights'
+    /// chase both read it, so neither is a timer in a scene.
+    ///
+    /// Not `fireworks != nil`: a streak under three earns no shells at all, and the crowd is up
+    /// for every home run there is (§17's table — streak 1 is "the cheer, the crowd bounce, the
+    /// lights chase at night").
+    public var crowdIsUp: Bool {
+        guard let f = flight, f.homeRun else { return false }
+        switch beat {
+        case .result: return true
+        case .flight: return wallCueIndex.map { playbackIndex >= Double($0) } ?? false
+        default: return false
+        }
+    }
+
     public var playbackPoint: FlightPoint? {
         guard let f = flight, !f.points.isEmpty else { return nil }
         let i = min(f.points.count - 1, Int(playbackIndex))

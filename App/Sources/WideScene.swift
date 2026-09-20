@@ -104,14 +104,35 @@ final class WideScene: CanvasScene {
         canvas.dither(0, 66, fullWidth, 8, scheme.sky1, scheme.sky2)
         canvas.dither(0, 126, fullWidth, 8, scheme.sky2, scheme.sky3)
 
+        // §17's draw order, from the back: sky → stars / moon → light halos → clouds →
+        // fireworks → birds → towers → field and wall face → trail and ball → stands and
+        // crowd → text. Everything that moves reads one clock, the machine's own.
+        let now = SceneryClock.now(machine)
+        let towers = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                            scale: view.scale, originX: view.originX,
+                                            ground: ground, time: now,
+                                            chasing: machine.crowdIsUp, layout: layout)
+        if machine.park.isNight {
+            SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
+                            time: now, width: fullWidth, layout: layout)
+        }
+
         Clouds.draw(into: canvas, clouds: scenery.sideClouds,
                     breeze: scenery.breezePixelsPerSecond,
-                    seconds: machine.tally[.secondsPlayed],
+                    seconds: now,
                     width: fullWidth, night: machine.park.isNight)
 
         drawFireworks(canvas, machine, fullWidth: fullWidth)
 
+        SkyArt.birds(into: canvas, scenery: scenery, view: .side, time: now,
+                     width: fullWidth, night: machine.park.isNight)
+
         behind.blit(onto: canvas, dy: backdropDY)
+
+        // The towers stand behind the stands, so their feet are covered when the stands go in.
+        // Lighter than the sky, not `ink`: this pole climbs through `night` and `ink`.
+        SkyArt.towers(into: canvas, frames: towers, width: fullWidth,
+                      poleColour: Palette.nightSky3, layout: layout)
 
         // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
         canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
@@ -220,6 +241,20 @@ final class WideScene: CanvasScene {
                                       machine: DerbyMachine, view: Framing, scenery: Scenery) {
         front.blit(onto: canvas, dy: dy)
 
+        // The crowd and the flags are the parts of the stands that move, so they are not in the
+        // cached layer: the crowd bounces while the cheer plays (`DerbyMachine.crowdIsUp`) and
+        // the flags flutter whatever the beat, because it is the wind that moves them.
+        let now = SceneryClock.now(machine)
+        let fullWidth = Double(canvas.width)
+        BackdropArt.crowd(into: canvas, park: machine.park, scenery: scenery,
+                          scale: view.scale, originX: view.originX, width: fullWidth,
+                          ground: view.ground, time: now, cheering: machine.crowdIsUp,
+                          layout: layout)
+        BackdropArt.standsFlags(into: canvas, park: machine.park, scenery: scenery,
+                                scale: view.scale, originX: view.originX, width: fullWidth,
+                                ground: view.ground, frame: SkyLife.flutterFrame(at: now),
+                                layout: layout)
+
         if let entry = vanishPoint(machine, scenery: scenery),
            machine.playbackIndex >= Double(entry.index) {
             // Seconds since it went in, off the machine's own clocks. Playback stops dead at
@@ -247,7 +282,12 @@ final class WideScene: CanvasScene {
         let wallH = machine.park.wallHeightFeet * view.scale
         // On the wall when it is tall enough to carry a 5 px face, above it when it is not.
         let wallLabelY = wallH >= 11 ? view.ground - wallH + 3 : view.ground - wallH - 8
-        canvas.t3(wallX + 6, wallLabelY, "\(Int(machine.park.wallDistanceFeet))", Palette.score)
+        // On an `ink` plate, which is what `ink` is for (docs/palette.md: "label backgrounds").
+        // In the close camera the wall fills so much of the frame that `score` on `wall` was
+        // hard to read, and against the crowd above it, worse (review nit, 2026-09-19).
+        let label = "\(Int(machine.park.wallDistanceFeet))"
+        canvas.rect(wallX + 5, wallLabelY - 1, Double(label.count) * 4 + 1, 7, Palette.ink)
+        canvas.t3(wallX + 6, wallLabelY, label, Palette.score)
     }
 
     /// The first point of the flight that is inside the stands: where the ball is swallowed.
