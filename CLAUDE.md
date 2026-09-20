@@ -106,4 +106,6 @@ wiring (a local `.storekit` file) are all in; the purchase/pending/refund/restor
 been exercised for real, since a `.storekit` configuration only works launched from Xcode. Next:
 building the Warm Up itself (#3), §17 steps 4–6 of #14 (stars, moon and tower chase, birds, flag
 flutter, crowd bounce), park variety (#5), and the replay clip (#4). `docs/watch.md` is a proposal
-for an Apple Watch version and waits on hardware.
+for an Apple Watch version and waits on hardware; `docs/ports.md` surveys everything else
+(SDL3 → Steam Deck/Windows/Linux, Android, web, consoles) and waits on M5. Both start with
+the same first step: lifting the blit and tick out of `CanvasScene` behind a host protocol.
