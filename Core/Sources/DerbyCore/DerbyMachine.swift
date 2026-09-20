@@ -197,6 +197,9 @@ public enum Transition: Equatable {
     case hitWall
     /// First touch of the ground.
     case landed
+    /// Two called strikes taken in a row (there is no third in this game, so no called-out
+    /// version). Fires once, on the second; a longer streak doesn't repeat it. #17.
+    case calledStrikesInARow
 }
 
 /// Pure game state. Scenes call `tick`, `slice`, `sliceMissed`, and draw from the properties.
@@ -212,6 +215,9 @@ public struct DerbyMachine: Equatable {
     public private(set) var playbackIndex: Double = 0
     public private(set) var tally = Tally()
     public private(set) var lastCall: Call? = nil
+    /// Called strikes taken back to back, reset by any swing or a taken ball. #17: two in a row
+    /// is *Three Blind Mice*'s cue (there is no third strike here).
+    public private(set) var calledStrikesInARow = 0
     public var timings: Timings
     /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
     public var majorsSliceRules: SliceRules
@@ -236,6 +242,9 @@ public struct DerbyMachine: Equatable {
     public var pitchingRules: PitchingRules { ladder.pitchingRules(majorsPitchingRules, for: park.league) }
     /// The help this park gives, nil from The Show on.
     public var rung: Rung? { ladder.rung(for: park.league) }
+    /// Whether this park has a ballpark organ (#17). The Show always does; a rung follows its
+    /// own `organ` flag — a sandlot has no organist. Claude's call, unreviewed (DESIGN.md §11).
+    public var hasOrgan: Bool { rung?.organ ?? true }
 
     /// `park` and `tally` are what a save restores; everything else starts fresh.
     public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
@@ -327,6 +336,7 @@ public struct DerbyMachine: Equatable {
     /// Called by the scene when `Contact.test` returned `.contact` during `.pitch`.
     public mutating func slice(_ crossing: SliceCrossing) {
         guard beat == .pitch else { return }
+        calledStrikesInARow = 0
         let l = Contact.resolve(crossing, pitch: pitch, rules: sliceRules)
         let f = Flight.simulate(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees,
                                 wallDistanceFeet: park.wallDistanceFeet, wallHeightFeet: park.wallHeightFeet)
@@ -348,6 +358,7 @@ public struct DerbyMachine: Equatable {
     /// Called when the finger lifts during `.pitch` without a contact.
     public mutating func sliceMissed() {
         guard beat == .pitch else { return }
+        calledStrikesInARow = 0
         countPitch()
         tally.add(.swings)
         tally.add(.whiffs)
@@ -440,9 +451,12 @@ public struct DerbyMachine: Equatable {
                     if pitch.isStrike {
                         tally.add(.calledStrikes)
                         endStreaks()
+                        calledStrikesInARow += 1
+                        if calledStrikesInARow == 2 { out.append(.calledStrikesInARow) }
                     } else {
                         tally.add(.ballsTaken)
                         if !statRules.takenBallKeepsStreak { endStreaks() }
+                        calledStrikesInARow = 0
                     }
                     let call: Call = pitch.isStrike ? .strike : .ball
                     lastCall = call

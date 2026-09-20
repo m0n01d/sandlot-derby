@@ -272,25 +272,47 @@ The batter is a stamp, not scaled art, and is off screen here.
 First pass built 2026-09-19 at Dwight's request ("simple beeps and boops will work for now… a
 crack of the bat, an ump grunting, and crowds cheering"). **No audio files.** Every sound is
 arithmetic in `Synth` (noise, oscillators, biquads: the spirit of an FM chip and a noise channel),
-rendered to buffers at launch and fired by `SoundBoard`. Placeholders by design; replace them one
-at a time.
+fired by `SoundBoard`. Placeholders by design; replace them one at a time. Most buffers render at
+launch; the three longest ones (the tunes below) render off the main thread the first time they
+are needed instead, so opening the app never pays for a tune nobody has reached yet.
 
 | Moment | Cue from Core | Sound | Haptic |
 |---|---|---|---|
 | Bat on ball | `slice` | crack, 9 steps by exit velo: a weak one is a low *tock*, a barrel is bright with the stands' slap coming back | `.rigid`, harder the better it is hit |
 | Swing and miss | `sliceMissed` | a whiff of air | — |
 | Taken strike / ball | `.called` | the ump: a two-beat bark for a strike, one low short grunt for a ball | — |
+| Two called strikes in a row | `.calledStrikesInARow` | the organ plays *Three Blind Mice*'s opening call (there is no third strike in this game) | — |
 | Clears the wall | `.clearedWall` | crowd cheer, 5 sizes by how far past the wall it lands; whistles in the big ones | `.success` |
 | Off the wall | `.hitWall` | wall thump, the crowd's *ohh*, then the sad trombone: *womp, wommmp* | `.heavy` |
 | Two straight home runs | — | the organ runs up the scale over the landing number and the crowd answers *CHARGE!*: one more starts the fireworks (§17). The pitch cuts the organ off mid-note if it is still playing, and then nobody answers | — |
 | Lands in the park | `.landed` | ground thud (a home run lands out of earshot) | — |
-| A streak of 3+ ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
+| A streak of 3–4 ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
+| A streak of 5+ ends | — | the organ plays the opening of Chopin's *Marche funèbre* instead, same lead-in. Doesn't replace the streak of 3–4 above | — |
+| Stats board open | `showStats`/`hideStats` | the organ plays *Take Me Out to the Ball Game* (first two lines), starting a beat after the board opens, looping once if still up, stopping dead the moment it closes | — |
 | Called up | `.calledUp` | a major arpeggio, up | — |
 
 **The organ** (#17) is a synthesized drawbar organ with its own player node. It lives in the gaps
 and **stops dead when the pitch is thrown**, as a real organist does when the pitcher comes set.
 The rally prompt is a run up the major scale, deliberately **not** the famous six-note "Charge!"
 fanfare, which was written in 1946 and is still under copyright; license it or leave it.
+
+**The rest of the organ** (#17, 2026-09-19, Claude's, unreviewed — nobody has heard any of this
+against the real songs yet): three more tunes through the same voice, all public domain on
+purpose — *Three Blind Mice* (trad., 1609), the opening of Chopin's *Marche funèbre* (1837, from
+his Piano Sonata No. 2), and the first two lines of *Take Me Out to the Ball Game*
+(Norworth/Von Tilzer, 1908), none of them transcribed from a score, so treat the exact notes as a
+best effort pending a listen. The Chopin is tempo'd differently from the other two on purpose: its
+real tempo is a slow Lento, so rather than compress the whole phrase to fit (which would lose the
+dotted "dum, dum-da-dum" that makes it recognisable), only its first bar is paced to clear the
+tightest gap before the next windup (~1.6 s); the turn that follows is left at its natural speed
+and is **not** guaranteed to finish — `.pitchThrown` is free to cut it off dead mid-phrase, exactly
+as it already does to the charge prompt. That's the organ's normal behaviour here, not a bug. Also
+undecided by the issue, so Claude's call: **Single-A has no organist.** `Rung.organ` is `false`
+there and `true` in Double-A and Triple-A; The Show has no rung and always has one.
+`DerbyMachine.hasOrgan` reads it, and every organ cue in the table above — the existing charge
+prompt included — is gated on it. Where Single-A would have played Chopin (a streak of 5+ dying),
+it just gets the ordinary three notes down instead, same as a streak of 3–4; nothing is silent
+there that used to make a sound.
 
 The cues are `Transition`s that fire as playback reaches the moment, so the crowd reacts when the
 ball clears the wall, not when the bat meets it. **Nothing sounds during the pitch: silence is the

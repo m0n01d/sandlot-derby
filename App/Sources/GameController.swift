@@ -33,15 +33,19 @@ final class GameController {
     // MARK: - The stats board
 
     /// Hard cut to the board. The machine stops ticking while it is up (`StatsScene.ticksMachine`).
+    /// *Take Me Out to the Ball Game* starts a beat later, if this park has an organ (#17).
     func showStats() {
         guard let view, view.scene !== statsScene else { return }
         view.presentScene(statsScene)
+        if machine.hasOrgan { sound.startStatsOrgan() }
     }
 
-    /// The board is only ever opened from the at-bat view, so that is where it returns.
+    /// The board is only ever opened from the at-bat view, so that is where it returns. The
+    /// organ, if it was playing, stops dead — same as when the pitch is thrown.
     func hideStats() {
         guard let view, view.scene === statsScene else { return }
         view.presentScene(atBatScene)
+        sound.stopOrgan()
     }
 
     /// Called once, from `GameView.makeUIView`. Presents the initial (at-bat) scene.
@@ -116,6 +120,8 @@ final class GameController {
                 if machine.flight?.homeRun != true { sound.landed() }     // a home run lands out of earshot
             case .calledUp:
                 sound.calledUp()
+            case .calledStrikesInARow:
+                if machine.hasOrgan { sound.threeBlindMice() }   // there is no third strike here (#17)
             case .parkChanged, .flash:
                 break
             }
@@ -125,7 +131,7 @@ final class GameController {
         if machine.beat == .result, beatBefore != .result {
             if machine.flight?.homeRun != true {
                 mournStreak(after: 0.35)
-            } else if machine.tally.homeRunStreak == 2 {
+            } else if machine.tally.homeRunStreak == 2, machine.hasOrgan {
                 sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
             }
         }
@@ -149,11 +155,18 @@ final class GameController {
         return (flight.distanceFeet - machine.park.wallDistanceFeet) / 100
     }
 
-    /// Three notes down, only for a streak worth mourning.
+    /// Three notes down, only for a streak worth mourning. A streak of 5+ gets Chopin instead,
+    /// where there is an organ to play him (#17) — a sandlot just gets the three notes for
+    /// everything 3+, same as before. Claude's call, unreviewed (DESIGN.md §11).
     private func mournStreak(after seconds: Double) {
         guard streakAtThePitch >= 3 else { return }
+        let streak = streakAtThePitch
         streakAtThePitch = 0
-        sound.streakOver(after: seconds)
+        if streak >= 5, machine.hasOrgan {
+            sound.funeralMarch(after: seconds)
+        } else {
+            sound.streakOver(after: seconds)
+        }
     }
 
     // MARK: - Slice input entry points, used by AtBatScene.
