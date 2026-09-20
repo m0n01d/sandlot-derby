@@ -64,6 +64,9 @@ final class GameController {
         machine = DerbyMachine(seed: seed,
                                park: startPark ?? save.map { Park.generate(number: $0.parkNumber) } ?? .first,
                                tally: startingTally)
+        // The sky's clock belongs to the machine (#5): a rare event is judged against the sky in
+        // Core and drawn from it in the scenes, so `-skyclock` has to wind one clock and not two.
+        machine.skyClockOffset = SceneryClock.offset
         #if DEBUG
         contractOffered = Self.startDeclined || (save?.contractOffered ?? false)
         #else

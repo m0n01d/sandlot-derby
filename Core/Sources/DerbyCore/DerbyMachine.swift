@@ -80,6 +80,14 @@ public struct Stat: Hashable {
     public static let moonshots = Stat("moonshots")
     public static let lasers = Stat("lasers")
 
+    // The rare things (#5, DESIGN.md §17 "Rare things"). Never announced and never explained:
+    // they are counted here and shown on the stats board, and nowhere else.
+    public static let birdsHit = Stat("birdsHit")
+    public static let blimpsHit = Stat("blimpsHit")
+    public static let scoreboardDents = Stat("scoreboardDents")
+    public static let windowsBroken = Stat("windowsBroken")
+    public static let lightsOut = Stat("lightsOut")
+
     // Streaks.
     public static let homeRunStreak = Stat("homeRunStreak")
     public static let bestHomeRunStreak = Stat("bestHomeRunStreak")
@@ -240,12 +248,31 @@ public struct DerbyMachine: Equatable {
     /// earned a show at all; nil for every other beat, and nil again the moment `.result` ends
     /// (DESIGN.md §17 "When"). `Fireworks.particles(show:at:)` turns this into drawn points.
     public private(set) var fireworks: FireworksShow? = nil
+    /// Every rare thing this flight does, found once at contact and in playback order (#5).
+    /// Empty for every beat that is not a flight or its result, and empty again at the cut back
+    /// to the plate — the same window `fireworks` lives in.
+    public private(set) var parkEvents: [ParkEvent] = []
+    /// What this park still carries: a dark bank, a dent, a broken pane. It survives the cut to
+    /// the plate and dies with the park, which is what #5 means by "until the park changes".
+    public private(set) var parkScars = ParkScars()
+    /// `Tally[.secondsPlayed]` as the swing was made. The sky the rare events were judged against
+    /// is worked out from this and nothing else, so a clip re-rendered at a fixed 60 Hz finds
+    /// the same birds a phone did (DESIGN.md §19).
+    public private(set) var clockAtContact: Double = 0
+    /// What the sky's clock is wound forward by. Zero in every shipped build: only the DEBUG
+    /// `-skyclock` argument moves it, so a screenshot can reach a flock of birds without waiting
+    /// forty seconds. It lives here rather than in the app because the sky a rare event is judged
+    /// against and the sky that is drawn have to be the same sky (#5).
+    public var skyClockOffset: Double = 0
+    /// The one clock everything in the sky reads (DESIGN.md §17 "One clock").
+    public var skyClock: Double { tally[.secondsPlayed] + skyClockOffset }
     public var timings: Timings
     /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
     public var majorsSliceRules: SliceRules
     public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
     public var fireworksRules: FireworksRules
+    public var rareEventRules: RareEventRules = .standard
     public var ladder: Ladder
     /// Whether a finger is on the glass right now, mirrored in every frame by the app (whatever
     /// the beat is or where the finger landed — a slice is "in progress" whenever a finger is
@@ -262,9 +289,15 @@ public struct DerbyMachine: Equatable {
     /// untouched afterwards. `rng` is not drawn from once in between.
     private var parkSetAside: Park? = nil
     private var pitchSetAside: Pitch? = nil
+    /// The career park's dents and dark banks, held while a Warm Up borrows the field. A day's
+    /// ten are played somewhere else entirely; they must not tidy up the park being cleared.
+    private var scarsSetAside: ParkScars? = nil
     private var rng: SplitMix64
     private var wallCueIndex: Int? = nil
     private var landCueIndex: Int? = nil
+    /// Where the cut to the close camera falls, found once with the other two rather than by
+    /// walking the flight again on every frame that asks which camera is up.
+    private var closeCutIndex: Int? = nil
     /// The quality of the swing that made contact, 0…1, carried from `slice(_:)` into
     /// `contactHoldNow`.
     private var contactQuality: Double = 0
@@ -361,11 +394,7 @@ public struct DerbyMachine: Equatable {
     /// so a replay cuts exactly where the live game did. Only `.flight` is ever close; the
     /// result hold always cuts back out.
     public var flightCamera: FlightCamera {
-        guard beat == .flight, let f = flight else { return .wide }
-        let wall = park.wallDistanceFeet
-        guard let reach = f.points.map(\.xFeet).max(), reach >= wall - cameraRules.closeReachFeet,
-              let cut = f.points.firstIndex(where: { $0.xFeet >= wall - cameraRules.closeLeadFeet })
-        else { return .wide }
+        guard beat == .flight, flight != nil, let cut = closeCutIndex else { return .wide }
         return playbackIndex >= Double(cut) ? .close : .wide
     }
 
@@ -384,6 +413,44 @@ public struct DerbyMachine: Equatable {
         case .result: return true
         case .flight: return wallCueIndex.map { playbackIndex >= Double($0) } ?? false
         default: return false
+        }
+    }
+
+    /// How long ago a rare thing happened, or nil while playback has not reached it (#5). Off the
+    /// machine's own clocks and never a timer in a scene, exactly like the pop where a home run
+    /// goes into the crowd: playback stops dead at the last point of the flight, so once the
+    /// landing number is up the result hold's clock carries the burst the rest of the way out.
+    public func secondsSince(_ event: ParkEvent) -> Double? {
+        guard beat == .flight || beat == .result,
+              playbackIndex >= Double(event.index) else { return nil }
+        let played = (playbackIndex - Double(event.index))
+            * FlightParams.calibrated.timestep / timings.flightSpeed
+        return beat == .result ? played + elapsed : played
+    }
+
+    /// The bird this flight has already gone through, if it has: the sky leaves it out for the
+    /// rest of its crossing, which is the only way a bird can be gone when nothing anywhere keeps
+    /// a bird (DESIGN.md §17 "Everything is a pure function").
+    public var struckBird: (slot: Int, index: Int)? {
+        for event in parkEvents where event.kind == .birdStrike {
+            guard secondsSince(event) != nil else { return nil }
+            return (event.flockSlot, event.target)
+        }
+        return nil
+    }
+
+    /// Whether the sky shows what a long career has arrived at — the blimp past park 100, the
+    /// searchlights past 500, the comet past 1,000 (#5). A Warm Up's park number is the *day*
+    /// (20260920), which would clear every threshold there is by accident, and the day's ten are
+    /// not a career park: they are played somewhere else and cleared nothing (DESIGN.md §18).
+    /// The seeded landmarks a day's park draws are its own and are shown; these are not.
+    public var showsMilestones: Bool { warmUp == nil }
+
+    /// Whether a bank is dark: put out earlier in this park, or put out by the shot on screen.
+    public func bankIsOut(_ index: Int) -> Bool {
+        if parkScars.darkBanks.contains(index) { return true }
+        return parkEvents.contains {
+            $0.kind == .lightsOut && $0.target == index && secondsSince($0) != nil
         }
     }
 
@@ -426,9 +493,22 @@ public struct DerbyMachine: Equatable {
         wallCueIndex = (f.homeRun || f.wallHit)
             ? f.points.firstIndex(where: { $0.xFeet >= park.wallDistanceFeet - 0.2 }) : nil
         landCueIndex = f.hangTime.flatMap { hang in f.points.firstIndex(where: { $0.time >= hang }) }
+        closeCutIndex = SideView.closeCutIndex(flight: f, wallDistanceFeet: park.wallDistanceFeet,
+                                               rules: cameraRules)
         playbackIndex = 0
         lastCall = nil
         contactQuality = min(1, max(0, crossing.quality))
+        // Every rare thing this arc passes through, found now and counted as playback reaches
+        // each one. It has to come after `contactQuality`, which is what `contactHoldNow` — and
+        // so the sky the events are judged against — is worked out from (#5).
+        clockAtContact = skyClock
+        parkEvents = RareEvents.detect(
+            park: park, scenery: park.scenery, flight: f,
+            birdSeed: SkyView.side.birdSeed(parkNumber: park.number),
+            blimpSeed: SkyView.side.blimpSeed(parkNumber: park.number),
+            clockAtContact: clockAtContact, contactHold: contactHoldNow,
+            flightSpeed: timings.flightSpeed,
+            statRules: statRules, rules: rareEventRules)
         recordWarmUpPitch(WarmUpPitch(outcome: f.homeRun ? .homeRun : f.wallHit ? .offTheWall : .inPlay,
                                       feet: Int(f.distanceFeet.rounded())))
         enter(.contact)
@@ -629,6 +709,13 @@ public struct DerbyMachine: Equatable {
                 if f.homeRun { startFireworksIfEarned(f) }
             }
             if let i = landCueIndex, before < i, i <= after { out.append(.landed) }
+            // The rare things count as playback reaches them, once each, exactly the way the
+            // wall and the ground do — so a bird is counted when the ball goes through it and
+            // not when the bat met it (#5).
+            for event in parkEvents where before < event.index && event.index <= after {
+                tally.add(event.kind.stat)
+                parkScars.record(event)
+            }
             if playbackIndex >= Double(f.points.count - 1) {
                 playbackIndex = Double(max(0, f.points.count - 1))
                 enter(.result)
@@ -649,6 +736,7 @@ public struct DerbyMachine: Equatable {
                 flight = nil
                 launch = nil
                 fireworks = nil        // the next pitch gets a clean sky (DESIGN.md §17 "When")
+                parkEvents = []        // …and no feathers still falling in it (#5)
                 if warmUp?.isSpent == true { endWarmUp(&out) } else { newPitch() }
                 out.append(.cutToAtBat)
             }
@@ -662,6 +750,7 @@ public struct DerbyMachine: Equatable {
         tally.add(.parksCleared)
         tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
         tally.set(.pitchesThisPark, 0)
+        parkScars = ParkScars()        // a new park, with its lights on and its glass in (#5)
         let wasMinors = park.league.isMinors
         park = Park.generate(number: park.number + 1, ladder: ladder)
         out.append(.parkChanged(park))
@@ -680,6 +769,8 @@ public struct DerbyMachine: Equatable {
         queuedWarmUp = nil
         parkSetAside = park
         pitchSetAside = pitch
+        scarsSetAside = parkScars
+        parkScars = ParkScars()
         warmUp = run
         park = run.card.park
         pitch = run.card.pitches[min(run.spent, run.total - 1)]
@@ -698,14 +789,19 @@ public struct DerbyMachine: Equatable {
         warmUp = nil
         park = parkSetAside ?? park
         pitch = pitchSetAside ?? pitch
+        parkScars = scarsSetAside ?? ParkScars()
         parkSetAside = nil
         pitchSetAside = nil
+        scarsSetAside = nil
         flight = nil
         launch = nil
         fireworks = nil
+        parkEvents = []
+        clockAtContact = 0
         playbackIndex = 0
         wallCueIndex = nil
         landCueIndex = nil
+        closeCutIndex = nil
         contactQuality = 0
         lastCall = nil
         calledStrikesInARow = 0

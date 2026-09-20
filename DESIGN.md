@@ -754,6 +754,91 @@ cache**, because the thing that makes them step 5 is that they move:
 - Drawing the crowd per frame costs about 200 pixel writes and 200 draws from a seeded stream,
   against a backdrop rebuild it no longer forces.
 
+### Rare things
+
+Step 6, and #5's landmarks with it. **Built 2026-09-20** (Claude's, unreviewed.) Park N is a pure
+function of N, so whatever is in park 87 is there for everyone: that is the folklore hook, and it
+is the only thing that makes a rare event worth telling anyone about.
+
+**Nothing here changes how the ball flies.** The flight is integrated once, at contact, and an
+event is something that arc *happens to pass through*. It is detected from the finished
+`FlightResult` and the park's seeded scenery (`RareEvents.detect`, Core, tested), counted once in
+the `Tally` as playback reaches it — the same way the `.clearedWall` cue fires — and drawn as a
+two-frame burst with no alpha. **Rarity comes from geometry and seeds, never from a die rolled at
+contact:** a landmark is in the park or it is not, and the ball either reaches it or it does not.
+
+| Thing | Where | One in | Counts |
+|---|---|---|---|
+| A bird | the sky, `SkyLife.birds` | a flock every 20–40 s | `birdsHit` |
+| The blimp | the sky, past park 100 | up about half the time | `blimpsHit` |
+| The out-of-town board | on the stands, 20–50 ft back | 3 seeded parks | `scoreboardDents` |
+| …its lit pane | one top corner of the board | inside the above | `windowsBroken` |
+| The light standard over the wall | night parks | 2 night parks | `lightsOut` |
+
+- **Three things the spec asked for turned out to be geometrically impossible, and the numbers say
+  so.** A batted ball's whole airspace past the wall is about 0–70 ft back and 0–90 ft up: at
+  112 mph and 35° it clears a 380 ft wall 77 ft up and is down to 14 ft forty feet later.
+  - **"A no-doubter that reaches a lamp bank"** cannot happen: the seeded towers stand 150–190 ft
+    up, and nothing this game can hit gets within eighty feet of one. So night parks grew a
+    **short light standard over the wall** — 74–98 ft up, 14–38 ft back, one night park in two —
+    which is the bank a no-doubter *can* reach. It is drawn, haloed and chased exactly like the
+    others and is simply the last one in the chase. `RareEventTests` asserts both halves: no
+    seeded tower is ever reachable, and the wall tower is.
+  - **A moon that can be hit** (#5) is out for the same reason: the moon sits at design row 14–40
+    and the highest a ball is ever *drawn* is row 16, only in the close camera, only on a phone
+    wider than 320. Left out rather than faked.
+  - **A window behind the wall** would be behind the stands, which swallow the ball first. The
+    window is therefore a **lit pane in the out-of-town board**, which is the one thing standing
+    in the airspace a ball actually crosses — the operator's slot, as on a real out-of-town board.
+- **The sky's two are judged in the close camera with the ball pinned, and nowhere else.** A bird's
+  x is a fraction of the view and its y is an absolute design row. The wide camera's scale grows
+  with the canvas, so the same towering fly is drawn near the top of a big phone's frame and
+  halfway down a 320-wide clip's: judged there, whether a bird was hit would depend on which phone
+  you owned, and the clip would not show what the player saw. Under the close camera's headroom
+  the ball sits at exactly `closeHeadroom` on every canvas and its x is a fixed fraction of the
+  width, so every phone and the clip agree. It also reads better: a bird strike is now the tight
+  shot where a towering fly hangs against the top of the frame.
+- **The sky an event is judged against is worked out from the clock at contact**, plus the hitstop
+  and the playback speed — never by reading the clock again. A clip is ticked at a fixed 60 Hz and
+  a phone is not, and a tenth of a second moves a flock a whole step. `Tally[.secondsPlayed]` at
+  the moment of the swing is exactly what a `Replay` record already carries, so the clip finds the
+  same birds; `testDetectionIsAFunctionOfWhatAReplayRecordCarries` is the guard.
+- **A struck bird stays gone for the rest of its crossing** without anything anywhere keeping a
+  bird: the strike names it (flock slot and place in the line) and the sky leaves it out.
+- **A dent, a broken pane and a dark bank last until the park changes** — which is usually about a
+  second, because anything that reaches them has cleared the wall and the park changes at the end
+  of the result hold. The two places they really read are a park that cannot be cleared (the
+  ceiling, before the contract is signed, §16) and **a Warm Up**, where ten pitches are thrown in
+  one park: a bank put out on pitch three is still dark on pitch nine. The career's park keeps its
+  own scars while a Warm Up borrows the field.
+- **The Warm Up gets the seeded landmarks and none of the milestones.** Its park number is the
+  *day* (20260920), which clears every threshold there is by accident, and the day's ten are not a
+  career park (§18). Its board, its pane and its wall tower are its own and are drawn.
+  `DerbyMachine.showsMilestones` is the one flag, and events hit during a Warm Up count like any
+  other stat.
+- **The numbers were measured, not guessed.** A first cut had the board dented by a quarter of
+  every hard swing in a park that had one and the pane unbreakable (the ball crosses the board's
+  top edge a foot above it, so asking only about the point it went in at counted every clean pass
+  through the glass as an ordinary dent). Raising the board's clearance to 15–30 ft over the
+  stands, tightening a bank's catch to 10 ft and asking about the whole path through the panel put
+  it where it is now: over a sweep of hard swings, 5 % dent a board, 2 % break a pane, 0.9 % take a
+  bird, 0.7 % put a bank out and 0.04 % hit the blimp.
+
+**Things a long career arrives at.** Never announced, never explained, each a pure function of the
+park number: **a blimp past park 100** (which can also be hit), **searchlights past 500** — two
+dithered beams sweeping up from behind the stands — and **a comet past 1,000**. All three are sky,
+all three are `f(seed, t)`, and none of them is cached. The comet started on row 8, where a long
+near-horizontal streak ran straight through `PARK 1000  1 PITCH` and read as two stray characters;
+it now hangs at rows 20–32 with a tail that climbs a pixel every two, which is what makes it a
+comet and not a typo.
+
+**Open, for Dwight:**
+1. Is a dent that lasts one second worth keeping at all, or should a park's scars survive the park
+   the way the `Tally` does? Today they die with the park by design ("until the park changes").
+2. The searchlights are the loudest thing in this list by some way. Right for park 500, or too much?
+3. The dog that takes the ball, and wind, are still unbuilt: the dog needs a ball that *stays in the
+   park* (nothing is drawn out there today) and wind is reserved by §14 Q3.
+
 ### Building it
 
 - **`Park.scenery`** in Core: backdrop pieces, cloud seeds, breeze, moon, flags. Seeded, Equatable,
@@ -775,7 +860,19 @@ cache**, because the thing that makes them step 5 is that they move:
 - **Order of work:** (1) backdrop cache, stands in the side view, horizon in the at-bat view;
   (2) clouds and breeze; (3) fireworks and pops; (4) night kit: stars, moon, stadium lights and
   their chase; (5) birds, flags, crowd bounce; (6) the bird strike, the lights-out shot and their
-  stats, with #5. **(1) through (5) are built** (2026-09-19); only (6) is left, and it waits on #5.
+  stats, with #5. **All six are built** — (1)–(5) on 2026-09-19 and (6) with #5's landmarks on
+  2026-09-20 (see "Rare things" above).
+- **Where step 6 lives.** `Core/Sources/DerbyCore/RareEvents.swift` holds `ParkEventKind`,
+  `ParkEvent`, `ParkScars`, `RareEventRules`, the detection and the bursts; `OutfieldBoard` and
+  the wall tower are seeded in `Scenery.swift` beside the rest of a park; `SkyLife.swift` gained
+  the blimp, the searchlights and the comet, and `Bird` gained the two numbers that let a struck
+  one be named. `App/Sources/SkyArt.swift` and `BackdropArt` turn the answers into pixels.
+  `SideView.swift` is new and is the one that was not obvious: the side view's two framings came
+  out of `WideScene` into Core, because an event is judged against where the ball is *drawn* and
+  that had to be something a test can ask about. The scene now calls `SideView.framing` and owns
+  no framing numbers of its own. Finding the close cut once per flight instead of per frame also
+  took the whole Core suite from 187 s to 3 s — `flightCamera` had been walking the flight on
+  every call.
 - **Where step 4 and 5 live.** `Core/Sources/DerbyCore/SkyLife.swift` holds `Star`, `Tower`,
   `Bird`, `SkyLifeRules` and the pure functions — a star's blink, a bank's place in the chase, a
   head's place in the bounce, a flag's flutter frame, and a flock's whole crossing. Every one is
