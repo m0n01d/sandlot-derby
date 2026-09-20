@@ -42,6 +42,63 @@ struct BackdropLayout {
     var popRadius = 3.0
     var popSeconds = 0.45
 
+    // MARK: - The night kit (DESIGN.md §17)
+
+    /// The moon's bite: a night-coloured disc this much of the moon's radius, pushed this far
+    /// to the seeded side of it.
+    var moonBiteRadius = 0.82
+    var moonBiteOffset = 0.62
+    /// A lamp and the gap between lamps in a bank. Three pixels is the smallest thing that can
+    /// carry a `score` centre and still read as a lamp rather than a speck.
+    var lampSize = 3.0
+    var lampGap = 1.0
+    /// The lattice pole: this wide where it meets the bank, this wide at its foot, with a rung
+    /// and a diagonal every so often.
+    var towerTopWidth = 4.0
+    var towerFootWidth = 9.0
+    var towerRungPitch = 7.0
+    /// The dithered halo. An ellipse that hugs the bank — this far out beyond it sideways and
+    /// this far above and below — rather than a circle around its middle: a bank is a wide,
+    /// shallow thing and a round glow around one read as snow falling past it. Three rings at
+    /// these fractions of that spread, each thinner than the last. A bank that is dark in the
+    /// chase keeps only the innermost, so the glow travels rather than switching off.
+    var haloSpreadX = 7.0
+    var haloSpreadY = 6.0
+    /// How much of that spread the glow gets *below* the bank. A lamp bank is aimed at the
+    /// field and its bloom goes up and out; a symmetrical glow put half of itself down the
+    /// pole, where it read as grit rather than light.
+    var haloBelowShare = 0.5
+    var haloRings = [0.5, 0.78, 1.0]
+    var haloRingsWhenDark = 1
+    /// At-bat: the towers flank the scoreboard (x 128…192), nearest pair first, standing on the
+    /// top of the wall band. Well clear of the zone, which starts at y 136.
+    var atBatTowerSlots = [96.0, 224.0, 62.0, 258.0]
+    var atBatTowerFootY = 96.0
+    var atBatTowerHeight = 34.0
+
+    // MARK: - Foul poles in the at-bat camera (#28)
+
+    /// One at each corner, rising from the top of the wall band where each foul line meets it,
+    /// in `score` like the side view's. Taller the higher up the ladder you are, the way the
+    /// stands' heights step: a sandlot's are just shorter.
+    var foulPoleWidth = 2.0
+    /// The top of the wall band, which is what they stand on. The same number as the towers'
+    /// foot and deliberately its own knob: the two have nothing to do with each other.
+    var atBatFoulPoleFootY = 96.0
+    var foulPoleHeightSingleA = 16.0
+    var foulPoleHeightDoubleA = 20.0
+    var foulPoleHeightTripleA = 24.0
+    var foulPoleHeightTheShow = 28.0
+
+    func foulPoleHeight(for league: League) -> Double {
+        switch league {
+        case .singleA: return foulPoleHeightSingleA
+        case .doubleA: return foulPoleHeightDoubleA
+        case .tripleA: return foulPoleHeightTripleA
+        case .theShow: return foulPoleHeightTheShow
+        }
+    }
+
     /// Every cached layer is drawn with the ground here and copied `dy` rows down, so the close
     /// camera lifting the ground out of frame does not cost a rebuild.
     static let canonicalGround = 176.0
@@ -170,14 +227,35 @@ enum BackdropArt {
              body: night ? Palette.ink : Palette.wall,
              detail: night ? Palette.ink : Palette.shade,
              breeze: scenery.breezePixelsPerSecond)
+    }
 
-        // Two on the scoreboard, pointing with the breeze. Still until step 5.
+    /// The two little flags on the scoreboard, pointing with the breeze and fluttering in two
+    /// frames. Drawn per frame, not cached: the flutter is what step 5 added.
+    static func scoreboardFlags(into c: PixelCanvas, scenery: Scenery, xOffset: Double,
+                                frame: Int, layout: BackdropLayout = .standard) {
         let pointRight = scenery.breezePixelsPerSecond >= 0
         for dx in layout.scoreboardFlagOffsets {
             let x = (xOffset + 128 + dx).rounded()
             let top = 80 - layout.scoreboardFlagPoleHeight
             c.rect(x, top, 1, layout.scoreboardFlagPoleHeight, Palette.chalk)
-            c.rect(pointRight ? x + 1 : x - 4, top, 4, 3, Palette.cap)
+            pennant(into: c, x: x, top: top, pointRight: pointRight, frame: frame,
+                    size: (w: 4, h: 3))
+        }
+    }
+
+    /// The foul poles in the at-bat camera (#28): one at each corner, standing on the top of
+    /// the wall band exactly where its foul line meets it. `score`, at night as well as by day,
+    /// so they catch the lights. Static, so they live in the backdrop cache; drawn after the
+    /// horizon pieces and before anything on the field.
+    static func atBatFoulPoles(into c: PixelCanvas, league: League, xs: [Double],
+                               layout: BackdropLayout = .standard) {
+        let height = layout.foulPoleHeight(for: league)
+        for x in xs {
+            // No rounding: `PixelCanvas.rect` and `PixelCanvas.line` both truncate, so passing
+            // the foul line's own endpoint straight through puts the pole's first column on
+            // exactly the pixel the line ends on. Rounding it first put it one to the right.
+            c.rect(x, layout.atBatFoulPoleFootY - height, layout.foulPoleWidth, height,
+                   Palette.score)
         }
     }
 
@@ -260,7 +338,8 @@ enum BackdropArt {
         front.rect(wallX, wallTopY - poleHeight, poleWidth, poleHeight, Palette.score)
     }
 
-    /// The stepped bleacher profile, its crowd, and its flags.
+    /// The stepped bleacher profile and the wall's own face — the parts of the stands that hold
+    /// still. Its crowd and its flags move, so they are drawn per frame instead.
     private static func drawStands(into c: PixelCanvas, park: Park, scenery: Scenery,
                                    scale: Double, originX: Double, width: Double,
                                    layout: BackdropLayout) {
@@ -302,27 +381,31 @@ enum BackdropArt {
             c.rect(backX, topY, width - backX, 1, Palette.wall)
         }
 
-        crowd(into: c, park: park, scenery: scenery, scale: scale, originX: originX,
-              width: width, wallTopY: wallTopY, layout: layout)
-        flags(into: c, scenery: scenery, x0: x(park.wallDistanceFeet), x1: width,
-              top: topY, layout: layout)
+        // The crowd and the flags are *not* drawn here any more: they move (step 5), so they are
+        // drawn per frame straight after this layer is copied down.
     }
 
     /// A `chalk` / `skin` / `cap` speckle over the seating. Seeded by the park, so the same
-    /// crowd turns out every time you come back. It sits still until the cheer bounces it (step 5).
-    private static func crowd(into c: PixelCanvas, park: Park, scenery: Scenery,
-                              scale: Double, originX: Double, width: Double,
-                              wallTopY: Double, layout: BackdropLayout) {
-        let ground = BackdropLayout.canonicalGround
+    /// crowd turns out every time you come back — and drawn per frame rather than cached,
+    /// because while the cheer plays it bounces.
+    ///
+    /// Half the speckle is a pixel higher on each step and the other half is not, so the stand
+    /// ripples instead of sliding. `cheering` comes from `DerbyMachine.crowdIsUp`, never from a
+    /// timer in a scene (DESIGN.md §17).
+    static func crowd(into c: PixelCanvas, park: Park, scenery: Scenery,
+                      scale: Double, originX: Double, width: Double, ground: Double,
+                      time: Double, cheering: Bool, layout: BackdropLayout = .standard) {
+        guard scenery.stands.hasCrowd else { return }
         let left = max(0, originX + park.wallDistanceFeet * scale)
         guard width - left > 2, scale > 0 else { return }
+        let wallTopY = ground - park.wallHeightFeet * scale
         let topY = ground - scenery.standsTopFeet * scale
         let area = (width - left) * max(0, wallTopY - topY)
         let heads = Int(area / layout.crowdPixelsPerHead)
         guard heads > 0 else { return }
 
         var g = SplitMix64(seed: seed(scenery, tag: 0x4))
-        for _ in 0..<heads {
+        for i in 0..<heads {
             let px = Double.random(in: left..<width, using: &g)
             let feet = (px - originX) / scale
             let h = standsHeightFeet(at: feet, park: park, scenery: scenery, layout: layout)
@@ -334,23 +417,45 @@ enum BackdropArt {
             if roll < layout.crowdSkinShare { colour = Palette.skin }
             else if roll < layout.crowdSkinShare + layout.crowdChalkShare { colour = Palette.chalk }
             else { colour = Palette.cap }
-            c.px(px.rounded(.down), py.rounded(.down), colour)
+            let up = SkyLife.crowdHeadIsUp(i, at: time, cheering: cheering)
+                && py - SkyLifeRules.standard.crowdBounceLift > seatTop
+            c.px(px.rounded(.down),
+                 py.rounded(.down) - (up ? SkyLifeRules.standard.crowdBounceLift : 0), colour)
         }
     }
 
-    /// Flags along the top of the stands, pointing with the breeze. Two flutter frames are
-    /// step 5; today they simply point.
-    private static func flags(into c: PixelCanvas, scenery: Scenery,
-                              x0: Double, x1: Double, top: Double, layout: BackdropLayout) {
-        guard scenery.flags > 0, x1 > x0 else { return }
+    /// Flags along the top of the stands, pointing with the breeze and fluttering in two frames.
+    /// Drawn per frame beside the crowd, for the same reason.
+    static func standsFlags(into c: PixelCanvas, park: Park, scenery: Scenery,
+                            scale: Double, originX: Double, width: Double, ground: Double,
+                            frame: Int, layout: BackdropLayout = .standard) {
+        let x0 = originX + park.wallDistanceFeet * scale
+        guard scenery.flags > 0, width > x0 else { return }
+        let top = ground - scenery.standsTopFeet * scale
         let pointRight = scenery.breezePixelsPerSecond >= 0
         for i in 0..<scenery.flags {
             let t = (Double(i) + 1) / Double(scenery.flags + 1)
-            let fx = (x0 + (x1 - x0) * t).rounded()
+            let fx = (x0 + (width - x0) * t).rounded()
             let poleTop = top - layout.flagPoleHeight
             c.rect(fx, poleTop, 1, layout.flagPoleHeight, Palette.chalk)
-            c.rect(pointRight ? fx + 1 : fx - layout.flagPennant.w,
-                   poleTop, layout.flagPennant.w, layout.flagPennant.h, Palette.cap)
+            pennant(into: c, x: fx, top: poleTop, pointRight: pointRight, frame: frame,
+                    size: layout.flagPennant)
+        }
+    }
+
+    /// One pennant in one of its two flutter frames: the cloth snaps between a high tail and a
+    /// low one. Three rows either way, so a flag never changes size as it flies — with no alpha
+    /// and no tweening, two frames is the whole vocabulary (§17).
+    private static func pennant(into c: PixelCanvas, x: Double, top: Double,
+                                pointRight: Bool, frame: Int, size: (w: Double, h: Double)) {
+        let w = size.w
+        let rows: [(dx: Double, w: Double)] = frame == 0
+            ? [(0, w), (0, w), (1, w - 1)]
+            : [(1, w - 1), (0, w), (0, w)]
+        for (j, row) in rows.prefix(Int(size.h)).enumerated() {
+            let y = top + Double(j)
+            let rw = max(1, row.w)
+            c.rect(pointRight ? x + 1 + row.dx : x - row.dx - rw, y, rw, 1, Palette.cap)
         }
     }
 

@@ -601,8 +601,22 @@ exactly. Scenes only draw.
   *Later, with #5:* in the side view a bird can be on the flight path; a ball passing within 2 px
   bursts it into `chalk` feathers, counts `birdsHit`, and changes nothing about the flight. Rarity
   comes free from the geometry.
-- **Night kit (§8, still unbuilt).** Forty fixed stars, one in eight blinking on a slow seeded
-  period, and a `chalk` moon with a night-coloured bite, in a seeded place in one park in four.
+  **Built 2026-09-19** (Claude's, unreviewed). The 20–40 s is one 30 s slot with its start
+  jittered 0–10 s inside it, so consecutive flocks are 30 ± 10 s apart by construction and the
+  whole thing stays closed-form — no flock state, no list of upcoming flocks, just
+  `f(seed, t)` over the current slot and the one before it (a flock takes 7–11 s to cross, so it
+  can outlive its own slot but never two). A bird's mark is a V one frame and a Λ the next, and
+  **neighbours beat on opposite frames**, so a flock ripples instead of marching. A flock flies
+  downwind; on a dead calm day it picks its own way, which is the only thing the seed decides
+  about its direction. At night a bird is drawn **lighter than the sky**, not in `ink`: the same
+  trap the side view's far pieces fell into in step 1, since the night sky's upper bands *are*
+  `night` and `ink`.
+- **Night kit (§8).** Forty fixed stars, one in eight blinking on a slow seeded period, and a
+  `chalk` moon with a night-coloured bite, in a seeded place in one park in four.
+  **Built 2026-09-19** (Claude's, unreviewed). A blinking star is *out* for 0.4 s every 3–7 s
+  rather than on half the time: with no alpha the only choice is there or not, and a 50 % duty
+  cycle read as a strobe. Stars sit in y 3–64, which is dark in both views. The moon's bite is a
+  `night` disc at 0.82 of its radius, pushed 0.62 of a radius to its seeded side.
 - **Stadium lights at night** (Dwight, 2026-09-19). Every night park has them, two to four towers,
   seeded. A tower is an `ink` lattice pole carrying a lamp bank: a grid of `chalk` lamps with
   `score` centres. With no alpha, the glow is a **dithered halo**: a checkerboard of `chalk` on the
@@ -616,6 +630,30 @@ exactly. Scenes only draw.
   Show are day games, so the first lights a player sees are a seeded park's: something to arrive
   at. *Later, with #5:* a no-doubter that reaches a bank puts it out in a shower of `score` sparks
   and counts `lightsOut`. One per career would be enough.
+
+  **Built 2026-09-19** (Claude's, unreviewed). Five things the spec did not settle:
+
+  - **The halo is an ellipse hugging the bank, not a circle around it**, and it is squashed to
+    half height below. A bank is a wide, shallow thing; a round glow around one read as snow
+    falling past it, and a symmetrical one put half of itself down the pole, where it read as
+    grit rather than light. Three rings — half the pixels, a quarter, an eighth — not four: the
+    sparser outer rings of a four-ring halo were scattered confetti, not a glow.
+  - **A dark bank in the chase keeps its lamps and loses its `score` centres and all but the
+    innermost ring of its halo.** Switching a bank off outright made the towers blink; this way
+    the light *travels*, which is what a chase is.
+  - **The lattice's colour is the view's, not the spec's `ink`.** The at-bat pole stands wholly
+    in the `#446688` horizon band, where `ink` reads, and keeps it. The side view's climbs
+    through `night` and `ink` and is drawn lighter than the sky instead — agent C's night rule
+    for the far pieces, hit again by the one other thing tall enough to reach those bands.
+  - **The at-bat towers are not the side view's seen from the other end.** You are looking the
+    other way down the park, so they take fixed slots flanking the scoreboard (x 96/224/62/258,
+    standing on the wall band) and only the count and the banks' own shapes carry over. The side
+    view's stand at seeded depths behind the wall, in feet, so the close camera simply sees them
+    bigger — at 150–190 ft they run out of the top of that frame, which is what makes the bank
+    a thing you see in the wide one.
+  - **Nothing here is cached.** The chase changes the halo, so the halos are drawn per frame
+    before the clouds and the towers per frame after the birds. It is a few thousand pixel
+    writes and it keeps §17's draw order honest.
 
 ### Backdrops
 
@@ -631,6 +669,16 @@ exactly. Scenes only draw.
 - **At-bat view: a horizon.** A low band above the wall, y 86–96, and two small flags on the
   scoreboard. Far things are `sky2` on the `sky3` band (distance with no new colour), near things
   `wall` and `shade`, night silhouettes `ink`.
+- **At-bat view: foul poles** (Dwight, 2026-09-19, #28: "add foul poles to the at bat cam"). One
+  at each corner in `score`, 2 px wide, standing on the top of the wall band exactly where its
+  foul line meets it, and `score` at night too so they catch the lights. Per league, the way the
+  stands' heights step: 16 / 20 / 24 / 28 px from Single-A to The Show and the seeded parks.
+  **Built 2026-09-19** (Claude's, unreviewed). Their x comes from the same two constants the
+  foul lines are drawn from, hoisted out of `AtBatScene.render` for the purpose, so they stay
+  married however wide the canvas is — and **not rounded**: `PixelCanvas.rect` and
+  `PixelCanvas.line` both truncate, so passing the line's own endpoint straight through puts the
+  pole's first column on the pixel the line ends on. Rounding it first put it one to the right,
+  which a full-resolution crop of the corner showed and nothing else would have.
 - **The ladder has its own backdrops**, so moving up looks like moving up:
 
   | Park | At-bat horizon | Side view behind the wall |
@@ -663,6 +711,23 @@ The stands climb in six steps. `SceneryRules` carries each tier's height and dep
 place a ball disappears is one number and not a drawing accident: the pop is drawn at the first
 point of the flight that is inside the profile the stands were drawn from.
 
+**Step 5, built 2026-09-19** (Claude's, unreviewed). The flags and the crowd **left the backdrop
+cache**, because the thing that makes them step 5 is that they move:
+
+- **The flags flutter in two frames**, a high tail and a low one, three rows either way so a flag
+  never changes size as it flies. They fly whatever the beat — it is the wind that moves them,
+  not the crowd — and they still point with the breeze.
+- **The crowd bounces while the cheer plays**, and *half of it* is a pixel higher on each step, so
+  the stand ripples instead of sliding. A head near the front of its deck stays down rather than
+  float off it.
+- **"While the cheer plays" is `DerbyMachine.crowdIsUp`,** a pure property on the machine and not
+  a timer in a scene: the ball has cleared the wall (the `.clearedWall` cue's own index) and the
+  beat is `.flight` or `.result`. The lights' chase reads the same window. It is deliberately
+  *not* `fireworks != nil` — a streak under three earns no shells, and §17's own table says the
+  crowd is up for every home run there is. Tested both ways round.
+- Drawing the crowd per frame costs about 200 pixel writes and 200 draws from a seeded stream,
+  against a backdrop rebuild it no longer forces.
+
 ### Building it
 
 - **`Park.scenery`** in Core: backdrop pieces, cloud seeds, breeze, moon, flags. Seeded, Equatable,
@@ -684,11 +749,27 @@ point of the flight that is inside the profile the stands were drawn from.
 - **Order of work:** (1) backdrop cache, stands in the side view, horizon in the at-bat view;
   (2) clouds and breeze; (3) fireworks and pops; (4) night kit: stars, moon, stadium lights and
   their chase; (5) birds, flags, crowd bounce; (6) the bird strike, the lights-out shot and their
-  stats, with #5. **(1) and (2) are built** (2026-09-19). The flags and the crowd are drawn but
-  still: their flutter and their bounce are step 5, which is where the clock that drives them
-  belongs.
+  stats, with #5. **(1) through (5) are built** (2026-09-19); only (6) is left, and it waits on #5.
+- **Where step 4 and 5 live.** `Core/Sources/DerbyCore/SkyLife.swift` holds `Star`, `Tower`,
+  `Bird`, `SkyLifeRules` and the pure functions — a star's blink, a bank's place in the chase, a
+  head's place in the bounce, a flag's flutter frame, and a flock's whole crossing. Every one is
+  `f(seed, t)` the way `Fireworks.particles` is, so `swift test` covers them and the replay clip
+  (#4) will reproduce them. The seeded *shapes* (how many stars, how tall a tower, where a flock
+  may fly) went into `SceneryRules` beside the clouds'; the *rates* are `SkyLifeRules`.
+  `App/Sources/SkyArt.swift` turns the answers into palette pixels. This is one Core file rather
+  than the `Birds.swift` + `NightSky.swift` the issue sketched: birds, stars and lights are the
+  same kind of thing — sky life on a shared clock — and they share the two-frame step helper.
+- **The new scenery draws come last in `Scenery.generate`'s stream**, deliberately, so that
+  adding the towers and the starfield moved no park's clouds, breeze or moon. `Scenery.towers` is
+  now the count of `Scenery.lightTowers` rather than a second stored field saying the same thing.
+- **One clock, `SceneryClock.now`.** Clouds, fireworks, stars, birds, flags, the crowd and the
+  chase all read `Tally[.secondsPlayed]`, so they step on the same grid. The birds quantise the
+  *clock* rather than the time since their own flock set off, for exactly that reason.
 - **`-park <n>`**, DEBUG only, starts in park n and implies `-nosave`: the ladder's four rungs and
   a night park are otherwise hours of play away from a screenshot.
+- **`-skyclock <seconds>`**, DEBUG only, winds the sky's clock forward: a flock of birds is
+  otherwise up to forty seconds away. It moves nothing but scenery, fakes no career state, and so
+  is the one debug argument that does *not* imply `-nosave`.
 
 **Open:**
 1. ~~Fireworks on every home run or only notable ones?~~ Answered 2026-09-19: they build with the

@@ -122,10 +122,33 @@ public struct SceneryRules: Equatable {
     /// Every night park has two to four light towers (§17). The minors and The Show are day
     /// games, so the first lights a player ever sees belong to a seeded park.
     public var towersPerNightPark: ClosedRange<Int> = 2...4
+    /// How far behind the wall a tower stands and how high it carries its bank, in feet. The
+    /// towers are shared out along the depth range rather than drawn independently, so two of
+    /// them never stand in the same place.
+    public var towerDepthFeet: ClosedRange<Double> = 25...165
+    /// Tall on purpose: at the close camera's scale a tower this high runs out of the top of
+    /// the frame, which is what makes the bank something you see in the wide one (§17).
+    public var towerHeightFeet: ClosedRange<Double> = 150...190
+    public var towerBankColumns: ClosedRange<Int> = 3...4
+    public var towerBankRows: ClosedRange<Int> = 2...3
+
     /// A moon in one night park in four.
     public var moonProbability: Double = 0.25
     public var moonRadius: ClosedRange<Double> = 5...8
     public var moonBand: ClosedRange<Double> = 14...40
+
+    /// Forty fixed stars, one in eight blinking on a slow seeded period (§17). The band is dark
+    /// in both views: at night the at-bat sky is `night` to y 44 and `ink` to 70, and the side
+    /// view's is `night` to 70 — so a `chalk` star reads anywhere inside it, and it sits well
+    /// above the scoreboard and the horizon.
+    public var starCount = 40
+    public var blinkingStarInEvery = 8
+    public var starBand: ClosedRange<Double> = 3...64
+    public var starBlinkPeriod: ClosedRange<Double> = 3...7
+
+    /// Where a flock of birds crosses, in design pixels. §17 says y < 60: well above the
+    /// scoreboard and nowhere near the zone.
+    public var birdBand: ClosedRange<Double> = 14...52
 
     public init() {}
     public static let standard = SceneryRules()
@@ -157,10 +180,17 @@ public struct Scenery: Equatable {
     /// share the side one: the sky never moves, whatever the camera does (§8).
     public let atBatClouds: [Cloud]
     public let sideClouds: [Cloud]
-    /// Night only, and only one night park in four. Not drawn until step 4.
+    /// Night only, and only one night park in four.
     public let moon: Moon?
-    /// Night only: two to four light towers. Not drawn until step 4.
-    public let towers: Int
+    /// Night only: where this park's two to four light towers stand and how tall they are.
+    /// Empty by day, so `towers` reads 0 there.
+    public let lightTowers: [Tower]
+    /// Night only: forty fixed stars, one in eight of them blinking. Empty by day.
+    public let stars: [Star]
+
+    /// How many light towers this park has. The count and the towers themselves were two fields
+    /// for one fact, which is one too many: this is the count of what was actually seeded.
+    public var towers: Int { lightTowers.count }
 
     /// The fixed entries from §17's table. Each rung of the ladder looks like one more rung of
     /// a real climb, which is the point of having them.
@@ -211,7 +241,12 @@ public struct Scenery: Equatable {
         let moonY = Double.random(in: rules.moonBand, using: &g).rounded()
         let moonR = Double.random(in: rules.moonRadius, using: &g).rounded()
         let bite = Bool.random(using: &g) ? 1 : -1
-        let towers = Int.random(in: rules.towersPerNightPark, using: &g)
+        let towerCount = Int.random(in: rules.towersPerNightPark, using: &g)
+
+        // Step 4's draws come last on purpose. Everything above keeps the number it had before
+        // the night kit existed, so no park's clouds, breeze or moon moved when it arrived.
+        let lightTowers = towers(count: towerCount, rules: rules, using: &g)
+        let stars = starfield(rules: rules, using: &g)
 
         return Scenery(
             parkNumber: n, far: far, near: near, stands: stands,
@@ -219,7 +254,37 @@ public struct Scenery: Equatable {
             breezePixelsPerSecond: breeze, atBatClouds: atBat, sideClouds: side,
             moon: park.isNight && moonRoll < rules.moonProbability
                 ? Moon(xFraction: moonX, y: moonY, radius: moonR, biteDirection: bite) : nil,
-            towers: park.isNight ? towers : 0)
+            lightTowers: park.isNight ? lightTowers : [],
+            stars: park.isNight ? stars : [])
+    }
+
+    /// Two to four towers, shared out along the depth range one to a slice and jittered inside
+    /// it — seeded, but never two of them standing in the same place.
+    private static func towers(count: Int, rules: SceneryRules,
+                               using g: inout SplitMix64) -> [Tower] {
+        let lo = rules.towerDepthFeet.lowerBound
+        let slice = (rules.towerDepthFeet.upperBound - lo) / Double(max(1, count))
+        return (0..<count).map { i in
+            Tower(feetBehindWall: (lo + (Double(i) + Double.random(in: 0.15...0.85, using: &g)) * slice).rounded(),
+                  heightFeet: Double.random(in: rules.towerHeightFeet, using: &g).rounded(),
+                  bankColumns: Int.random(in: rules.towerBankColumns, using: &g),
+                  bankRows: Int.random(in: rules.towerBankRows, using: &g))
+        }
+    }
+
+    /// Forty stars across the band, of which every eighth blinks. The period and the phase are
+    /// drawn for all forty whether or not they are used, so which stars blink can never shift
+    /// where the rest of them sit.
+    private static func starfield(rules: SceneryRules, using g: inout SplitMix64) -> [Star] {
+        (0..<rules.starCount).map { i in
+            let x = Double.random(in: 0.01...0.99, using: &g)
+            let y = Double.random(in: rules.starBand, using: &g).rounded()
+            let period = Double.random(in: rules.starBlinkPeriod, using: &g).rounded()
+            let phase = Double.random(in: 0..<period, using: &g)
+            return Star(xFraction: x, y: y,
+                        blinkPeriod: i.isMultiple(of: rules.blinkingStarInEvery) ? period : nil,
+                        blinkPhase: phase)
+        }
     }
 
     /// Two to four stamps in one band, left to right across the view.
