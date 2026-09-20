@@ -26,6 +26,9 @@ cd App && xcodegen generate && open SandlotDerby.xcodeproj
 
 The generated project is git-ignored; `App/project.yml` is the source of truth.
 
+To build headlessly and capture simulator screenshots (for PR before/after shots), use
+[`scripts/shots.sh`](scripts/shots.sh).
+
 ## Research trail
 
 Three private pages hold the research, mood board and mechanic prototype this repo distils:

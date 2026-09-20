@@ -259,13 +259,13 @@ The batter is a stamp, not scaled art, and is off screen here.
   tick while it is up, and the tap is not a swing.
 - Persist at every beat change (`UserDefaults`, one JSON blob: park number + tally). The pitch
   sequence is not saved.
-- Game Center (M5): best HR streak, fewest pitches to park 100, and the daily card. **Not**
+- Game Center (M5): best HR streak, fewest pitches to park 100, and the Warm Up (#3, §18). **Not**
   longest: exit velo is capped and flight is deterministic, so everyone reaches the same maximum.
-- **Approved 2026-09-19, not built:** a daily card (the first ten pitches of the day are seeded by
-  the date, same park and pitches for everyone, Wordle-style share string; name undecided, not
-  "Daily Ten"), a pixel-perfect **replay** clip as the share artifact (re-rendered from seed +
-  launch through `PixelCanvas`), **more park variety** (seeded landmarks and rare events, same for
-  everyone on park N), and **more feel** (M3). See issues.
+- **Approved 2026-09-19, not built:** the Warm Up (#3, §18; the first ten pitches of the day,
+  seeded by the date, same park and pitches for everyone, Wordle-style share string), a
+  pixel-perfect **replay** clip as the share artifact (re-rendered from seed + launch through
+  `PixelCanvas`), **more park variety** (seeded landmarks and rare events, same for everyone on
+  park N), and **more feel** (M3). See issues.
 
 ## 11. Audio and haptics (M5)
 
@@ -321,7 +321,8 @@ player's own music or podcast keeps playing underneath. `-mute` silences it for 
 
 ## 12. Tuning knobs
 
-All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
+All live in `DerbyCore` structs with doc comments, except a few marked `(App)` — pure layout, no
+gameplay effect, living beside the scene that draws them. Defaults are the prototype's.
 
 | Knob | Where | Default | Effect |
 |---|---|---|---|
@@ -336,10 +337,11 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `strikeZone` | `PitchingRules` | 40×50 | thumb-sized; shrink only if it feels like a cheat |
 | speed ranges | `PitchType` | table | difficulty lever |
 | `flightSpeed` | `Timings` | 2× | 1× is too slow, verified in the prototype |
-| `contactHold` | `Timings` | 0.35 s | the slash freeze |
+| `contactHoldWeak` / `contactHoldBarrel` | `Timings` | 0.22 s / 0.50 s | the slash freeze, interpolated linearly on the swing's contact quality (issue #20) |
 | `liftCoefficient` | `FlightParams` | 0.15 | under-rewards high spinny hits on purpose |
 | wall ranges | `Park.Rules` | 330–410 / 6–26 | park variety |
 | every column of the minors table (§10) | `Ladder` → `Rung` | table | how gentle each rung is, and what help it shows |
+| `Rung.organ` | `Ladder` → `Rung` | false (Single-A) / true (Double-A, Triple-A, The Show) | whether the rung has a ballpark organ; gates every organ cue |
 | `guideAngleDegrees`, `coachLowAngle` / `coachHighAngle` / `coachWeakExitVelocity` | `Ladder` | 28°, 12° / 42° / 88 mph | the swing guide's angle and when each coaching word fires |
 | `closeReachFeet` / `closeLeadFeet` | `CameraRules` | 60 / 100 ft | which balls earn the close camera, and how early it cuts in |
 | `takenBallKeepsStreak` | `StatRules` | true | whether a taken ball ends the HR streak |
@@ -347,6 +349,13 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `noDoubterMarginFeet` / `wallScraperMarginFeet` | `StatRules` | 50 / 12 | how far past the wall a HR landed |
 | `moonshotApexFeet` / `laserMaxAngle` | `StatRules` | 150 ft / 20° | the other two HR kinds |
 | `lineDriveFrom` / `flyBallFrom` / `popUpFrom` | `StatRules` | 10° / 25° / 50° | Statcast batted-ball classes |
+| `threeBlindMiceBPM` / `funeralMarchBPM` / `takeMeOutBPM` | `Synth` | 300 / 225 / 150 | tempo of the three organ tunes (§11) |
+| `statsOrganDelay` | `SoundBoard` | 1.0 s | delay before *Take Me Out* starts over the stats board |
+| the streak table, plus shell timing and shape | `FireworksRules` | table | how many shells a HR streak (or the call-up) earns, and how each shell launches, bursts and falls (§17) |
+| the cloud, breeze, stands and night-sky ranges | `SceneryRules` | table | clouds, breeze, stands height/depth by tier, night towers and moon odds (§17) |
+| the horizon, stands and cloud-drift ranges | `BackdropLayout` / `Clouds.Rules` (App) | table | horizon band, stands profile, crowd density, cloud drift rate and colours (§17) |
+| the card's panel, text and signature-line geometry | `ContractCardLayout` (App) | table | where the contract card draws each line (§16) |
+| `contractRowBand` / `contractMinimumSliceLength` | `StatsScene` (App) | 6 / 12 | hit test for the stats-board contract row (§16) |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.
@@ -360,11 +369,15 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
 - **M2 — at-bat view and slice.** `AtBatScene`, pitcher, batter, ball path, `UIPanGesture` /
   touch samples → `Contact.test` each move, `DerbyMachine` driving both scenes, the cut.
 - **M3 — feel.** Miss markers, contact freeze with slash and readout, flash frame, hitstop.
-  Retune `fullPowerSpeed` and `hitMarginPixels` on a real phone.
+  Retune `fullPowerSpeed` and `hitMarginPixels` on a real phone. Closed 2026-09-19; the leftovers
+  (hitstop by quality, `BARREL` call, third pitcher pose, held-finger swing-miss) were built in
+  #23.
 - **M4 — parks and score.** Seeded parks, night swap, tally persistence, park advance on HR.
-- **M5 — ship.** Audio, haptics, app icon (a ball on a chalk line), Game Center, TestFlight,
-  screenshots, store listing. Name decision. The contract card and the one purchase (§16), which
-  wants the daily card (#3) shipped first.
+- **M5 — ship.** Built: audio and haptics, the organ tunes, `parkCeiling`, the contract card, and
+  StoreKit 2 wiring with a local `.storekit` file. Not built or not exercised: the purchase,
+  pending, refund and restore paths have never been run for real — a `.storekit` configuration
+  only takes effect when the app is launched from Xcode, never from `simctl` — plus the app icon,
+  Game Center, TestFlight, the store listing, and the Warm Up (#3, §18).
 
 ## 14. Open questions
 
@@ -398,7 +411,7 @@ reach, would wreck the pitch → cut rhythm and the 16-colour canvas, and throw 
 tricks", which is the pitch to players and press. At ~10k installs all three earn about the same
 small money, so price for reach and brand.
 
-**What is free, forever:** the minors (parks 1–3), the daily card (#3, played in a Show-league
+**What is free, forever:** the minors (parks 1–3), the Warm Up (#3, §18; played in a Show-league
 park so it is a taste of what is sold), replay sharing (#4), the stats board and every stat, the
 daily and HR-streak leaderboards. A paywalled share loop is a dead share loop.
 
@@ -496,8 +509,8 @@ or a rewarded video.
 on TestFlight → ~~grandfathering~~ (done) → listing copy.
 
 **Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
-the trial can be short. Median pitches-to-call-up says how short, and the free daily card (#3) is
-what keeps a non-payer around, so ship it first.
+the trial can be short. Median pitches-to-call-up says how short, and the free Warm Up (#3, §18)
+is what keeps a non-payer around, so ship it first.
 
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
@@ -703,7 +716,7 @@ point of the flight that is inside the profile the stands were drawn from.
 
 ## 18. The Warm Up: the first ten pitches of the day
 
-Issue #3; what §16 and §13 call "the daily card". Decided by Dwight 2026-09-19: the name ("first 10
+Issue #3; what §16 and §13 used to call "the daily card" before this section existed. Decided by Dwight 2026-09-19: the name ("first 10
 pitches is a Warm Up"), the day ("whatever wordle does": the **local calendar day**), and what it
 counts toward ("professional batters have to warm up too": everything but the cost). The rest of
 this section is Claude's and unreviewed. **Spec only, nothing built.**
