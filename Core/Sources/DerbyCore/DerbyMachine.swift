@@ -264,6 +264,19 @@ public struct DerbyMachine: Equatable {
 
     public var cameraRules = CameraRules.standard
 
+    /// The last park the player may stand in, nil for none (DESIGN.md §16). A home run in the
+    /// ceiling park counts in every way but one: the park does not change. It emits `.calledUp`
+    /// so the scene can offer the contract, and the advance is owed. Core knows nothing about
+    /// money: the app sets this from the entitlement, and back to nil when the contract is
+    /// signed, which pays the advance at the next windup.
+    public var parkCeiling: Int? = nil
+    /// A home run at the ceiling earned an advance that has not happened. Not saved: after a
+    /// relaunch it takes one more home run, which is a call-up worth having anyway.
+    private var advanceOwed = false
+
+    /// True when a home run here cannot move the player on.
+    public var isAtCeiling: Bool { parkCeiling.map { park.number >= $0 } ?? false }
+
     /// The flight framing right now: a pure function of the flight and how much of it has played,
     /// so a replay cuts exactly where the live game did. Only `.flight` is ever close; the
     /// result hold always cuts back out.
@@ -380,7 +393,13 @@ public struct DerbyMachine: Equatable {
         var out: [Transition] = []
         switch beat {
         case .windup:
-            if elapsed > timings.windup { enter(.pitch); out.append(.pitchThrown) }
+            if advanceOwed && !isAtCeiling {
+                // The ceiling lifted with a call-up owed: pay it between pitches, and start the
+                // windup again under the new park's rules. `.calledUp` already played.
+                advanceOwed = false
+                advancePark(&out, announcing: false)
+                newPitch()
+            } else if elapsed > timings.windup { enter(.pitch); out.append(.pitchThrown) }
         case .pitch:
             if elapsed > pitch.duration * timings.pitchOverrun + timings.takeGrace {
                 countPitch()
@@ -414,15 +433,12 @@ public struct DerbyMachine: Equatable {
         case .result:
             if elapsed > timings.resultHold {
                 if let f = flight, f.homeRun {
-                    tally.add(.parksCleared)
-                    tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
-                    tally.set(.pitchesThisPark, 0)
-                    let wasMinors = park.league.isMinors
-                    park = Park.generate(number: park.number + 1, ladder: ladder)
-                    out.append(.parkChanged(park))
-                    if wasMinors && !park.league.isMinors {
-                        tally.set(.pitchesToTheShow, tally[.pitches])
+                    if isAtCeiling {
+                        advanceOwed = true
                         out.append(.calledUp)
+                    } else {
+                        advanceOwed = false
+                        advancePark(&out, announcing: true)
                     }
                 }
                 flight = nil
@@ -432,6 +448,21 @@ public struct DerbyMachine: Equatable {
             }
         }
         return out
+    }
+
+    /// A cleared park: the books close on it and the next one is generated. `announcing` is
+    /// false when the call-up was already announced by the home run that earned it (§16).
+    private mutating func advancePark(_ out: inout [Transition], announcing: Bool) {
+        tally.add(.parksCleared)
+        tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
+        tally.set(.pitchesThisPark, 0)
+        let wasMinors = park.league.isMinors
+        park = Park.generate(number: park.number + 1, ladder: ladder)
+        out.append(.parkChanged(park))
+        if wasMinors && !park.league.isMinors {
+            tally.set(.pitchesToTheShow, tally[.pitches])
+            if announcing { out.append(.calledUp) }
+        }
     }
 
     private mutating func enter(_ b: Beat) {
