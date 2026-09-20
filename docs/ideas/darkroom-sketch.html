@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Darkroom — sketch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible&display=swap">
+<style>
+body{margin:0;padding:24px 20px 48px;background:#121816;color:#ECEFE9;font:16px/1.5 'Atkinson Hyperlegible',system-ui,sans-serif}
+.wrap{max-width:680px;margin:0 auto}
+h1{font:400 18px 'Silkscreen',monospace;margin:0 0 4px}
+p{max-width:64ch;margin:0 0 12px}
+.note{font-size:14px;color:#9AA8A2}
+canvas{display:block;width:100%;max-width:640px;aspect-ratio:320/224;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;cursor:crosshair;background:#222244;border-radius:4px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:12px 0}
+button{font:inherit;font-size:14px;padding:6px 12px;border:1px solid #4CCB72;background:#1F3A2A;color:#ECEFE9;border-radius:4px;cursor:pointer}
+a{color:#7EDD9A}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Darkroom — sketch</h1>
+<p class="note">The playable sketch <a href="darkroom.md">darkroom.md</a> is written from. Self-contained: the JavaScript below is the reference for the core's slosh, development, dither and verdict functions. Drag left and right across the tray to rock it, or use the arrow keys; tilt works on a phone. Your own photo never leaves the page.</p>
+<canvas id="darkCanvas" width="320" height="224" aria-label="A developing tray under a red safelight; rock it to bring up the print"></canvas>
+<div class="controls">
+  <button type="button" id="lightsBtn">Lights on</button>
+  <button type="button" id="newPrintBtn">New sheet</button>
+  <label for="photoIn" class="note">Your own photo <input type="file" id="photoIn" accept="image/*"></label>
+  <button type="button" id="darkTiltBtn">Use the phone's tilt</button>
+</div>
+<p class="note" id="darkNote">The shadows come up first, as on real paper. Rock evenly and the print is even. Leave it tilted and one side runs dark. The lights are a hard cut, and the print comes out warm-toned in five of the sixteen colours with a Bayer dither.</p>
+</div>
+<script>
+(function(){
+'use strict';
+const PAL={sky1:'#4466CC',sky2:'#66AAEE',sky3:'#AACCEE',grassA:'#22AA44',grassB:'#228844',wall:'#226644',dirt:'#CC8844',dirtD:'#AA6622',chalk:'#EEEEEE',ink:'#222244',skin:'#EEAA88',cap:'#CC2222',bat:'#AA8844',score:'#EEDD22',shade:'#116633',night:'#221144'};
+function rng(seed){ let s=(seed>>>0)||0x9E3779B9; return function(){ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+function txt(ctx,t,x,y,color,size,align){ ctx.font=(size||8)+'px Silkscreen, monospace'; ctx.fillStyle=color; ctx.textBaseline='top'; ctx.textAlign=align||'left'; ctx.fillText(t,x,y); ctx.textAlign='left'; }
+function pt(c,e){ const r=c.getBoundingClientRect(); return {x:(e.clientX-r.left)*c.width/r.width, y:(e.clientY-r.top)*c.height/r.height}; }
+function fillDisc(ctx,cx,cy,r,color){ ctx.fillStyle=color; const rr=r*r; for(let dy=-r;dy<=r;dy++){ for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy<=rr) ctx.fillRect(Math.round(cx+dx),Math.round(cy+dy),1,1); } } }
+function linePx(ctx,x0,y0,x1,y1,color,dash){ ctx.fillStyle=color; const n=Math.max(1,Math.round(Math.hypot(x1-x0,y1-y0))); for(let i=0;i<=n;i++){ if(dash && (i%(dash*2))>=dash) continue; ctx.fillRect(Math.round(x0+(x1-x0)*i/n),Math.round(y0+(y1-y0)*i/n),1,1);} }
+function ditherBand(ctx,x,y,w,h,a,b){ for(let yy=y;yy<y+h;yy++){ for(let xx=x;xx<x+w;xx++){ ctx.fillStyle=((xx+yy)&1)?a:b; ctx.fillRect(xx,yy,1,1);} } }
+const reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const BAYER=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+async function askTilt(onOrient,note,okText){ try{ if(typeof DeviceOrientationEvent==='undefined'){ note.textContent='No motion sensors here; the other controls still work.'; return false; } if(typeof DeviceOrientationEvent.requestPermission==='function'){ const p=await DeviceOrientationEvent.requestPermission(); if(p!=='granted'){ note.textContent='Tilt permission was not granted; the other controls still work.'; return false; } } window.addEventListener('deviceorientation',onOrient); note.textContent=okText; return true; }catch(err){ note.textContent='Tilt is blocked in this viewer; the other controls still work.'; return false; } }
+function rollOf(ev){ let land=false; try{ land=((screen.orientation&&screen.orientation.type)||'').indexOf('landscape')===0; }catch(_){ } const a=land?ev.beta:ev.gamma; return a==null?null:a; }
+
+
+/* ---------------- Darkroom ---------------- */
+(function darkroom(){
+ const c=document.getElementById('darkCanvas'); if(!c) return; const ctx=c.getContext('2d');
+ const W=320,H=224, PW=96,PH=64, SC=2, PX=64, PY=44; const TRAY={x:48,y:30,w:224,h:156};
+ const RED=[PAL.skin,PAL.cap,PAL.dirtD,PAL.night]; const WARM=[PAL.chalk,PAL.skin,PAL.dirt,PAL.dirtD,PAL.ink];
+ const note=document.getElementById('darkNote'), lightsBtn=document.getElementById('lightsBtn'), newBtn=document.getElementById('newPrintBtn'), photoIn=document.getElementById('photoIn'), tiltBtn=document.getElementById('darkTiltBtn');
+ const L=new Float32Array(PW*PH), P=new Float32Array(PW); let s=0,sv=0,lights=false,tsec=0,drag=null,dragF=0,keyF=0,tiltF=0,verdict='',last=performance.now(),tiltOn=false,zero=null;
+ function defaultImage(){ for(let y=0;y<PH;y++) for(let x=0;x<PW;x++){ let l=0.9-0.3*(y/PH); const hill=38+7*Math.sin(x/9)+4*Math.sin(x/3.7); if(y>hill) l=0.5+0.08*Math.sin(x/5+y/3); if(y>54) l=0.32; if(y>=20&&y<28&&x>=28+(y-20)&&x<56-(y-20)) l=0.22; if(x>=30&&x<54&&y>=28&&y<54) l=0.58; if(x>=34&&x<40&&y>=34&&y<40) l=0.97; if(x>=45&&x<50&&y>=44&&y<54) l=0.2; if(Math.hypot(x-78,y-11)<5) l=1.0; if(Math.hypot(x-14,y-36)<9) l=0.28; if(x>=13&&x<16&&y>=44&&y<55) l=0.18; if(y>=54&&((x+y)%17===0)) l=0.42; L[y*PW+x]=l; } }
+ function fromImage(img){ const oc=document.createElement('canvas'); oc.width=PW; oc.height=PH; const o=oc.getContext('2d'); const r=Math.max(PW/img.width,PH/img.height); const w=img.width*r,h=img.height*r; o.drawImage(img,(PW-w)/2,(PH-h)/2,w,h); const d=o.getImageData(0,0,PW,PH).data; let mn=1,mx=0; for(let i=0;i<PW*PH;i++){ const l=(0.2126*d[i*4]+0.7152*d[i*4+1]+0.0722*d[i*4+2])/255; L[i]=l; if(l<mn)mn=l; if(l>mx)mx=l; } const sp=Math.max(0.05,mx-mn); for(let i=0;i<PW*PH;i++) L[i]=(L[i]-mn)/sp; }
+ function reset(){ P.fill(0); s=0; sv=0; lights=false; tsec=0; verdict=''; lightsBtn.textContent='Lights on'; }
+ function stats(){ let mn=9,mx=0,sum=0; for(let x=0;x<PW;x++){ const v=Math.min(1.35,P[x]); if(v<mn)mn=v; if(v>mx)mx=v; sum+=v; } return {mn,mx,mean:sum/PW}; }
+ function step(dt){ if(lights) return; const force=tiltF*7+dragF+keyF; sv+=(-12*s-1.6*sv+force)*dt; s+=sv*dt; s=Math.max(-1.2,Math.min(1.2,s)); dragF*=Math.pow(0.02,dt); const act=Math.min(1,Math.abs(sv)/1.6); const base=1/19; for(let x=0;x<PW;x++){ const depth=1+s*((x/(PW-1))*2-1)*0.9; P[x]+=base*(0.4+0.6*act)*Math.max(0.1,depth)*dt; } tsec+=dt; }
+ function draw(){ ctx.fillStyle=lights?PAL.dirtD:PAL.night; ctx.fillRect(0,0,W,H);
+  if(!lights){ ctx.fillStyle=PAL.cap; ctx.fillRect(W-44,10,28,5); ditherBand(ctx,W-52,15,44,6,PAL.cap,PAL.night); }
+  ctx.fillStyle=PAL.ink; ctx.fillRect(TRAY.x-3,TRAY.y-3,TRAY.w+6,TRAY.h+6); ctx.fillStyle=lights?PAL.wall:PAL.night; ctx.fillRect(TRAY.x,TRAY.y,TRAY.w,TRAY.h);
+  if(!lights){ ctx.fillStyle=PAL.dirtD; const e=Math.round(Math.max(0,Math.abs(s)-0.1)*10); if(s>0) ctx.fillRect(TRAY.x+TRAY.w-e,TRAY.y,e,TRAY.h); else if(s<0) ctx.fillRect(TRAY.x,TRAY.y,e,TRAY.h); }
+  const ramp=lights?WARM:RED; const n=ramp.length;
+  for(let y=0;y<PH;y++){ for(let x=0;x<PW;x++){ const l=L[y*PW+x]; let tone=1-Math.min(1.35,P[x])*(1-l); tone=Math.max(0,Math.min(1,tone)); const th=(BAYER[y&3][x&3]+0.5)/16; let idx=Math.floor((1-tone)*(n-1)+th); if(idx>n-1) idx=n-1; if(idx<0) idx=0; ctx.fillStyle=ramp[idx]; ctx.fillRect(PX+x*SC,PY+y*SC,SC,SC);} }
+  if(lights){ ctx.fillStyle=PAL.chalk; ctx.fillRect(PX-2,PY-2,PW*SC+4,1); ctx.fillRect(PX-2,PY+PH*SC+1,PW*SC+4,1); ctx.fillRect(PX-2,PY-2,1,PH*SC+4); ctx.fillRect(PX+PW*SC+1,PY-2,1,PH*SC+4); }
+  ctx.fillStyle=PAL.ink; ctx.fillRect(0,0,W,10); const mm=Math.floor(tsec/60), ss=Math.floor(tsec%60);
+  txt(ctx,(lights?'LIGHTS ON':'SAFELIGHT')+' · DEV '+mm+':'+(ss<10?'0':'')+ss,3,1,PAL.chalk);
+  let hint=''; if(!lights){ const st=stats(); hint=st.mean<0.12?'ROCK THE TRAY':(st.mean<0.85?'KEEP IT MOVING':'ABOUT DONE'); } else hint=verdict;
+  txt(ctx,hint,W-3,1,lights?PAL.score:PAL.cap,8,'right'); }
+ function frame(){ const now=performance.now(); let dt=(now-last)/1000; last=now; if(dt>0.1) dt=0.1; step(dt); draw(); requestAnimationFrame(frame); }
+ c.addEventListener('pointerdown',e=>{ const p=pt(c,e); drag={x:p.x}; try{ c.setPointerCapture(e.pointerId);}catch(_){ } e.preventDefault(); });
+ c.addEventListener('pointermove',e=>{ if(!drag) return; const p=pt(c,e); const dx=p.x-drag.x; drag.x=p.x; dragF=Math.max(-14,Math.min(14,dragF+dx*0.9)); });
+ const up=()=>{ drag=null; }; c.addEventListener('pointerup',up); c.addEventListener('pointercancel',up);
+ c.tabIndex=0; c.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft'){ keyF=-9; e.preventDefault(); } if(e.key==='ArrowRight'){ keyF=9; e.preventDefault(); } }); c.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft'||e.key==='ArrowRight') keyF=0; });
+ lightsBtn.addEventListener('click',()=>{ if(lights){ reset(); return; } lights=true; const st=stats(); const spread=st.mx-st.mn; let v=spread<0.2?'EVEN':(spread<0.45?'A LITTLE UNEVEN':'UNEVEN'); if(st.mean<0.55) v+=' · THIN'; else if(st.mean>1.2) v+=' · DARK'; verdict=v; lightsBtn.textContent='Back under the safelight'; });
+ newBtn.addEventListener('click',reset);
+ photoIn.addEventListener('change',()=>{ const f=photoIn.files&&photoIn.files[0]; if(!f) return; const url=URL.createObjectURL(f); const img=new Image(); img.onload=()=>{ try{ fromImage(img); reset(); note.textContent='Your photo is in the tray. It never leaves this page.'; }catch(err){ note.textContent='That image could not be read here; the sample sheet is back.'; defaultImage(); reset(); } URL.revokeObjectURL(url); }; img.onerror=()=>{ note.textContent='That file is not an image this browser can open.'; }; img.src=url; });
+ tiltBtn.addEventListener('click',async()=>{ if(tiltOn){ zero=null; note.textContent='Re-zeroed. Hold the phone flat, then rock it side to side.'; return; } const ok=await askTilt(ev=>{ const a=rollOf(ev); if(a==null) return; if(zero===null) zero=a; tiltF=Math.max(-1,Math.min(1,(a-zero)/30)); },note,'Tilt is live. Hold the phone flat, then rock it side to side like a tray. Tap again to re-zero.'); if(ok){ tiltOn=true; tiltBtn.textContent='Re-zero the tilt'; } });
+ defaultImage(); reset(); requestAnimationFrame(frame);
+})();
+})();
+</script>
+</body>
+</html>
