@@ -295,6 +295,60 @@ enum Synth {
         return finish(out, gain: 0.7)
     }
 
+    // MARK: - The rest of the organ (#17): three more tunes for `Synth.organ`
+
+    // Claude's transcriptions, unreviewed — nobody has heard these against the real songs yet
+    // (DESIGN.md §11). All three are public domain on purpose: "Three Blind Mice" is a trad.
+    // English round first printed in 1609, Chopin's "Marche funèbre" (Piano Sonata No. 2) was
+    // written in 1837, and "Take Me Out to the Ball Game" (Norworth/Von Tilzer) is from 1908.
+    // None of them is the 1946 "Charge!" fanfare or any other stadium prompt still under licence.
+
+    /// Beats → seconds at a tune's own tempo, so each tune reads as a note table plus one knob.
+    private static func beats(_ n: Double, bpm: Double) -> Double { n * 60 / bpm }
+
+    /// *Three Blind Mice*, the opening call — "Three blind mice, three blind mice", mi-re-do
+    /// twice. There is no third strike in this game, so the cue is two called strikes in a row
+    /// (`DerbyMachine.calledStrikesInARow`); it fires with no lead-in, so it must clear the gap
+    /// (`missHold` + `windup`, ~1.7 s) on its own, which this comfortably does at 1.5 s.
+    static let threeBlindMiceBPM = 240.0
+    static func threeBlindMice() -> [Float] {
+        let b = { Self.beats($0, bpm: threeBlindMiceBPM) }
+        let tune: [(midi: Int?, seconds: Double)] = [
+            (64, b(1)), (62, b(1)), (60, b(1)), (64, b(1)), (62, b(1)), (60, b(1)),
+        ]
+        return organ(tune, gain: 0.5)
+    }
+
+    /// Chopin's *Marche funèbre*, the opening bars' repeated-note figure in B-flat minor: three
+    /// beats on the tonic and a turn, twice. Fires (with `mournStreak`'s usual lead-in) when a
+    /// home-run streak of 5+ dies — `streakOver`'s three notes down still cover 3–4, unchanged.
+    /// Real tempo is a slow Lento; this is compressed hard, the same trade `chargeRun` makes, to
+    /// clear the tightest gap (a called strike ending the streak) at well under a second.
+    static let funeralMarchBPM = 300.0
+    static func funeralMarch() -> [Float] {
+        let b = { Self.beats($0, bpm: funeralMarchBPM) }
+        func cell(landingOn turn: Int) -> [(midi: Int?, seconds: Double)] {
+            [(58, b(0.5)), (58, b(0.5)), (58, b(0.5)), (turn, b(1))]
+        }
+        return organ(cell(landingOn: 61) + cell(landingOn: 58), gain: 0.5)   // Bb3 x3, Db4, then home
+    }
+
+    /// *Take Me Out to the Ball Game*, the chorus's first two lines — "Take me out to the ball
+    /// game, take me out with the crowd" (DESIGN.md §11's "first 8 bars" by default). Plays over
+    /// the stats board, which stops the machine clock, so there is no gap to clear here.
+    static let takeMeOutBPM = 150.0
+    static func takeMeOut() -> [Float] {
+        let b = { Self.beats($0, bpm: takeMeOutBPM) }
+        let tune: [(midi: Int?, seconds: Double)] = [
+            (72, b(1)), (72, b(1)), (67, b(1)), (64, b(1)), (62, b(1)), (62, b(1)), (60, b(1.5)),
+            (72, b(1)), (72, b(1)), (67, b(1)), (64, b(1)), (62, b(1)), (62, b(1.5)),
+        ]
+        return organ(tune, gain: 0.45)
+    }
+
+    /// How long `takeMeOut` lasts: when the stats board's organ may loop it once more.
+    static let takeMeOutSeconds = 5.6
+
     // MARK: - Beeps and boops
 
     /// Square-wave notes played one after another.

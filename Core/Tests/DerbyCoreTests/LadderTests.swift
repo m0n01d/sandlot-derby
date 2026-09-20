@@ -136,4 +136,39 @@ final class LadderTests: XCTestCase {
         XCTAssertNil(word(park: 1, quality: 1, power: 1, angle: 28))       // a home run needs no note
         XCTAssertNil(word(park: 4, quality: 0, power: 0.3, angle: -20))    // nobody coaches in The Show
     }
+
+    /// #17: a sandlot has no organist. Every rung above it does, and so does The Show, which has
+    /// no rung at all.
+    func testOnlySingleALacksAnOrgan() {
+        XCTAssertFalse(DerbyMachine(seed: 1, park: Park.generate(number: 1)).hasOrgan)
+        XCTAssertTrue(DerbyMachine(seed: 1, park: Park.generate(number: 2)).hasOrgan)
+        XCTAssertTrue(DerbyMachine(seed: 1, park: Park.generate(number: 3)).hasOrgan)
+        XCTAssertTrue(DerbyMachine(seed: 1, park: Park.generate(number: 4)).hasOrgan)
+        XCTAssertNil(DerbyMachine(seed: 1, park: Park.generate(number: 4)).rung)
+    }
+
+    /// #17: *Three Blind Mice*'s cue. There is no third strike in this game, so it is two in a
+    /// row, not three, and it doesn't repeat if the streak keeps going.
+    func testTwoCalledStrikesInARowFiresOnceNotOnTheThird() {
+        var m = DerbyMachine(seed: 21)                       // Single-A: every pitch is a strike
+        toNextPitch(&m)
+        XCTAssertEqual(m.calledStrikesInARow, 0)
+        let first = run(&m, until: .windup)                  // taken, not swung at
+        XCTAssertFalse(first.contains(.calledStrikesInARow))
+        XCTAssertEqual(m.calledStrikesInARow, 1)
+
+        toNextPitch(&m)
+        let second = run(&m, until: .windup)
+        XCTAssertTrue(second.contains(.calledStrikesInARow))
+        XCTAssertEqual(m.calledStrikesInARow, 2)
+
+        toNextPitch(&m)
+        let third = run(&m, until: .windup)
+        XCTAssertFalse(third.contains(.calledStrikesInARow))  // fired once, not on every strike after
+        XCTAssertEqual(m.calledStrikesInARow, 3)
+
+        toNextPitch(&m)
+        m.sliceMissed()                                       // any swing breaks the streak
+        XCTAssertEqual(m.calledStrikesInARow, 0)
+    }
 }
