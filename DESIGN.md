@@ -398,8 +398,13 @@ gameplay effect, living beside the scene that draws them. Defaults are the proto
 | `noDoubterMarginFeet` / `wallScraperMarginFeet` | `StatRules` | 50 / 12 | how far past the wall a HR landed |
 | `moonshotApexFeet` / `laserMaxAngle` | `StatRules` | 150 ft / 20° | the other two HR kinds |
 | `lineDriveFrom` / `flyBallFrom` / `popUpFrom` | `StatRules` | 10° / 25° / 50° | Statcast batted-ball classes |
+| `homeRunsToClear` | `ProgressRules` | 3 | home runs **in this park**, not in a row, that clear it and advance to the next (§10, #40) |
+| `minSwingsBeforeRecords` / `priority` | `RecordRules` | 25 / longest, HR streak, exit velo, apex, hang time, fewest pitches | when the celebration turns on, and which record wins when more than one fell on the same swing (§10, #41) |
+| `progressLampX` / `Y` / `Size` / `Gap` | `AtBatScene` (App) | 166 / 85 / 3 / 2 | the outfield scoreboard's home-run-to-clear lamps, one per home run the count wants (§10, #40) |
+| `parkProgressY` / `recordY` / `recordNameY` / `holdTextScale` | `WideScene` (App) | 76 / 152 / 164 / 2× | where the result hold draws `HR N OF 3` / `PARK CLEARED` and `NEW RECORD` / the record's name (§10, #40, #41) |
 | `threeBlindMiceBPM` / `funeralMarchBPM` / `takeMeOutBPM` | `Synth` | 300 / 225 / 150 | tempo of the three organ tunes (§11) |
 | `statsOrganDelay` | `SoundBoard` | 1.0 s | delay before *Take Me Out* starts over the stats board |
+| `newRecordTune` / `newRecordSeconds` | `Synth` | six-note figure / 0.93 s (computed from the tune) | the record flourish — an original rising arpeggio, never licensed — plus the same six notes beeped where the park has no organist (§10, #41) |
 | the streak table, plus shell timing and shape | `FireworksRules` | table | how many shells a HR streak (or the call-up) earns, and how each shell launches, bursts and falls (§17) |
 | the cloud, breeze, stands and night-sky ranges | `SceneryRules` | table | clouds, breeze, stands height/depth by tier, night towers and their depth/height/bank shape, moon odds, forty seeded stars and their blink duty cycle, and the bird band (§17) |
 | the night kit's motion and the bird flock | `SkyLifeRules` | table | star blink timing, the lights' chase rate, the crowd's bounce, flag flutter, the bird flock's size, slot interval, speed and wingbeat, and the blimp's slot and speed, the searchlights' sweep and period, and the comet's crossing time (§17, #5) |
@@ -417,9 +422,12 @@ gameplay effect, living beside the scene that draws them. Defaults are the proto
 | `contractRowBand` / `contractMinimumSliceLength` | `StatsScene` (App) | 6 / 12 | hit test for the stats-board contract row (§16) |
 | `pitches` / `minParksCleared` / `epochDay` / `shareLink` | `WarmUpRules` | 10 / 1 / 20260401 (placeholder) / "sandlotderby.app" (placeholder) | the day's ten, the gate before a first Warm Up, and the day-count epoch and share link, both placeholders until ship (§18) |
 | the card's panel, cell grid, feet and `SHARE` geometry | `WarmUpCardLayout` (App) | table | where the result card draws each line, as `ContractCardLayout` does the contract's (§18) |
-| `canvasWidth`×`canvasHeight` / `scale` / `framesPerSecond` / `framesPerYield` | `ReplayClipRules` (App) | 320×224 / 4× (→ 1280×896) / 60 / 1 | the clip's fixed frame whatever the phone is, its whole-number upscale, and the encoder's frame rate and yield cadence (§19) |
+| `newBestGap` / `newBestScale` | `WarmUpCardLayout` (App) | 8 / 1× | how far `NEW BEST` sits beside a beaten stat on the Warm Up card, and its scale (§18, #41) |
+| `leadInSeconds` / `offeredFor` / `loopHoldSeconds` | `ReplayRules` | 0.4 s / home run \| off the wall / 0.8 s | how much pitch a replay opens with, what earns the camera in the corner, and how long the on-screen loop rests on the landing number (§19, #42) |
+| `width` / `height` / `inset` / `top` / `pad` / `tapSlack` | `ReplayIconLayout` (App) | 11 / 8 / 8 / 8 / 14 / 6 | the camera in the corner's picture size, its position past `safeRight`, and its tap target grown to thumb size (§19, #42) |
+| `wordY` / `wordScale` / `inset` / `pad` / `tapSlack` | `ReplayScreenLayout` (App) | 8 / 1 / 8 / 12 / 8 | where `SHARE` sits on the replay screen and its grown tap target (§19, #42) |
+| `canvasWidth`×`canvasHeight` / `scale` / `framesPerSecond` / `framesPerYield` | `ReplayClipRules` (App) | 320×224 / 4× (→ 1280×896) / 60 / 1 | the clip's fixed frame whatever the phone is, its whole-number upscale, and the encoder's frame rate and yield cadence — the export measurement vindicates `framesPerYield` at 1 (§19, #42) |
 | `bitrate` / `maxSeconds` / `crop` | `ReplayClipRules` (App) | 12 Mbit/s / 20 s / `.landscape` | encoder quality, a stop rather than a length, and v1's only crop (§19) |
-| `WideScene.longPressSeconds` | `WideScene` (App) | 0.35 s | how long the landing-number press must hold to trigger a clip (§19) |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.
@@ -438,15 +446,17 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
   #23.
 - **M4 — parks and score.** Seeded parks, night swap, tally persistence, park advance on HR.
 - **M5 — ship.** Built: audio and haptics, the organ tunes, `parkCeiling`, the contract card,
-  StoreKit 2 wiring with a local `.storekit` file, the Warm Up (#3, §18), the replay clip (#4,
-  §19), §17 steps 1–5 (fireworks, sky, backdrops, the night kit, birds, flag flutter and crowd
-  bounce), and park variety (#5) and §17 step 6 (the bird strike, the lights-out shot). Not built
-  or not exercised: the purchase, pending, refund and restore paths have never been run for real —
-  a `.storekit` configuration only takes effect when the app is launched from Xcode, never from
-  `simctl` — the share sheets (`UIActivityViewController` cannot be reached from `simctl` either,
-  so the Warm Up's `SHARE` and the replay's long press have only been confirmed to draw and
-  hit-test, never touched by a finger), plus the app icon, Game Center, TestFlight and the store
-  listing.
+  StoreKit 2 wiring with a local `.storekit` file, the Warm Up (#3, §18), the instant replay (#4,
+  rebuilt around a camera icon and a lead-in, #42, §19), §17 steps 1–5 (fireworks, sky, backdrops,
+  the night kit, birds, flag flutter and crowd bounce), park variety (#5) and §17 step 6 (the bird
+  strike, the lights-out shot), three-home-run parks (#40, §10) and the record celebration (#41,
+  §10). Not built or not exercised: the purchase, pending, refund and restore paths have never been
+  run for real — a `.storekit` configuration only takes effect when the app is launched from Xcode,
+  never from `simctl` — the camera icon, `SHARE` and the share sheet have never been touched by a
+  finger (`UIActivityViewController` cannot be reached from `simctl` either, so all three have only
+  been confirmed to draw and hit-test through the DEBUG arguments and screenshots), and nothing in
+  this wave has been measured on the iPad mini 6 Dwight actually plays on, plus the app icon, Game
+  Center, TestFlight and the store listing.
 
 ## 14. Open questions
 

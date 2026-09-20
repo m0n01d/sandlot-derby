@@ -31,7 +31,10 @@ routing, PR screenshot and grooming rules do.
   (`RareEvents.detect` — finds every rare thing a batted ball passes through: a bird, the blimp,
   the out-of-town board and its lit pane, the light standard over the wall, §17 step 6, #5) and
   `SideView.swift` (`SideViewRules` / `SideView.framing` — the side view's wide and close framing,
-  hoisted out of `WideScene` so a rare event can be judged against where the ball is drawn).
+  hoisted out of `WideScene` so a rare event can be judged against where the ball is drawn). Wave 4
+  (2026-09-20) added `Records.swift` (`Records.kind(before:after:swing:)` — a pure comparison of
+  the tally before and after a swing, plus `RecordRules`/`RecordKind`, so the live game, a replay
+  clip and a test all agree on which record fell, §10, #41).
 - `App/` — the iOS app. The Xcode project is generated and git-ignored:
   `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
   scenes (`AtBatScene`, `WideScene`, `ContractScene`, `WarmUpCardScene`) driven by `DerbyMachine`
@@ -44,7 +47,13 @@ routing, PR screenshot and grooming rules do.
   `App/SandlotDerby.storekit` (StoreKit 2, no server). Wave 2 added `WarmUpCardScene.swift` (the
   Warm Up's result card, modelled on `ContractScene`, §18), `ReplayRenderer.swift` (renders a
   `Replay` to an off-screen `.mp4`, §19) and `SkyArt.swift` (turns `SkyLife`'s answers into
-  palette pixels — stars, towers, birds, §17).
+  palette pixels — stars, towers, birds, §17). Wave 4 added `ReplayScene.swift`
+  (`ReplayScreenLayout` plus the replay screen itself — the swing again, in real time, hard-cut
+  over the paused live machine, §19, #42), `ReplayPlayback.swift` (`ReplayPlayback` — ticks a
+  private rebuilt machine and draws it through off-screen copies of `AtBatScene`/`WideScene`, the
+  one path both the replay screen and the exported clip drive, §19) and `ReplayIcon.swift`
+  (`ReplayIconLayout` plus the camera in the corner and its hit test, replacing #4's long press,
+  §19, #42).
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
@@ -66,9 +75,11 @@ overrides whatever StoreKit itself would say.
 | `-showstats` | once an `-autoslice` career reaches 12+ pitches at a windup, cuts to the stats board once, for a screenshot | no | no |
 | `-park <n>` | start in park `n` instead of wherever the save left off | yes | yes |
 | `-streak <n>` | start the career with a home-run streak of `n` already going | yes | yes |
+| `-records` | a career standing one home run short of a record: seeds the 25 swings the gate asks for, a longest any home run beats, and a fewest-to-clear that clearing a park beats; pair with `-park <n>` for a park with an organ, since Single-A has no organist (§10, #41) | yes | yes |
 | `-warmup <day>` | force the Warm Up for a `YYYYMMDD` day, faking the one cleared park the gate asks for (§18) | yes | yes |
 | `-warmupcard` | jump straight to the Warm Up's result card with a made-up ten, the way `-streak` fakes a streak (§18) | yes | yes |
-| `-replay <path>` | with `-autoslice`, write the first home run's clip to `<path>` (absolute) or a filename in Documents, and log where it went (§19) | yes | yes |
+| `-replayscreen` | with `-autoslice`, opens the replay screen once, at the windup after the first swing that earns the camera, and leaves it there — for screenshots of #42 | yes | yes |
+| `-replay <path>` | implies `-replayscreen`; with `-autoslice`, writes the first home run's clip to `<path>` (absolute) or a filename in Documents **from the replay screen, game paused** — through the very same door `SHARE` uses, not during live play — and logs where it went (§19, #42) | yes | yes |
 | `-skyclock <seconds>` | winds the sky's clock forward so a screenshot can reach a bird flock without waiting; moves scenery only and fakes no career state, so it is on **neither** list (§17) | no | no |
 | `-autoloft` | with `-autoslice`, the dev swing takes a steep 53° stroke instead of 27°, so it puts up a towering fly the birds and the blimp can be pinned against; like `-autobarrel` it changes only the stroke and fakes no career state, so it is on **neither** list (§17, #5) | no | no |
 | `-mute` | mutes all sound | no | no |
@@ -102,7 +113,7 @@ overrides whatever StoreKit itself would say.
   ```sh
   FRAMES=30 GAP=0.2 scripts/shots.sh /path/to/checkout-or-worktree "iPhone 17" /tmp/out -autoslice -showstats
   ```
-  Six lessons from waves 1–3:
+  Nine lessons from waves 1–4:
   - `simctl`'s screenshot capture lags the game clock, so landing a frame inside a beat's ~1 s
     window takes dense bursts (short `GAP`, high `FRAMES`) and retries, not one lucky shot.
   - A `.storekit` configuration only applies when the app is launched from Xcode (or an
@@ -125,6 +136,19 @@ overrides whatever StoreKit itself would say.
     xcrun simctl io <udid> recordVideo --codec h264 out.mp4   # stop it with Ctrl-C (SIGINT)
     ffmpeg -i out.mp4 -vf fps=30 v%03d.png
     ```
+  - Dwight plays on a real **iPad mini 6**, not a phone (wave 4, #42's three complaints came from
+    that device). UI work should be checked on an iPad mini simulator as well as a phone:
+    `DEVICE_TYPE="iPad mini (A17 Pro)" scripts/shots.sh /path/to/checkout "derby-ipad" /tmp/out
+    -autoslice` (see the script's header comment for the full `DEVICE_TYPE`/`ROTATE` contract).
+  - **Debug builds are far slower than Release at pixel work** — a replay export measured 16 s in
+    Debug and 3 s in Release before #43's fixes (§19). Judge performance in Release:
+    `xcodebuild -configuration Release …`. A build installed from Xcode onto a device is Debug
+    unless the scheme says otherwise, so a laggy Xcode run does not by itself mean a laggy shipped
+    build.
+  - The iOS Simulator tap/capture tools (`xcrun simctl`, this project's screenshot and video
+    recipes) need `xcode-select` pointing at `Xcode.app`, not just the Command Line Tools —
+    switching it needs Dwight's password, so an agent that hits an `xcode-select` error should say
+    so rather than trying to work around it.
 
   `SURVEY=1 swift test --filter RareEventSurvey` un-skips `RareEventTests`' two rarity-survey
   tests, which sweep every park (and, for the sky, every half-second of the clock) against the
@@ -141,10 +165,13 @@ See DESIGN.md §13. M0–M4 are done. Wave 1 of M5 merged 2026-09-19: #22 (Warm 
 (fireworks). Wave 2 merged the same day: #30 (the replay clip, §19), #31 (the Warm Up itself,
 §18), #32 (the night kit, birds, flag flutter, crowd bounce and the at-bat foul poles — §17 steps
 4–5, #28). Wave 3 merged 2026-09-20: #34 (the replay-during-Warm-Up fix, #33, and the wave 2 docs
-batch) and #37 (park variety, #5, §17 step 6). Audio, haptics, the organ tunes, `parkCeiling`, the
-contract card, StoreKit 2 wiring (a local `.storekit` file), the Warm Up, the replay clip and park
-variety are all in; the purchase/pending/refund/restore paths have not been exercised for real,
-since a `.storekit` configuration only works launched from Xcode. Next: every buildable issue is
+batch) and #37 (park variety, #5, §17 step 6). Wave 4 merged 2026-09-20: #43 (the instant replay
+rebuilt around a camera icon and a lead-in, closing #42, §19) and #44 (three-home-run parks and the
+record celebration, closing #40 and #41, §10). Audio, haptics, the organ tunes, `parkCeiling`, the
+contract card, StoreKit 2 wiring (a local `.storekit` file), the Warm Up, the instant replay, park
+variety, three-home-run parks and the record celebration are all in; the purchase/pending/refund/
+restore paths have not been exercised for real, since a `.storekit` configuration only works
+launched from Xcode. Next: every buildable issue is
 closed; what remains is Dwight's — #11 (pricing, §16) needs the purchase, pending, refund and
 restore paths run from Xcode, and the review of every decision still marked unreviewed; then the
 rest of M5 (the app icon, Game Center, TestFlight, the store listing). `docs/watch.md` is a
