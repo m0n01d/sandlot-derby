@@ -1110,14 +1110,23 @@ and `streakNow`, with tests~~ → ~~the save~~ → ~~headline and scoreboard~~ �
 4. The Watch (`docs/watch.md`) leaves this phone-only in v1. Ten pitches is a very wrist-sized
    game; revisit if the watch gets past its W2.
 
-## 19. The replay clip
+## 19. The instant replay
 
-> **Status: built 2026-09-19 (#4), unreviewed.** Dwight approved the idea ("Replay is a great
-> idea", #2 item 4); every decision below is Claude's unless it is quoted from the issue.
+> **Status: rebuilt 2026-09-20 (#42), unreviewed.** Dwight played the first version (#4, #30, #34)
+> on a real iPad mini 6 on 2026-09-20 and asked for three things:
+>
+> - *"for clips the replays needs to start a few frames before the bat makes contact."*
+> - *"its VEEERRRRYYY slow to export on my ipad mini 6. it makes the game laggy and jittery while
+>   its clipping in the background."*
+> - *"instead of tap and hold which is awkward. just show a camera icon in the corner or something
+>   for a instant replay, and then they can save and share from there."*
+>
+> Those three are decided. **Everything else below is Claude's and unreviewed**, including which
+> balls earn a replay, where the camera sits, one corner word instead of two, and the loop.
 
-A home run is re-rendered off screen, frame by frame, into an H.264 `.mp4` and handed to the
-system share sheet. Not a screen recording: there is no ReplayKit, no permission prompt, and
-nothing the player sees is captured. The clip is drawn again from a record of how the swing
+A swing worth seeing again can be watched again, on the glass, and then written to an H.264 `.mp4`
+and handed to the system share sheet. Not a screen recording: there is no ReplayKit, no permission
+prompt, and nothing the player sees is captured. It is drawn again from a record of how the swing
 happened, by the same code that drew it live.
 
 **Why it is possible at all.** Every frame is already a pure function of `DerbyMachine` and the
@@ -1125,94 +1134,176 @@ park (§8, §17). Flight is integrated once at contact and played back; the sky,
 stands and the fireworks are functions of the park number and the machine's own clock, never of
 `Date()`. So a machine rebuilt from the right few numbers draws the identical picture.
 
-**The record** (`Core/Sources/DerbyCore/Replay.swift`). `Codable`, `Equatable`, about half a
-kilobyte. It keeps the *inputs*, never anything derived:
+### The camera in the corner
+
+A pixel camera, eleven by eight, `chalk` body with an `ink` lens, in the top right of both play
+views — the one corner neither HUD writes in (the at-bat view has the headline top left and the
+speed bottom left; the flight view has the exit velocity top left and the park name bottom right).
+It is pinned past `safeRight`, so it clears a phone's Dynamic Island in either landscape and sits
+8 px in on an iPad, where the inset is zero.
+
+It is offered after a batted ball worth seeing again — a home run, or one off the wall
+(`ReplayRules.offeredFor`). It stands through that swing's result hold, the next windup, the next
+pitch and a miss's hold, and it is gone the moment the next ball is hit, because then there is a
+new swing to watch. It is never up over a ball in the air.
+
+Its target is the picture grown by 14 px on every side, the way the outfield scoreboard's tap is
+grown. **A tap on it is never a swing**: while a finger is inside it and has not moved,
+`AtBatScene.fingerDown` reads false, so a finger resting there when a pitch times out is not
+answered as a swing and a miss (§3, #20). The moment it moves far enough to be a slice, it is one.
+
+The long press of #4 is gone, and so is the machinery that waited for a calm beat to put a sheet up
+on.
+
+### The replay screen
+
+A tap on the camera is a hard cut to `ReplayScene`, with the live machine standing still behind it
+exactly as it stands behind the stats board and the two cards. **Nothing is rendered or encoded to
+watch a replay.** `ReplayPlayback` ticks a private machine rebuilt from the record and draws it
+through off-screen copies of `AtBatScene` and `WideScene` — the same `render(into:)` the player
+saw — so a frame of a replay costs what a frame of the game costs. That is the whole of the second
+complaint fixed by construction rather than by being made cheaper.
+
+It loops, resting `ReplayRules.loopHoldSeconds` on the landing number. One word, `SHARE`, top right
+on an ink plate, in the corner the camera that opened it was in. A tap anywhere else is a hard cut
+back to the camera the game was paused on — the landing number if one is still up, the plate
+otherwise — and the machine picks its own clock up where it left it.
+
+**One word, not two.** Dwight asked to "save and share from there"; the system share sheet's own
+first row is *Save Video*, so `SHARE` is both. A `SAVE` of our own would mean a photo-library
+permission prompt, an `Info.plist` key and a failure path a game with no toasts has no way to speak
+about. Claude's call, unreviewed.
+
+**Silent in v1.** The cues that are transitions — `.clearedWall`, `.hitWall`, `.landed`, and the
+fireworks pops, which `SoundBoard` already drives off `tick`'s own return — would be a few lines to
+replay. The crack of the bat would not: it fires from `GameController.recordSlice`, not from a
+transition, and neither does the haptic. Rather than ship a replay that cheers but never cracks,
+v1 is silent.
+
+### The record
+
+`Core/Sources/DerbyCore/Replay.swift`. `Codable`, `Equatable`, about half a kilobyte. It keeps the
+*inputs*, never anything derived:
 
 - the park by value (number, wall distance, wall height, night), so a clip does not move if the
   `Ladder` or `Park.Rules` later move the wall;
 - the pitch (type by name, speed, strike, target);
 - the `SliceCrossing` the finger made;
 - the whole `Tally` as it stood **the instant before** `slice(_:)` ran;
-- `marks`: the slash direction and the finger's trail, the only two things the contact freeze
-  draws that the machine knows nothing about (§3).
+- `marks`: the slash direction, the finger's trail, and **when each of those samples was made**,
+  in seconds relative to contact;
+- `pitchElapsedAtContact`: the pitch beat's own clock as the slash landed;
+- the Warm Up in progress, whole, if there was one (#33).
 
-`Replay.machine(from:)` builds a machine at that pitch (`DerbyMachine.atPitch`, the one door that
-exists for it) and replays the single `slice(_:)` call. The launch, the flight, the cue indices,
-the hitstop, the fireworks seed and the landing number are therefore all recomputed by the game's
-own code and cannot drift from it. `ReplayTests` ticks the original and the rebuild side by side
-at 1/60 and asserts every number a frame reads is equal on every frame, from the contact freeze
-to the end of the landing number — including the drawn fireworks particles.
+The last three are optional, so a record written before they existed still decodes — and replays
+from the freeze, the way it always did.
 
-**The clip.** §3's beats and nothing else: the contact freeze, one white frame, the flight across
-both cameras, the landing number. `ReplayRenderer` calls the very same `AtBatScene.render(into:)`
-and `WideScene.render(into:)` on off-screen copies of those scenes, so there is no second copy of
-the drawing code to keep in step. Frames go up by a whole number with nearest neighbour; no
-filtering, ever. Always 320×224 at heart, never the phone's wider canvas, so a clip made on any
-phone is the same picture. The park number and, at two or more, the streak are already on those
-frames (§10, §17), which is the stamp the issue asks for — "always stamp the park number so the
-reply is *let me try park 87*".
+`Replay.machine(from:)` builds a machine at the contact freeze and replays the single `slice(_:)`
+call, so the launch, the flight, the cue indices, the hitstop, the fireworks seed and the landing
+number are all recomputed by the game's own code and cannot drift from it.
 
-**The trigger.** A long press anywhere during the result hold of a home run. No button, no menu,
-no toast: for 1.30 s the landing number is the only thing on the screen, so it is the target. The
-press has to mature *during* the hold, so `WideScene` watches the clock rather than waiting for
-the finger to lift — a finger still down at the cut would otherwise never be answered. Drawing
-takes longer than the hold it was asked in, so it runs behind the game: the next pitch is never
-held up, and if the player is already swinging again the sheet waits for the next miss or landing
-number. While a clip is being drawn one word, `CLIP`, sits in the corner in the ordinary 3×5 face.
-That is the whole of the interface.
+### The lead-in
 
-**Knobs** (`ReplayClipRules`, `App/Sources/ReplayRenderer.swift`):
+`Replay.leadInMachine(from:)` stands a second machine in `.pitch`, `ReplayRules.leadInSeconds`
+short of the slash, with `secondsPlayed` wound back by the same amount so the sky does not drift
+ahead and jump back at the cut. A replay ticks that machine forward — the last of the pitch
+arriving, the finger's stroke growing, drawn by `AtBatScene`'s own live-trail code with the
+recorded samples in place of the finger's — and then **throws it away**: the freeze and everything
+after it come from `Replay.machine(from:)`, unchanged.
+
+That hand-over is the point. From the freeze on a rebuild is **bit exact**, and #33's frame-for-frame
+tests hold word for word. A lead-in accumulates, and the live game ticked that pitch at whatever
+the display gave, so its claim is the weaker and honest one: it draws the same **pixels** — the
+ball on the same whole design pixel, the same beat, pitch and labels — with the clocks agreeing to
+far below a frame. `ReplayLeadInTests` walks the live pitch and the rebuilt lead-in side by side at
+1/60 and checks exactly that, for a career swing and for a Warm Up swing.
+
+### The clip
+
+§3's beats and nothing else, now with the pitch in front of them: the last 0.4 s of the pitch, the
+contact freeze, one white frame, the flight across both cameras, the landing number.
+`ReplayRenderer` drives the very same `ReplayPlayback` the screen does, at a fixed 1/60, so what is
+written and what was watched are the same picture. Frames go up by a whole number with nearest
+neighbour; no filtering, ever. Always 320×224 at heart, never the phone's wider canvas, so a clip
+made on any device is the same picture. The park number and, at two or more, the streak are already
+on those frames (§10, §17), which is the stamp #4 asked for.
+
+**What it costs.** Measured 2026-09-20 in the iPhone 17 simulator on an Apple-silicon Mac, one
+369-frame clip (6.15 s of video, 1280×896, 60 fps), milliseconds a frame:
+
+| | render | buffer | upscale | append | wait | yield | **wall** |
+|---|---|---|---|---|---|---|---|
+| Debug, before | 2.256 | 0.034 | 38.108 | 0.036 | 0.000 | 2.486 | **15.97 s (2.60×)** |
+| Debug, after | 2.242 | 0.017 | 0.746 | 0.020 | 0.548 | 0.845 | **1.74 s (0.28×)** |
+| Release, before | 0.061 | 0.055 | 0.357 | 0.040 | 7.477 | 0.054 | **3.16 s (0.51×)** |
+| Release, after | 0.041 | 0.101 | 0.229 | 0.018 | 2.803 | 0.046 | **1.35 s (0.22×)** |
+
+Two things were slow, and neither was the one that looked slow:
+
+1. **The upscale, in a Debug build.** Writing the scaled row a pixel at a time cost 38 ms a frame,
+   because an `UnsafeMutablePointer` subscript is an unspecialised generic access at `-Onone` and
+   there were 286,720 of them. It is now one `memset_pattern4` per **run** of identical design
+   pixels and one `copyMemory` per repeated row. This art is one palette line with no gradients and
+   no anti-aliasing (§9), so a row of sky is a single run 320 wide: 38.1 ms → 0.75 ms.
+2. **Waiting on the encoder.** The loop used to `Task.sleep` while the writer said it had had
+   enough. A sleep holds the main thread's turn and the encoder falls further behind; holding it
+   for 100 ms at a time took the same clip to 12.4 s, nearly all of it waiting. It now yields
+   instead, and `framesPerYield` stays 1 — the measurement vindicates the knob that #4 guessed at.
+   A yield costs 0.046 ms in a Release build, not the milliseconds it was assumed to.
+
+Dwight's A15 will be slower than this Mac, and the simulator's H.264 encoder is software where a
+device's is hardware, so the two differences pull in opposite directions. **Nothing here has been
+measured on the iPad mini 6 itself.**
+
+**Knobs**
+
+`ReplayRules` (`Core/Sources/DerbyCore/Replay.swift`):
 
 | Knob | Value | What it is |
 |---|---|---|
-| `canvasWidth` × `canvasHeight` | 320 × 224 | the design frame, fixed for clips whatever the phone is |
+| `leadInSeconds` | 0.4 | how much pitch a replay opens with — 24 frames at 60 |
+| `offeredFor` | `[.homeRun, .offTheWall]` | what earns the camera in the corner |
+| `loopHoldSeconds` | 0.8 | how long the on-screen loop rests on the landing number |
+
+`ReplayIconLayout` (`App/Sources/ReplayIcon.swift`): `width` 11, `height` 8, `inset` 8, `top` 8,
+`pad` 14, `tapSlack` 6.
+
+`ReplayScreenLayout` (`App/Sources/ReplayScene.swift`): `wordY` 8, `wordScale` 1, `inset` 8,
+`pad` 12, `tapSlack` 8.
+
+`ReplayClipRules` (`App/Sources/ReplayRenderer.swift`):
+
+| Knob | Value | What it is |
+|---|---|---|
+| `canvasWidth` × `canvasHeight` | 320 × 224 | the design frame, fixed for clips whatever the device is |
 | `scale` | 4 | whole-number upscale, nearest neighbour → 1280 × 896 |
 | `framesPerSecond` | 60 | and the exact `dt` the machine is ticked at |
 | `bitrate` | 12 Mbit/s | generous, so one white frame survives as one white frame |
-| `maxSeconds` | 20 | a stop, not a length; a home run is about four |
-| `framesPerYield` | 1 | frames drawn between yields, so the game stays playable behind it |
+| `maxSeconds` | 20 | a stop, not a length; a home run with its lead-in is about six |
+| `framesPerYield` | 1 | frames between yields — what keeps the encoder fed, see above |
 | `crop` | `.landscape` | v1 is the native frame; see below |
-| `WideScene.longPressSeconds` | 0.35 | long enough not to misfire, twice over inside the hold |
 
-DEBUG: `-replay <path>` with `-autoslice` writes the first home run's clip and logs the path, so a
-clip can be made with nothing touching the glass. Absolute paths are used as given, anything else
-is a filename in Documents. It is in `SaveStore`'s no-save list and `Store`'s robot list.
+DEBUG: `-replayscreen` with `-autoslice` opens the replay screen at the windup after the first
+swing that earns the camera, and leaves it there. `-replay <path>` implies it and then writes that
+clip out, logging the path and the millisecond table above — so a clip is made through the very
+same door `SHARE` is, with the game paused, rather than behind a running one. Both are in
+`SaveStore`'s no-save list and `Store`'s robot list.
 
 **Open:**
-1. **Crop.** The game is landscape and the clip is its native frame. TikTok and Reels want square
+1. **One corner word or two.** `SHARE` opens the sheet, whose first row saves. If Dwight wants a
+   literal `SAVE` it means a photo-library permission prompt and an `Info.plist` key.
+2. **Crop.** The game is landscape and the clip is its native frame. TikTok and Reels want square
    or vertical, which would mean either pillar-boxing (honest, wastes half the frame) or a second
    framing that is not the one the player saw. The knob is there; the variant is not built, and it
    is a design question, not a rendering one.
-2. **Audio.** None in v1. `Synth`/`SoundBoard` are pure and already drive off the same cues
-   `DerbyMachine.tick` returns, so the crack, the crowd and the fireworks pops could be rendered
-   to a buffer on the same fixed clock and muxed in as a second `AVAssetWriter` track. Worth doing
-   before this is a share loop anyone uses; a silent clip of a pixel home run is half the brag.
-3. **The link.** `Replay` is `Codable` and tiny, so the clip could carry a park number and a swing
+3. **Audio.** See "Silent in v1" above.
+4. **The link.** `Replay` is `Codable` and tiny, so the clip could carry a park number and a swing
    that another player could *play*, not just watch. Nothing is built for it and §14 Q4 still says
    sharing is a screenshot, so this needs a yes before anyone builds a URL scheme for it.
-4. **Where the clip goes.** It is written to the temporary directory and never cleaned up
+5. **Where the clip goes.** It is written to the temporary directory and never cleaned up
    explicitly; iOS reclaims it. If sharing becomes common that should become a real cache policy.
-5. **What it costs to draw.** Measured in the simulator on a **Debug** build: about 5 s of wall
-   time for a 5.5 s clip, with the game behind it at ~20 fps (it was 7 fps at `framesPerYield` 3,
-   which is why that knob is 1). The clip is a second full software frame plus a 1.1-megapixel
-   upscale per display frame, and `PixelCanvas` says in its own comments that a Debug build's
-   bounds and exclusivity checks alone cost the 60 Hz budget — so Release should be far cheaper.
-   **Not measured in Release, and not measured on a phone.** If it is still this visible there,
-   the answer is probably to drop the clip to 30 fps rather than to draw it any coarser.
+6. **What it costs on the device.** See the table. Not measured on an A15.
 
-**Fixed 2026-09-19** (Claude, unreviewed, #33). A clip made during a Warm Up used to rebuild as a
-career swing: `Replay` had no idea a Warm Up was running, so the rebuilt machine's `warmUp` was
-always nil and the clip drew `PARK 20260920` in the corner and on the scoreboard instead of
-`WARM UP`, the career headline instead of `WARM UP · n/10`, and the career streak's fireworks
-instead of the Warm Up's own. `Replay` now carries an optional `WarmUpRecord`: the **whole** Warm
-Up card by value, not just the day — `WarmUp.generate(day:)` depends on `WarmUpRules`,
-`PitchingRules` and `Ladder` defaults that can move later, exactly the reason `ParkRecord` above
-already keeps the park's own numbers rather than regenerating them from `park.number` — plus the
-results spent so far (whose count is also the pitch index) and the streak, all as they stood the
-instant before `slice(_:)` ran. `DerbyMachine.atPitch` grew a matching optional `warmUp` parameter,
-the same door `Replay.machine(from:)` already used, only wider, and `machine(from:)` passes the
-restored run through it. Records written before this field existed have no `warmUp` key at all and
-decode to nil, like every other optional here. A clip is a recording, not a pitch: `ReplayRenderer`
-draws into a private local copy of the machine that is discarded the instant `.cutToAtBat` fires,
-so nothing it does — including, on a clip of the tenth pitch, calling `endWarmUp` and emitting
-`.warmUpEnded` on that one throwaway copy — ever reaches `SaveStore` or the result card.
+**Never touched by a finger.** The camera, `SHARE`, `SAVING` and the share sheet have all been
+exercised through the DEBUG arguments and read off screenshots, never tapped. The popover anchor on
+an iPad is written but unexercised.

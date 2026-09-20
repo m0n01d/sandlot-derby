@@ -954,7 +954,10 @@ public struct DerbyMachine: Equatable {
     /// DESIGN.md §18/§19). `parkSetAside`/`pitchSetAside` are deliberately left nil: a replay never
     /// ticks far enough to hand the field back, and if it ever did, leaving them nil rather than
     /// guessing at the career's park is the honest failure.
+    /// `elapsed` is how far into the pitch beat to stand: zero for the moment before a recorded
+    /// slice, and the lead-in's start for a replay that begins a few frames earlier (#42).
     public static func atPitch(park: Park, tally: Tally, pitch: Pitch, warmUp: WarmUpRun? = nil,
+                               elapsed: Double = 0,
                                timings: Timings = .standard, sliceRules: SliceRules = .standard,
                                pitchingRules: PitchingRules = .standard, statRules: StatRules = .standard,
                                fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) -> DerbyMachine {
@@ -963,7 +966,7 @@ public struct DerbyMachine: Equatable {
                              statRules: statRules, fireworksRules: fireworksRules, ladder: ladder)
         m.pitch = pitch
         m.beat = .pitch
-        m.elapsed = 0
+        m.elapsed = max(0, elapsed)
         m.warmUp = warmUp
         return m
     }

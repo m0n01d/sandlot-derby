@@ -27,6 +27,9 @@ final class AtBatScene: CanvasScene {
         let angle: Double
         let power: Double
         let trailPoints: [Point]
+        /// When each of those points was made, in seconds relative to this contact (zero or
+        /// negative). Carried into the `Replay` so a lead-in can draw the stroke growing (#42).
+        let trailTimes: [Double]
     }
 
     private struct MissVisual {
@@ -44,7 +47,11 @@ final class AtBatScene: CanvasScene {
     /// Read by `GameController.tick(_:)`, once a frame, to mirror `DerbyMachine.sliceInProgress`
     /// (DESIGN.md §3, issue #20) — "a slice is in progress" means a finger is down, not that one
     /// happened to touch down while `.pitch` was already showing.
-    var fingerDown: Bool { dragStart != nil }
+    ///
+    /// Except a finger resting on the camera in the corner, which is not a swing and must not be
+    /// answered as one when the pitch times out (#42). The moment it moves far enough to be a
+    /// slice it counts as one, like any other finger.
+    var fingerDown: Bool { dragStart != nil && !isReplayIconTouch }
     private var closest: ClosestMiss?
     private var contactVisual: ContactVisual?
     private var missVisual: MissVisual?
@@ -251,6 +258,11 @@ final class AtBatScene: CanvasScene {
             canvas.t3(8, 16, "HR STREAK \(machine.streakNow)", Palette.score)
         }
 
+        // The instant replay's camera, top right, when there is a swing worth seeing again (#42).
+        if controller?.showsReplayIcon == true {
+            ReplayIcon.draw(into: canvas, safeRight: safeRight, layout: replayIcon)
+        }
+
         drawLiveTrail(canvas: canvas, wx: wx)
     }
 
@@ -450,9 +462,18 @@ final class AtBatScene: CanvasScene {
         }
     }
 
+    /// The stroke behind the ball this frame: the live finger's own samples, or, through a
+    /// replay's lead-in, the recorded ones that had been made by now (#42). One source or the
+    /// other — the drawing below is the same either way, which is the point.
+    private var strokeNow: [Point] {
+        if let replayStroke { return replayStroke }
+        return (trail ?? []).map { $0.point }
+    }
+
     private func drawLiveTrail(canvas: PixelCanvas, wx: (Double) -> Double) {
-        if let trail, trail.count > 1 {
-            drawTrail(canvas: canvas, wx: wx, points: trail.suffix(14).map { $0.point },
+        let stroke = strokeNow
+        if stroke.count > 1 {
+            drawTrail(canvas: canvas, wx: wx, points: Array(stroke.suffix(14)),
                       color: Palette.chalk, core: Palette.score, thickness: 2)
         }
         if let fadeTrail {
@@ -465,19 +486,34 @@ final class AtBatScene: CanvasScene {
         }
     }
 
-    // MARK: - The replay record (#4)
+    // MARK: - The replay record (#4, #42)
 
-    /// The two things the contact freeze draws that the machine knows nothing about: the
-    /// direction of the slash through the ball and the finger's trail behind it. Read by
-    /// `GameController.recordSlice` the moment a swing lands, to go into the `Replay`.
-    var lastContactMarks: (slash: Point, trail: [Point])? {
-        contactVisual.map { ($0.dir, $0.trailPoints) }
+    /// Where the camera in the corner goes and how big its target is. A knob per #42.
+    private let replayIcon = ReplayIconLayout.standard
+
+    /// The recorded stroke to draw instead of the live finger's, through a replay's lead-in.
+    /// Nil in the game and from the freeze on.
+    private var replayStroke: [Point]?
+
+    /// The three things the contact freeze draws that the machine knows nothing about: the
+    /// direction of the slash through the ball, the finger's trail behind it, and when each of
+    /// those samples was made. Read by `GameController.recordSlice` the moment a swing lands, to
+    /// go into the `Replay`.
+    var lastContactMarks: (slash: Point, trail: [Point], times: [Double])? {
+        contactVisual.map { ($0.dir, $0.trailPoints, $0.trailTimes) }
+    }
+
+    /// Hands an off-screen copy of this scene the stroke as it stood part-way through a replay's
+    /// lead-in (#42). `nil` gives the live finger back, which is what the hand-over to the freeze
+    /// does.
+    func showReplayStroke(_ points: [Point]?) {
+        replayStroke = points
     }
 
     /// Puts a recorded swing's draw-only marks back, so an off-screen copy of this scene redraws
-    /// the contact freeze exactly as it was. `ReplayRenderer` calls this once, before the first
-    /// frame; the ball, its radius, the swing angle and the power all come from the crossing,
-    /// which is the same one the live scene was handed.
+    /// the contact freeze exactly as it was. `ReplayPlayback` calls this at the hand-over; the
+    /// ball, its radius, the swing angle and the power all come from the crossing, which is the
+    /// same one the live scene was handed.
     func restoreContactVisual(from replay: Replay) {
         let crossing = replay.swing.crossing
         contactVisual = ContactVisual(ball: crossing.ball.position,
@@ -485,7 +521,8 @@ final class AtBatScene: CanvasScene {
                                       dir: replay.marks.slash.point,
                                       angle: crossing.swingAngleDegrees,
                                       power: crossing.power,
-                                      trailPoints: replay.marks.trail.map(\.point))
+                                      trailPoints: replay.marks.trail.map(\.point),
+                                      trailTimes: replay.marks.trailTimes ?? [])
         trackedBeat = .contact
     }
 
@@ -564,6 +601,10 @@ final class AtBatScene: CanvasScene {
     /// it changes only the stroke, fakes no career state, and does nothing on its own.
     private static let autoLoft = ProcessInfo.processInfo.arguments.contains("-autoloft")
     private static let loftDegrees = 53.0
+    /// How many samples the robot's stroke is made of: the same eighteen a real drag's trail
+    /// keeps, a display frame apart, so a `-replay` clip's lead-in has a stroke growing in it
+    /// rather than one that appears whole (#42).
+    private static let devStrokeSamples = 18
 
     /// A medium 27° stroke through the ball, wherever it is, run through the real hit test so
     /// an early press is judged like an early finger. Space bar calls this.
@@ -580,9 +621,20 @@ final class AtBatScene: CanvasScene {
                                    pitch: machine.pitch, progress: machine.pitchProgress,
                                    ballAt: { controller.ballAt($0) }, rules: machine.sliceRules)
         guard case .contact(let crossing) = outcome else { return }
+        // The robot has no finger, so its stroke is sampled like one: the same eighteen points a
+        // real drag keeps (`trail.suffix(18)`), a display frame apart, along the stroke it took.
+        // Without the times a `-replay` clip's lead-in would have no stroke growing in it (#42).
+        let samples = Self.devStrokeSamples
+        var points: [Point] = []
+        var times: [Double] = []
+        for i in 0..<samples {
+            let t = Double(i) / Double(samples - 1)
+            points.append(along(-40 + 44 * t))
+            times.append(-Double(samples - 1 - i) / 60)
+        }
         contactVisual = ContactVisual(ball: crossing.ball.position, radius: crossing.ball.radius, dir: dir,
                                       angle: crossing.swingAngleDegrees, power: crossing.power,
-                                      trailPoints: [along(-40), along(4)])
+                                      trailPoints: points, trailTimes: times)
         controller.recordSlice(crossing)
     }
     #endif
@@ -636,13 +688,16 @@ final class AtBatScene: CanvasScene {
             var dx = b.x - dragStart.x, dy = b.y - dragStart.y
             if hypot(dx, dy) < machine.sliceRules.minAngleLength { dx = b.x - a.x; dy = b.y - a.y }
             let len = max(0.0001, hypot(dx, dy))
+            let kept = trail.suffix(18)
             contactVisual = ContactVisual(
                 ball: crossing.ball.position,
                 radius: crossing.ball.radius,
                 dir: Point(x: dx / len, y: dy / len),
                 angle: crossing.swingAngleDegrees,
                 power: crossing.power,
-                trailPoints: trail.suffix(18).map { $0.point }
+                trailPoints: kept.map { $0.point },
+                // Relative to this instant, so a lead-in can draw the stroke growing (#42).
+                trailTimes: kept.map { $0.time - now }
             )
             controller.recordSlice(crossing)
             self.trail = nil
@@ -671,7 +726,26 @@ final class AtBatScene: CanvasScene {
         return (trail ?? []).allSatisfy { hypot($0.point.x - start.x, $0.point.y - start.y) < 6 }
     }
 
+    /// A finger that is on the camera in the corner and has not moved. While that is true it is
+    /// not a swing in progress (`fingerDown`), and if it lifts there it opens the replay instead
+    /// of being answered as one (#42). `dragStart` is in the centred 320 column and the camera is
+    /// pinned to the canvas's own edge, so the offset goes back on before the test.
+    private var isReplayIconTouch: Bool {
+        guard controller?.showsReplayIcon == true, let start = dragStart else { return false }
+        let canvasPoint = Point(x: start.x + xOffset, y: start.y)
+        guard ReplayIcon.contains(canvasPoint, canvasWidth: Double(size.width),
+                                  safeRight: safeRight, layout: replayIcon) else { return false }
+        return (trail ?? []).allSatisfy {
+            hypot($0.point.x - start.x, $0.point.y - start.y) < replayIcon.tapSlack
+        }
+    }
+
     private func endDrag() {
+        if isReplayIconTouch {
+            trail = nil; dragStart = nil; closest = nil
+            controller?.showReplay()    // not a swing: nothing is counted
+            return
+        }
         if isScoreboardTap() {
             trail = nil; dragStart = nil; closest = nil
             controller?.showStats()     // not a swing: nothing is counted

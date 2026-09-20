@@ -1,5 +1,40 @@
 import Foundation
 
+/// What a batted ball has to be to be worth seeing again (#42).
+public enum ReplayWorth: String, Codable, Hashable, CaseIterable {
+    case homeRun
+    case offTheWall
+}
+
+/// The knobs for a replay — what is offered one, how far before the slash it starts, and how long
+/// the loop rests on the landing number (#42, DESIGN.md §19). The pixels the clip is written at
+/// are `ReplayClipRules`, in the app; these are the rules of the thing itself, so they live here
+/// with the record and can be tested.
+public struct ReplayRules: Equatable {
+    /// How long before contact a replay begins: the last of the pitch arriving and the finger's
+    /// stroke being drawn, so the slash lands on something rather than opening cold. Dwight, from
+    /// an iPad mini 6: "for clips the replays needs to start a few frames before the bat makes
+    /// contact." 0.4 s is 24 frames at 60.
+    public var leadInSeconds = 0.4
+    /// Which batted balls earn the camera in the corner. A home run always; a ball off the wall
+    /// because it is the other one you want to show someone. Nothing that stays in the park.
+    public var offeredFor: Set<ReplayWorth> = [.homeRun, .offTheWall]
+    /// How long the on-screen replay rests on the landing number before it starts again. Long
+    /// enough to read the number, short enough that the loop is a loop and not a slideshow.
+    /// Not in the clip: a written clip ends on the cut back to the plate, as it always has.
+    public var loopHoldSeconds = 0.8
+
+    public init() {}
+    public static let standard = ReplayRules()
+
+    /// Whether this flight is worth the corner camera. Takes the two facts rather than a
+    /// `FlightResult`, so the app can ask it from the live machine at the result without
+    /// rebuilding anything.
+    public func offers(homeRun: Bool, offTheWall: Bool) -> Bool {
+        (homeRun && offeredFor.contains(.homeRun)) || (offTheWall && offeredFor.contains(.offTheWall))
+    }
+}
+
 /// A point in design space, flat and `Codable`. The geometry types carry no conformances of
 /// their own, so this file is the one place the record's shape on the wire is fixed.
 public struct ReplayPoint: Codable, Equatable {
@@ -105,9 +140,16 @@ public struct Replay: Codable, Equatable {
     public struct Marks: Codable, Equatable {
         public var slash: ReplayPoint
         public var trail: [ReplayPoint]
-        public init(slash: Point, trail: [Point]) {
+        /// When each trail sample was taken, in seconds **relative to contact** — so every one is
+        /// zero or negative and the last is the one the slash goes through. The lead-in draws the
+        /// prefix that had happened by then (#42). Optional, and one per `trail` point when it is
+        /// there: a record written before the lead-in existed has no times, and a replay of it
+        /// simply has no lead-in, the way it always did.
+        public var trailTimes: [Double]?
+        public init(slash: Point, trail: [Point], times: [Double]? = nil) {
             self.slash = ReplayPoint(slash)
             self.trail = trail.map(ReplayPoint.init)
+            trailTimes = (times?.count == trail.count) ? times : nil
         }
     }
 
@@ -170,19 +212,28 @@ public struct Replay: Codable, Equatable {
     public var marks: Marks
     /// Nil for a career swing; see `WarmUpRecord` (#33).
     public var warmUp: WarmUpRecord?
+    /// The pitch beat's own clock the instant the slash landed — `DerbyMachine.elapsed` while the
+    /// beat is `.pitch`, which is what `pitchProgress` is worked out from. Without it there is
+    /// nowhere to stand the machine for a lead-in (#42). Optional, so records written before the
+    /// lead-in existed decode and simply open on the freeze, the way they always did.
+    public var pitchElapsedAtContact: Double?
 
     /// Takes the record at the moment of contact. `machine` must be the machine as it stood
     /// **before** `slice(_:)` ran — `GameController.recordSlice` captures it on the line above
     /// the call.
+    ///
+    /// `trailTimes`, when given, is one time per trail point in seconds relative to contact
+    /// (zero or negative); `AtBatScene` keeps them alongside the points it already kept.
     public init(capturing machine: DerbyMachine, crossing: SliceCrossing,
-                slash: Point, trail: [Point]) {
+                slash: Point, trail: [Point], trailTimes: [Double]? = nil) {
         version = 1
         park = ParkRecord(machine.park)
         pitch = PitchRecord(machine.pitch)
         swing = SwingRecord(crossing)
         tally = machine.tally
-        marks = Marks(slash: slash, trail: trail)
+        marks = Marks(slash: slash, trail: trail, times: trailTimes)
         warmUp = machine.warmUp.map(WarmUpRecord.init)
+        pitchElapsedAtContact = machine.beat == .pitch ? machine.elapsed : nil
     }
 
     /// A machine standing at the very start of the contact beat, with the swing already counted.
@@ -201,5 +252,55 @@ public struct Replay: Codable, Equatable {
     /// True when this swing is worth a clip at all. Only a home run is offered one (#4).
     public var isHomeRun: Bool {
         Replay.machine(from: self).flight?.homeRun ?? false
+    }
+
+    /// Whether the corner camera is offered for this swing (#42). Rebuilds the machine, so the
+    /// app asks its own live machine at the result instead — this is for tests and for a record
+    /// that arrives from somewhere else.
+    public func isWorthSeeingAgain(rules: ReplayRules = .standard) -> Bool {
+        guard let f = Replay.machine(from: self).flight else { return false }
+        return rules.offers(homeRun: f.homeRun, offTheWall: f.wallHit)
+    }
+
+    // MARK: - The lead-in (#42)
+
+    /// How much lead-in this record can actually give: the rule's, but never more pitch than
+    /// there was. Zero for a record written before the pitch clock was kept, which replays from
+    /// the freeze exactly as it always did.
+    public func leadInSeconds(rules: ReplayRules = .standard) -> Double {
+        guard let atContact = pitchElapsedAtContact else { return 0 }
+        return max(0, min(rules.leadInSeconds, atContact))
+    }
+
+    /// A machine standing in `.pitch`, `leadInSeconds` short of the slash: the ball still on its
+    /// way, the pitch and the park and the Warm Up all as they were. Tick it at a fixed `dt` and
+    /// it walks the last of the pitch the player saw.
+    ///
+    /// `secondsPlayed` is wound **back** by the lead-in, because the record's tally is the one at
+    /// contact and the sky reads that clock (DESIGN.md §17 "One clock") — without the roll-back
+    /// the clouds would drift 0.4 s ahead through the lead-in and then jump back at the slash.
+    ///
+    /// This machine is thrown away at contact: `machine(from:)` above is what draws the freeze
+    /// and everything after it, so nothing the lead-in accumulates can drift into the clip. The
+    /// lead-in itself is only as exact as the `dt` it is ticked at, which is the honest answer —
+    /// the live game ticked it at whatever the display gave.
+    public static func leadInMachine(from replay: Replay, rules: ReplayRules = .standard) -> DerbyMachine {
+        let lead = replay.leadInSeconds(rules: rules)
+        var tally = replay.tally
+        tally.set(.secondsPlayed, max(0, tally[.secondsPlayed] - lead))
+        return DerbyMachine.atPitch(park: replay.park.park, tally: tally,
+                                    pitch: replay.pitch.pitch, warmUp: replay.warmUp?.run,
+                                    elapsed: max(0, (replay.pitchElapsedAtContact ?? 0) - lead))
+    }
+
+    /// The finger's stroke as it stood `secondsBeforeContact` before the slash: the samples that
+    /// had already been made. `AtBatScene` draws these through the very same two lines it draws
+    /// the live finger's with.
+    public func stroke(secondsBeforeContact: Double) -> [Point] {
+        guard let times = marks.trailTimes, times.count == marks.trail.count else { return [] }
+        let now = -max(0, secondsBeforeContact)
+        var out: [Point] = []
+        for (i, t) in times.enumerated() where t <= now { out.append(marks.trail[i].point) }
+        return out
     }
 }

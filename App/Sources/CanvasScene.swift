@@ -18,9 +18,9 @@ class CanvasScene: SKScene {
     var safeLeft = 0.0
     var safeRight = 0.0
 
-    /// Set by `ReplayRenderer` (#4) on an off-screen copy of a scene, so the very same drawing
-    /// code redraws a recorded moment from a rebuilt machine instead of the live one. Nil in the
-    /// game, where the controller's machine is the only one there is.
+    /// Set by `ReplayPlayback` (#4, #42) on an off-screen copy of a scene, so the very same
+    /// drawing code redraws a recorded moment from a rebuilt machine instead of the live one.
+    /// Nil in the game, where the controller's machine is the only one there is.
     var replayMachine: DerbyMachine?
 
     /// The machine this frame is drawn from. Every `render(into:)` reads this and nothing else.
@@ -59,13 +59,10 @@ class CanvasScene: SKScene {
             canvas.fill(Palette.chalk)
             flashNextFrame = false
         } else {
+            // No `CLIP` word any more: nothing is drawn or encoded while the game is being
+            // played, so there is nothing for it to announce (#42). The one word a clip puts on
+            // the screen now is `SAVING`, on the replay screen, which owns it.
             render(into: canvas)
-            // The only thing a clip being made puts on the screen: one word, bottom right, in the
-            // ordinary 3×5 face (#4). Never on the flash frame, which stays a white frame, and
-            // never in the clip itself — the renderer calls `render(into:)` and never this.
-            if controller?.isRenderingReplayClip == true {
-                canvas.t3(Double(canvas.width) - 26, 8, "CLIP", Palette.score)
-            }
         }
         blit(canvas)
     }
