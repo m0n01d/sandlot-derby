@@ -43,6 +43,7 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - Assets.xcassets
     dependencies:
       - package: DerbyCore
     info:
@@ -60,6 +61,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: com.m0n01d.sandlotderby
         DEVELOPMENT_TEAM: W2E7DTS835
         CODE_SIGN_STYLE: Automatic
