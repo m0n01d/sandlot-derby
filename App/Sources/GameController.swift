@@ -14,9 +14,13 @@ final class GameController {
 
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
         let save = SaveStore.load()
+        var startingTally = save?.tally ?? Tally()
+        #if DEBUG
+        if let n = Self.debugStartingStreak { startingTally = Self.tally(withHomeRunStreak: n) }
+        #endif
         machine = DerbyMachine(seed: seed,
                                park: save.map { Park.generate(number: $0.parkNumber) } ?? .first,
-                               tally: save?.tally ?? Tally())
+                               tally: startingTally)
         atBatScene = AtBatScene()
         wideScene = WideScene()
         statsScene = StatsScene()
@@ -106,6 +110,8 @@ final class GameController {
             case .clearedWall:
                 sound.homeRun(size: homeRunSize)
                 haptics.homeRun()
+                // A pop per shell, mixed under the cheer. No extra haptic: `.success` just fired.
+                if let show = machine.fireworks { sound.fireworks(show, rules: machine.fireworksRules) }
             case .hitWall:
                 sound.offTheWall()
                 haptics.offTheWall()
@@ -179,6 +185,24 @@ final class GameController {
 
     #if DEBUG
     private static var showStatsForScreenshots = ProcessInfo.processInfo.arguments.contains("-showstats")
+
+    /// `-streak <n>`: start the career with a home-run streak of `n` already going, so a shell
+    /// count deep in the table (or a finale) can be screenshotted without hitting n home runs in
+    /// a row first. Implies `-nosave` (`SaveStore`): a faked streak has no business overwriting,
+    /// or being overwritten by, a real one.
+    private static var debugStartingStreak: Int? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-streak"), i + 1 < args.count else { return nil }
+        return Int(args[i + 1])
+    }
+
+    /// A `Tally` with only `homeRunStreak` (and its running best) set, via the same JSON shape
+    /// `SaveStore` and old saves already round-trip through — `Tally.set` is Core-internal, so
+    /// this is the one door the app has into a specific starting number.
+    private static func tally(withHomeRunStreak n: Int) -> Tally {
+        let json = #"{"values":{"homeRunStreak":\#(n),"bestHomeRunStreak":\#(n)}}"#.data(using: .utf8)!
+        return (try? JSONDecoder().decode(Tally.self, from: json)) ?? Tally()
+    }
     #endif
 
     /// The ball's position at a given pitch progress, for `Contact.test`'s `ballAt` closure

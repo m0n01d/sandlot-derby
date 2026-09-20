@@ -82,6 +82,8 @@ final class WideScene: CanvasScene {
         canvas.dither(0, 66, fullWidth, 8, scheme.sky1, scheme.sky2)
         canvas.dither(0, 126, fullWidth, 8, scheme.sky2, scheme.sky3)
 
+        drawFireworks(canvas, machine, fullWidth: fullWidth)
+
         // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
         canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
         let stripe = max(4, (16 * view.scale).rounded())
@@ -165,6 +167,32 @@ final class WideScene: CanvasScene {
 
         let parkName = machine.park.displayName
         canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
+    }
+
+    /// Home-run fireworks (DESIGN.md §17 "Fireworks"): screen-space, so a burst sits in the same
+    /// place whether this frame is wide or close, drawn right after the sky so the field, wall,
+    /// ball and every readout land on top of it. `DerbyCore.Fireworks` does all the maths; this
+    /// only turns a particle's role into a palette pixel.
+    private func drawFireworks(_ canvas: PixelCanvas, _ machine: DerbyMachine, fullWidth: Double) {
+        guard let show = machine.fireworks else { return }
+        let scheme = Palette.scheme(isNight: show.isNight)
+        let particles = Fireworks.particles(show: show, at: machine.tally[.secondsPlayed], rules: machine.fireworksRules)
+        for particle in particles where particle.visible {
+            let colour: Palette.RGBA8
+            switch particle.colour {
+            case .score: colour = Palette.score
+            case .cap: colour = Palette.cap
+            case .chalk: colour = Palette.chalk
+            case .skin: colour = Palette.skin
+            case .sky3: colour = scheme.sky3
+            }
+            let x = fullWidth * particle.x
+            if particle.size >= 2 {
+                canvas.rect(x, particle.y, 2, 2, colour)
+            } else {
+                canvas.px(x, particle.y, colour)
+            }
+        }
     }
 
     /// The batter is the yardstick for the wall, so he is drawn to the field's scale: most real

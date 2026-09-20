@@ -208,11 +208,16 @@ public struct DerbyMachine: Equatable {
     public private(set) var playbackIndex: Double = 0
     public private(set) var tally = Tally()
     public private(set) var lastCall: Call? = nil
+    /// Set the instant the ball clears the wall (the `.clearedWall` cue) if the streak has
+    /// earned a show at all; nil for every other beat, and nil again the moment `.result` ends
+    /// (DESIGN.md §17 "When"). `Fireworks.particles(show:at:)` turns this into drawn points.
+    public private(set) var fireworks: FireworksShow? = nil
     public var timings: Timings
     /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
     public var majorsSliceRules: SliceRules
     public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
+    public var fireworksRules: FireworksRules
     public var ladder: Ladder
     private var rng: SplitMix64
     private var wallCueIndex: Int? = nil
@@ -227,12 +232,13 @@ public struct DerbyMachine: Equatable {
     /// `park` and `tally` are what a save restores; everything else starts fresh.
     public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
                 sliceRules: SliceRules = .standard, pitchingRules: PitchingRules = .standard,
-                statRules: StatRules = .standard, ladder: Ladder = .standard) {
+                statRules: StatRules = .standard, fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) {
         var g = SplitMix64(seed: seed)
         let first = Pitching.generate(using: &g, rules: ladder.pitchingRules(pitchingRules, for: park.league))
         self.park = park
         self.tally = tally
         self.statRules = statRules
+        self.fireworksRules = fireworksRules
         self.ladder = ladder
         self.timings = timings
         self.majorsSliceRules = sliceRules
@@ -371,6 +377,19 @@ public struct DerbyMachine: Equatable {
         }
     }
 
+    /// Fires once, right when the ball clears the wall: the streak (already extended by
+    /// `countContact`, which ran at contact, well before this cue) says how many shells, the
+    /// call-up forces a finale, and a no-doubter can add one more. DESIGN.md §17 "How big
+    /// follows the streak" and "Seed".
+    private mutating func startFireworksIfEarned(_ f: FlightResult) {
+        let isCalledUp = park.league == .tripleA
+        let isNoDoubter = f.distanceFeet - park.wallDistanceFeet >= statRules.noDoubterMarginFeet
+        let shells = fireworksRules.shellCount(homeRunStreak: tally.homeRunStreak, isCalledUp: isCalledUp, isNoDoubter: isNoDoubter)
+        guard shells > 0 else { return }
+        let seed = UInt64(park.number) &* 0x2545_F491_4F6C_DD1D &+ UInt64(tally.pitches)
+        fireworks = FireworksShow(shellCount: shells, seed: seed, start: tally[.secondsPlayed], isNight: park.isNight)
+    }
+
     // MARK: - Clock
 
     @discardableResult
@@ -405,7 +424,10 @@ public struct DerbyMachine: Equatable {
             let before = Int(playbackIndex)
             playbackIndex += dt * (1.0 / FlightParams.calibrated.timestep) * timings.flightSpeed
             let after = min(f.points.count - 1, Int(playbackIndex))
-            if let i = wallCueIndex, before < i, i <= after { out.append(f.homeRun ? .clearedWall : .hitWall) }
+            if let i = wallCueIndex, before < i, i <= after {
+                out.append(f.homeRun ? .clearedWall : .hitWall)
+                if f.homeRun { startFireworksIfEarned(f) }
+            }
             if let i = landCueIndex, before < i, i <= after { out.append(.landed) }
             if playbackIndex >= Double(f.points.count - 1) {
                 playbackIndex = Double(max(0, f.points.count - 1))
@@ -427,6 +449,7 @@ public struct DerbyMachine: Equatable {
                 }
                 flight = nil
                 launch = nil
+                fireworks = nil        // the next pitch gets a clean sky (DESIGN.md §17 "When")
                 newPitch()
                 out.append(.cutToAtBat)
             }

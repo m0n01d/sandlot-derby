@@ -497,6 +497,19 @@ exactly. Scenes only draw.
 - **Sound:** a soft pop per burst (short noise burst, then a crackle tail), mixed under the cheer.
   Synthesized like the rest (§11). No extra haptic: `.success` already fired.
 - **Seed:** park number and career pitch count, so no two are alike and a replay matches.
+- **Built 2026-09-19 (Claude's, unreviewed).** Live in `Core/Sources/DerbyCore/Fireworks.swift`,
+  not the app as first written above: the maths (the streak table, a shell's ring and fall,
+  `FireworksRules`) is pure and Foundation-only, so `swift test` covers it and the planned replay
+  clip and any other host can reuse it without SpriteKit. `WideScene` only turns
+  `Fireworks.particles(show:at:)`'s roles into palette pixels. `DerbyMachine.fireworks` is set at
+  the `.clearedWall` cue (the streak `countContact` already extended at contact, well before the
+  cue, so the third straight home run's own show sees a streak of 3) and cleared the instant the
+  machine leaves `.result`. The call-up's "once per career" needs no extra flag: Triple-A is a
+  one-way door, so `isBeingCalledUp` can only ever fire once regardless. A no-doubter's bonus
+  shell stacks even on a finale or a call-up (untested by the table above, which doesn't say);
+  seen in practice on a 90+ ft no-doubter, e.g. streak 3 + no-doubter = 2 shells, streak 10/finale
+  + no-doubter = 11. Screenshots and a DEBUG `-streak <n>` launch argument (starts a career at a
+  given home-run streak, implies `-nosave`) are on the PR for issue #14.
 
 ### Sky
 

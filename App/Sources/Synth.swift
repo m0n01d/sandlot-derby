@@ -317,4 +317,29 @@ enum Synth {
 
     /// Called up to The Show: a major arpeggio, up.
     static func calledUp() -> [Float] { boops([(523, 0.09), (659, 0.09), (784, 0.09), (1_047, 0.28)], gain: 0.26) }
+
+    // MARK: - Fireworks (issue #14, "life": fireworks, sky and backdrops)
+
+    /// One shell's burst: a short noise pop on the front, then a scatter of sparks crackling off
+    /// as it fades. Mixed under the cheer, one per shell (DESIGN.md §17 "Sound").
+    static func fireworkPop() -> [Float] {
+        let dur = 0.5, n = count(dur)
+        var body = Biquad.bandpass(1_400, q: 0.9)
+        var noise = Noise(seed: 0xF12E_0001)
+        var out = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            let t = Double(i) / sampleRate
+            out[i] = body.process(noise.next()) * exp(-t / 0.03)
+        }
+        var hiss = Biquad.highpass(3_200)
+        var pick = Noise(seed: 0xF12E_0002)
+        for spark in 0..<10 {
+            let start = count(0.05 + 0.35 * (0.5 + 0.5 * pick.next()))
+            for j in 0..<count(0.02) where start + j < n {
+                let t = Double(j) / sampleRate
+                out[start + j] += hiss.process(pick.next()) * exp(-t / 0.006) * (0.30 + 0.05 * Double(spark % 3))
+            }
+        }
+        return finish(out, gain: 0.4)
+    }
 }

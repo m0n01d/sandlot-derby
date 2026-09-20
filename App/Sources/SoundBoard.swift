@@ -1,5 +1,6 @@
 import AVFoundation
 import UIKit
+import DerbyCore
 
 /// Plays `Synth`'s sounds. Everything is rendered into buffers once at launch and fired as
 /// one-shots through a small pool of player nodes, so a sound costs nothing at the moment it is
@@ -143,6 +144,29 @@ final class SoundBoard {
     /// `size` 0…1: how far past the wall it is going to land.
     func homeRun(size: Double) {
         play(cheers[Int((max(0, min(1, size)) * Double(cheers.count - 1)).rounded())], on: crowd)
+    }
+
+    // MARK: - Fireworks (issue #14, "life": fireworks, sky and backdrops)
+
+    /// Built the first time a streak earns a show, not at launch: fireworks are rare, so there
+    /// is no reason every player pays to render one up front.
+    private lazy var fireworkPopBuffer: AVAudioPCMBuffer = makeBuffer(Synth.fireworkPop())
+
+    /// Mirrors the local `buffer(_:)` helper inside `init()`, for a buffer built lazily instead.
+    private func makeBuffer(_ samples: [Float]) -> AVAudioPCMBuffer {
+        let b = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(1, samples.count)))!
+        b.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { b.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        return b
+    }
+
+    /// A soft pop per shell, mixed under the cheer that `homeRun(size:)` already started from
+    /// the same `.clearedWall` transition. Timed to each shell's burst, not its launch, so the
+    /// sound lands with the particles, not the streak of light climbing to them.
+    func fireworks(_ show: FireworksShow, rules: FireworksRules) {
+        for shell in 0..<show.shellCount {
+            play(fireworkPopBuffer, after: Double(shell) * rules.shellLaunchInterval + rules.risePeriod)
+        }
     }
 }
 
