@@ -314,9 +314,9 @@ framesPerSecond) · `WatchHaptics` (pitchTick, the cue table).
   entitlement proven in the sandbox, optional complication. Ships inside the phone's M5.
 
 **Order against the phone's milestones:** W0 whenever the hardware lands; it is a spike and
-informs nothing else. W1 is worth doing on its own merits. **W2 onward after M3**, because M3
-retunes the `SliceRules` the watch inherits, and tuning the wrist against numbers that are about
-to move is wasted work.
+informs nothing else. W1 is worth doing on its own merits. W2 onward was gated on M3, because M3
+could have retuned the `SliceRules` the watch inherits. **M3 closed 2026-09-19 with the knobs
+unchanged** (520 px/s, 9 px), so that gate is met: W2 now waits only on W1 and the watch itself.
 
 ## 10. Open questions
 

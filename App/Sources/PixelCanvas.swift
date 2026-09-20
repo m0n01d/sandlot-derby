@@ -141,7 +141,21 @@ final class PixelCanvas {
         "Z": Array("111001010100111"), ".": Array("000000000000010"), ":": Array("000010000010000"),
         "-": Array("000000111000000"), "%": Array("101001010100101"), "/": Array("001001010100100"),
         ",": Array("000000000010100")
+        // No currency symbols here on purpose (DESIGN.md §16): a 3×5 cell has no room for the
+        // stroke that has to overshoot the `S` top and bottom, and without it a `$` reads as a
+        // blocky `5`. The price is drawn in the 5×7 face below, which has the rows for it.
     ]
+
+    /// True when every character of `text` has a 3×5 glyph.
+    static func hasGlyphs3(for text: String) -> Bool {
+        text.uppercased().allSatisfy { f3[$0] != nil }
+    }
+
+    /// True when every character of `text` has a 5×7 glyph. `Store` asks before offering a price
+    /// the way the store wrote it; a currency this face cannot spell falls back to its ISO code.
+    static func hasGlyphs5(for text: String) -> Bool {
+        text.uppercased().allSatisfy { f5[$0] != nil }
+    }
 
     /// 5x7 bitmap face, copied verbatim from the prototype's `F5`
     /// (prototypes/03-camera-cut-and-slice.html ~line 226).
@@ -153,7 +167,19 @@ final class PixelCanvas {
         "8": Array("01110100011000101110100011000101110"), "9": Array("01110100011000101111000010001001100"),
         "F": Array("11111100001000011110100001000010000"), "T": Array("11111001000010000100001000010000100"),
         "H": Array("10001100011000111111100011000110001"), "R": Array("11110100011000111110101001001010001"),
-        " ": Array("00000000000000000000000000000000000")
+        " ": Array("00000000000000000000000000000000000"),
+        // Added for the `BARREL` call (DESIGN.md §3, issue #20), same block-letter style as the rest.
+        "B": Array("11110100011000111110100011000111110"), "A": Array("01110100011000111111100011000110001"),
+        "E": Array("11111100001000011110100001000011111"), "L": Array("10000100001000010000100001000011111"),
+        // Not in the prototype: the contract card's price (DESIGN.md §16). Seven rows are the
+        // point — the `$`'s stroke overshoots the `S` above and below, which is the one thing
+        // that stops it reading as a `5`, and 3×5 has no room for it.
+        "$": Array("00100011111010001110001011111000100"),
+        "€": Array("00111010001111001000111100100000111"),
+        "£": Array("00111010000100011100010000100011111"),
+        "¥": Array("10001010100010011111001001111100100"),
+        ".": Array("00000000000000000000000000110001100"),
+        ",": Array("00000000000000000000011000110001100")
     ]
 
     /// Draws `text` in the 3x5 face at the given scale (labels, readouts).

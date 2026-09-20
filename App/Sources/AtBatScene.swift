@@ -40,6 +40,11 @@ final class AtBatScene: CanvasScene {
 
     private var trail: [SamplePoint]?
     private var dragStart: Point?
+    /// Whether a finger is on the glass right now, whatever beat this is or where it landed.
+    /// Read by `GameController.tick(_:)`, once a frame, to mirror `DerbyMachine.sliceInProgress`
+    /// (DESIGN.md §3, issue #20) — "a slice is in progress" means a finger is down, not that one
+    /// happened to touch down while `.pitch` was already showing.
+    var fingerDown: Bool { dragStart != nil }
     private var closest: ClosestMiss?
     private var contactVisual: ContactVisual?
     private var missVisual: MissVisual?
@@ -157,7 +162,7 @@ final class AtBatScene: CanvasScene {
             if b.radius >= 2 { canvas.px(wx(b.x + b.radius), b.y, Palette.ink) }
             canvas.t3(wx(8), H - 12, "\(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk)
         case .contact:
-            drawContactVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed)
+            drawContactVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed, isBarrel: machine.isBarrelNow, zone: z)
         case .miss:
             drawMissVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed)
             let label = callWord(machine.lastCall)
@@ -213,17 +218,26 @@ final class AtBatScene: CanvasScene {
         }
     }
 
+    /// Three frames on the windup clock — `elapsed`/`beat`, no state of its own — set, leg
+    /// kick/reach back, release (DESIGN.md §3, §9). The third, `.set`, was the one never built
+    /// (issue #20): before it, the windup's first 40% and everything past `.pitch` shared the
+    /// release silhouette, so the wind-up never had a calm beat to kick off from.
     private func drawPitcher(canvas: PixelCanvas, wx: (Double) -> Double, beat: Beat, elapsed: Double) {
         let windup = beat == .windup ? min(1, elapsed / 0.5) : 1
         let px = 160.0, py = 117.0
         canvas.rect(wx(px - 2), py - 12, 5, 8, Palette.ink)
         canvas.rect(wx(px - 2), py - 16, 5, 4, Palette.skin)
         canvas.rect(wx(px - 3), py - 18, 7, 2, Palette.cap)
-        if beat == .windup, windup > 0.4, windup < 0.9 {
+        if beat == .windup, windup <= 0.4 {
+            // Set: feet together, hands tucked in — the pause before the kick.
+            canvas.rect(wx(px - 1), py - 4, 2, 4, Palette.ink)
+        } else if beat == .windup, windup < 0.9 {
+            // Leg kick / reach back.
             canvas.rect(wx(px - 1), py - 4, 3, 4, Palette.ink)
             canvas.rect(wx(px + 2), py - 8, 2, 4, Palette.ink)
             canvas.line(wx(px + 3), py - 12, wx(px + 6), py - 20, Palette.ink)
         } else {
+            // Release: also held through `.pitch` and beyond — the ball has already left the hand.
             canvas.rect(wx(px - 2), py - 4, 2, 4, Palette.ink)
             canvas.rect(wx(px + 1), py - 4, 2, 4, Palette.ink)
             canvas.line(wx(px + 3), py - 10, wx(px + 7), py - 6, Palette.ink)
@@ -254,7 +268,8 @@ final class AtBatScene: CanvasScene {
         }
     }
 
-    private func drawContactVisual(canvas: PixelCanvas, wx: (Double) -> Double, elapsed: Double) {
+    private func drawContactVisual(canvas: PixelCanvas, wx: (Double) -> Double, elapsed: Double,
+                                    isBarrel: Bool, zone: Rect) {
         guard let c = contactVisual else { return }
         drawTrail(canvas: canvas, wx: wx, points: c.trailPoints, color: Palette.chalk, core: nil, thickness: 1)
         let x0 = c.ball.x - c.dir.x * 16, y0 = c.ball.y - c.dir.y * 16
@@ -274,6 +289,21 @@ final class AtBatScene: CanvasScene {
         let ly = max(4, min(224 - 24, c.ball.y + 18))
         canvas.rect(wx(lx - 2), ly - 2, Double(label.count) * 4 + 3, 9, Palette.ink)
         canvas.t3(wx(lx), ly, label, Palette.score)
+
+        if isBarrel {
+            // BARREL, next to the SWING/POWER readout, in the chunkier 5×7 face (StatRules.isBarrel,
+            // DESIGN.md §3, issue #20). Anchored under the readout and pinned below the strike zone,
+            // so it never sits over the ball, the slash or the zone. Static, not blinking: the
+            // contact freeze is only 0.22–0.50 s (`Timings.contactHoldWeak`…`contactHoldBarrel`),
+            // too short for a blink to read inside the §9 motion budget. Decision, Claude's,
+            // 2026-09-19, unreviewed.
+            let barrelLabel = "BARREL"
+            let bw = Double(barrelLabel.count) * 6
+            let blx = max(4, min(320 - bw - 4, c.ball.x - bw / 2))
+            let bly = min(224 - 11, max(zone.y + zone.height + 6, ly + 12))
+            canvas.rect(wx(blx - 2), bly - 2, bw + 3, 11, Palette.ink)
+            canvas.t5(wx(blx), bly, barrelLabel, Palette.score)
+        }
     }
 
     private func drawMissVisual(canvas: PixelCanvas, wx: (Double) -> Double, elapsed: Double) {
@@ -369,11 +399,36 @@ final class AtBatScene: CanvasScene {
             fadeTrail = nil
         case .miss:
             // A called strike/ball: `DerbyMachine` reached this beat on its own (the pitch
-            // timed out), so no `touchesEnded` ever built a `missVisual` for it.
+            // timed out), so no `touchesEnded` ever built a `missVisual` for it. Ring at the
+            // plate, no trail (DESIGN.md §7).
             if controller.machine.lastCall != .miss {
                 let ball = controller.ballAt(1.0)
                 missVisual = MissVisual(pressPoint: nil, ball: ball.position, radius: ball.radius,
                                          early: false, feetAway: 0, trailPoints: [])
+            } else if missVisual == nil {
+                // A swing-miss `DerbyMachine` resolved on its own: the pitch timed out with a
+                // slice still in progress, i.e. the finger held through it (DESIGN.md §3, issue
+                // #20). A real `touchesEnded` miss already set `missVisual` synchronously before
+                // this runs, so this only fires when the finger is still down — draw the same
+                // markers from whatever the drag has recorded so far, same as `endDrag()`.
+                let machine = controller.machine
+                let c = closest
+                let ball: BallSample
+                let progress: Double
+                let early: Bool
+                if let c {
+                    ball = c.ball
+                    progress = c.progress
+                    early = (1 - abs(c.progress - 1) / machine.sliceRules.timingWindow) <= 0
+                } else {
+                    ball = controller.ballAt(1.0)
+                    progress = 1.0
+                    early = false
+                }
+                let feetAway = max(0, (1 - progress) * machine.pitchingRules.moundDistanceFeet)
+                missVisual = MissVisual(pressPoint: c?.fingerPoint, ball: ball.position, radius: ball.radius,
+                                        early: early, feetAway: feetAway,
+                                        trailPoints: (trail ?? []).suffix(24).map { $0.point })
             }
         default:
             break
@@ -387,6 +442,12 @@ final class AtBatScene: CanvasScene {
     /// be reached with no finger (simulator screenshots, soak runs).
     private static let autoSlice = ProcessInfo.processInfo.arguments.contains("-autoslice")
 
+    /// `-autobarrel` launch argument (issue #20 screenshots): the dev swing hits at full power
+    /// instead of 0.7×, so every contact clears `StatRules.isBarrel` regardless of pitch type or
+    /// exact timing jitter — for reliably capturing the `BARREL` call in a burst. Has no effect
+    /// without `-autoslice` (or the space-bar dev slice) also firing the swing.
+    private static let autoBarrel = ProcessInfo.processInfo.arguments.contains("-autobarrel")
+
     /// A medium 27° stroke through the ball, wherever it is, run through the real hit test so
     /// an early press is judged like an early finger. Space bar calls this.
     func devSlice() {
@@ -396,8 +457,9 @@ final class AtBatScene: CanvasScene {
         let radians = 27.0 * Double.pi / 180
         let dir = Point(x: cos(radians), y: -sin(radians))
         func along(_ d: Double) -> Point { Point(x: ball.x + dir.x * d, y: ball.y + dir.y * d) }
+        let speed = Self.autoBarrel ? machine.sliceRules.fullPowerSpeed : 0.7 * machine.sliceRules.fullPowerSpeed
         let outcome = Contact.test(segment: along(-4), along(4), dragStart: along(-40),
-                                   fingerSpeed: 0.7 * machine.sliceRules.fullPowerSpeed,
+                                   fingerSpeed: speed,
                                    pitch: machine.pitch, progress: machine.pitchProgress,
                                    ballAt: { controller.ballAt($0) }, rules: machine.sliceRules)
         guard case .contact(let crossing) = outcome else { return }

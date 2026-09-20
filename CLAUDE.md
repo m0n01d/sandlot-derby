@@ -60,5 +60,9 @@ routing, PR screenshot and grooming rules do.
 
 ## Milestones
 
-See DESIGN.md §13. M0 ("core compiles and the calibration tests pass on a Mac") is done, and the
-app has the bones of M1–M2. Next is M3, feel, which needs a real phone.
+See DESIGN.md §13. M0–M4 are done. M3 (feel) closed 2026-09-19 after Dwight played it on a phone
+with sound and haptics in: the slice knobs stayed at 520 px/s and 9 px, and the unbuilt leftovers
+(hitstop, `BARREL` call, third pitcher pose, held-finger swing-miss) are issue #20. What is left
+is M5, ship. Its pricing track (§16) has `parkCeiling` in core; next there is the contract card
+scene, and §16 wants the daily card (#3) shipped before the paywall. `docs/watch.md` is a
+proposal for an Apple Watch version and waits on hardware.
