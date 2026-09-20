@@ -334,6 +334,6 @@ unchanged** (520 px/s, 9 px), so that gate is met: W2 now waits only on W1 and t
 
 ## 11. Non-goals (watch)
 
-Everything in §15, plus: Game Center, the daily card (#3), replay sharing (#4) and leaderboards in
+Everything in §15, plus: Game Center, the Warm Up (§18), the replay clip (§19) and leaderboards in
 v1, the double-tap pinch gesture (far too slow to time a pitch),
 Crown-as-swing, workout sessions, phone-to-watch connectivity, any settings screen.
