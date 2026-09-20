@@ -719,7 +719,9 @@ point of the flight that is inside the profile the stands were drawn from.
 Issue #3; what §16 and §13 used to call "the daily card" before this section existed. Decided by Dwight 2026-09-19: the name ("first 10
 pitches is a Warm Up"), the day ("whatever wordle does": the **local calendar day**), and what it
 counts toward ("professional batters have to warm up too": everything but the cost). The rest of
-this section is Claude's and unreviewed. **Spec only, nothing built.**
+this section is Claude's and unreviewed. **Built 2026-09-19** (Claude, unreviewed) — see "What the
+build decided" at the end of this section for the eight things the spec left open and one place
+where building it showed the spec was wrong.
 
 **What it is.** The first ten pitches of each day are the same for everyone: one park and one pitch
 sequence, seeded by the date. There is no menu and no mode to pick: it is how the day starts. Ten
@@ -792,12 +794,58 @@ decode. `results` is one entry per spent pitch (outcome and feet), which is what
 interrupted at pitch six resume at pitch seven, and what the card and the share string are drawn
 from. Nothing is stored about other days.
 
-**Knobs:** `WarmUpRules`: `pitches` 10, `minParksCleared` 1, `epochDay` (at ship).
+**Knobs:** `WarmUpRules`: `pitches` 10, `minParksCleared` 1, `epochDay` (at ship),
+`shareLink` (at ship). `WarmUpCardLayout` holds the card's geometry, as `ContractCardLayout`
+does the contract's.
 
-**Build order:** `WarmUp.generate` and its tests → the machine's warm-up state, stat routing and
-`streakNow`, with tests → the save → headline and scoreboard → the result card → the share sheet
-→ the stats-board row. After wave 1 of the in-flight work lands, because it edits `DerbyMachine`,
-`GameController` and `SaveStore`.
+**Build order:** ~~`WarmUp.generate` and its tests~~ → ~~the machine's warm-up state, stat routing
+and `streakNow`, with tests~~ → ~~the save~~ → ~~headline and scoreboard~~ → ~~the result card~~ →
+~~the share sheet~~ → ~~the stats-board row~~. All done 2026-09-19.
+
+**What the build decided** (2026-09-19, Claude, unreviewed — the paragraphs above left these open):
+
+- **The day number *is* the park number.** `WarmUp.generate(day:)` builds the day's park as
+  `Park.generate(number: day)`, and everything else falls out of that for free: a `YYYYMMDD` is far
+  past The Show, so the wall comes from the ordinary seeded ranges with night allowed,
+  `League(parkNumber:)` answers The Show, and §17's scenery — itself a pure function of the park
+  number — is seeded by the day with no new seeding code and no change to `Park` or `Scenery`.
+- **Which meant the spec's "nothing else changes" was wrong in three places.** A park whose number
+  is a date has a `displayName` of `PARK 20260920`, and it was drawn in three of them. The at-bat
+  scoreboard says `WARM UP` as specced; so must the **wide view's corner** (it is the same word in
+  the other camera) and the **stats board's heading corner**, which is the *career's* park, since
+  the board is headed `CAREER` and a Warm Up only ever borrows the field. For the same reason the
+  save records `careerPark.number`, and `isAtCeiling` is false throughout a Warm Up — otherwise a
+  day-numbered park would clear any ceiling and a refund landing mid-Warm-Up would lift it.
+- **`bestHomeRunStreak` is fed by the Warm Up's streak, the live career streak is not.** The
+  carve-out exists so a warm-up cannot *break* a career streak and so the fireworks read the right
+  number; letting a genuinely good day set the career best is what "counts toward everything but
+  the cost" says. **Worth a look:** a robot swinging perfectly at all ten set `BEST HR STREAK` to
+  10 off one Warm Up. If that reads as cheapening the career record, this is the line to cut.
+- **Only the *home-run* streak is carved out.** `hitStreak` and its best are fed and ended by
+  warm-up swings like any other counted stat, because §18 names only the home-run streak and that
+  is the one the fireworks and the §11 cues read.
+- **Handing the field back leaves nothing behind.** `endWarmUp` restores the career's park and
+  pitch and also clears the transients (`flight`, `launch`, `playbackIndex`, `lastCall`,
+  `calledStrikesInARow`, the cue indices, the contact quality). That is what makes the promise
+  testable as written: `WarmUpTests` asserts the career machine after a Warm Up is `==` to one
+  rebuilt from its own seed, park and tally, so the stats are provably the only thing that moved.
+- **A run with no save never starts one.** `SaveStore.isEnabled` is the gate, not a separate flag:
+  a run with no save has no yesterday to differ from. That is what keeps `-autoslice` and `-nosave`
+  screenshot runs exactly what they were, with no extra condition to remember.
+- **The fireworks seed carries the Warm Up's spent count**, because `pitches` does not move during
+  one and all ten of a day's shows would otherwise be the same show. Outside a Warm Up the seed is
+  bit-for-bit what it was.
+- **`epochDay` is a placeholder** (2026-04-01) until there is a ship date, and so is `shareLink`.
+  On the placeholder, 20 September 2026 is `WARM UP 173`.
+- **The 3×5 face gained `·`**, one pixel, for the `WARM UP · 3/10` headline the spec asks for in
+  those words. Checked at full resolution: it reads as a separator, not a full stop.
+- **DEBUG launch arguments:** `-warmup <day>` forces the day's Warm Up (implies `-nosave`, and
+  fakes the one cleared park the gate asks for); `-warmupcard` jumps straight to the result card
+  with a made-up ten, the way `-streak` fakes a streak. With `-showstats`, a finished Warm Up goes
+  to the board rather than the card, because a robot has no finger to leave the card with.
+- **Not exercised:** the share sheet. `UIActivityViewController` cannot be driven from `simctl`,
+  so the `SHARE` word and the row were only confirmed to draw and to hit-test; the sheet itself
+  has never been opened. The share *string* is built in Core and is tested there.
 
 **Open:**
 1. The glyphs. Squares and one 💥, or all baseballs and bats?

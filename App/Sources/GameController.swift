@@ -11,6 +11,7 @@ final class GameController {
     let wideScene: WideScene
     let statsScene: StatsScene
     let contractScene: ContractScene
+    let warmUpCardScene: WarmUpCardScene
     /// The one purchase (DESIGN.md §16). Read by the card and the stats board for the price.
     let store = Store()
     private weak var view: SKView?
@@ -22,19 +23,43 @@ final class GameController {
     /// entitled for good. Only a beta tester can be in that state (§16).
     private let grandfathered: Bool
 
+    /// The only day the game remembers (DESIGN.md §18): the Warm Up in progress or the one last
+    /// finished, which is the row the stats board carries until tomorrow's replaces it.
+    private(set) var lastWarmUp: SavedWarmUp?
+    /// The finished card, for the result scene and the stats-board row. Nil until a day is done.
+    var finishedWarmUp: WarmUpResult? {
+        guard let saved = lastWarmUp, saved.done else { return nil }
+        return WarmUpResult(day: saved.day, pitches: saved.pitches)
+    }
+    private var foregroundObserver: (any NSObjectProtocol)?
+
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
         let save = SaveStore.load()
         #if DEBUG
         // `-contract`: start where the card is earned, so it can be reached in one home run.
-        // `-park n`: drop into one park for a screenshot.
-        let startPark = Self.startInTripleA ? Park.generate(number: League.theShow.rawValue - 1)
-            : Self.debugParkNumber.map { Park.generate(number: $0) }
+        // `-park n`: drop into one park for a screenshot. `-warmup <day>`: Double-A, the park a
+        // career that has just cleared Single-A is standing in, which is the Warm Up's gate.
+        let startPark: Park?
+        if Self.startInTripleA {
+            startPark = Park.generate(number: League.theShow.rawValue - 1)
+        } else if let n = Self.debugParkNumber {
+            startPark = Park.generate(number: n)
+        } else if Self.debugWarmUpDay != nil {
+            startPark = Park.generate(number: 2)
+        } else {
+            startPark = nil
+        }
         #else
         let startPark: Park? = nil
         #endif
         var startingTally = save?.tally ?? Tally()
         #if DEBUG
-        if let n = Self.debugStartingStreak { startingTally = Self.tally(withHomeRunStreak: n) }
+        if let n = Self.debugStartingStreak {
+            startingTally = Self.tally(["homeRunStreak": n, "bestHomeRunStreak": n])
+        }
+        // `-warmup <day>` fakes the one thing the Warm Up's gate asks for: a career that has
+        // cleared Single-A. Without it the forced day would be refused, as it should be.
+        if Self.debugWarmUpDay != nil { startingTally = Self.tally(["parksCleared": 1]) }
         #endif
         machine = DerbyMachine(seed: seed,
                                park: startPark ?? save.map { Park.generate(number: $0.parkNumber) } ?? .first,
@@ -47,24 +72,45 @@ final class GameController {
         // Grandfathering (§16): asked once of each save, on the first launch that can ask it.
         // A blob written before the paywall has no answer in it, so the park number is the answer.
         grandfathered = save?.grandfathered ?? ((save?.parkNumber ?? 0) >= League.theShow.rawValue)
+        lastWarmUp = save?.warmUp
+        #if DEBUG
+        if Self.showWarmUpCardForScreenshots { lastWarmUp = Self.sampleWarmUp }
+        #endif
         atBatScene = AtBatScene()
         wideScene = WideScene()
         statsScene = StatsScene()
         contractScene = ContractScene()
+        warmUpCardScene = WarmUpCardScene()
         atBatScene.controller = self
         wideScene.controller = self
         statsScene.controller = self
         contractScene.controller = self
+        warmUpCardScene.controller = self
         applyCeiling()
         persist()                                   // the grandfathering answer, written down
         store.onEntitlementChange = { [weak self] in self?.entitlementChanged() }
         Task { await store.start() }
+        startTodaysWarmUpIfNeeded()
+        // The other half of "at launch, and whenever the app comes back to the foreground"
+        // (§18). A `scenePhase` change would have to be plumbed through two SwiftUI views to
+        // reach the controller; the notification is already addressed to it.
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.startTodaysWarmUpIfNeeded() }
+        }
     }
 
-    /// Written at every beat change, so at worst a second or so of `secondsPlayed` is lost.
+    deinit {
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+    }
+
+    /// Written at every beat change, so at worst a second or so of `secondsPlayed` is lost. The
+    /// park recorded is the **career's**: a Warm Up borrows the field, and the day's park number
+    /// has no business being restored as the park the player is standing in (§18).
     private func persist() {
-        SaveStore.save(SaveState(parkNumber: machine.park.number, tally: machine.tally,
-                                 contractOffered: contractOffered, grandfathered: grandfathered))
+        SaveStore.save(SaveState(parkNumber: machine.careerPark.number, tally: machine.tally,
+                                 contractOffered: contractOffered, grandfathered: grandfathered,
+                                 warmUp: lastWarmUp))
     }
 
     // MARK: - The Show, and what stands between (DESIGN.md §16)
@@ -79,7 +125,7 @@ final class GameController {
     /// Entitled: no ceiling. Not entitled: the last minors park — or, after a refund, the park
     /// the player is standing in, because nothing is ever taken away. They just stop advancing.
     private func applyCeiling() {
-        machine.parkCeiling = isEntitled ? nil : max(Self.minorsCeiling, machine.park.number)
+        machine.parkCeiling = isEntitled ? nil : max(Self.minorsCeiling, machine.careerPark.number)
     }
 
     /// Signed, restored, a pending purchase landing, a purchase made on another device, a refund.
@@ -137,6 +183,88 @@ final class GameController {
     private static let startDeclined = arguments.contains("-declined")
     #endif
 
+    // MARK: - The Warm Up (DESIGN.md §18)
+
+    /// Today, as `YYYYMMDD` in the **local** calendar and time zone ("whatever wordle does").
+    /// The one clock in the whole feature: Core is handed the number and never reads a clock.
+    private static var todayDayNumber: Int {
+        let d = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        return (d.year ?? 2026) * 10000 + (d.month ?? 1) * 100 + (d.day ?? 1)
+    }
+
+    /// The day to play, or nil for a run that must not have one. A run with no save has no
+    /// yesterday to differ from, so `-autoslice` and `-nosave` never start a Warm Up and every
+    /// screenshot run stays what it was; `-warmup <day>` is the one way to force it.
+    private static var warmUpDay: Int? {
+        #if DEBUG
+        if let forced = debugWarmUpDay { return forced }
+        #endif
+        return SaveStore.isEnabled ? todayDayNumber : nil
+    }
+
+    /// Called at launch and every time the app comes back to the foreground. If today is not
+    /// the saved day the day's ten are queued for the next windup; if it is the saved day and
+    /// they were interrupted, they pick up where they stopped.
+    func startTodaysWarmUpIfNeeded() {
+        guard let day = Self.warmUpDay, machine.warmUp == nil else { return }
+        let card = WarmUp.generate(day: day)
+        if let saved = lastWarmUp, saved.day == day {
+            guard !saved.done else { return }                 // already played today
+            machine.beginWarmUp(card, resuming: saved.pitches)
+        } else {
+            machine.beginWarmUp(card)
+        }
+    }
+
+    /// Mirrors the run into the save at every beat change, so a Warm Up interrupted at pitch six
+    /// resumes at pitch seven and a pitch still in the air comes back as taken.
+    private func recordWarmUpProgress() {
+        guard let run = machine.warmUp else { return }
+        lastWarmUp = SavedWarmUp(day: run.card.day, pitches: run.pitches, done: false)
+    }
+
+    /// The tenth has played out: the day is written down as finished and the card comes up by
+    /// hard cut, the machine standing still behind it.
+    private func finishWarmUp(_ result: WarmUpResult) {
+        lastWarmUp = SavedWarmUp(day: result.day, pitches: result.pitches, done: true)
+        persist()
+        #if DEBUG
+        // `-showstats` alongside a Warm Up goes to the board rather than the card: a robot has
+        // no finger to leave the card with, and the board is where the day's row and its
+        // counted stats can be seen together.
+        if Self.showStatsForScreenshots {
+            Self.showStatsForScreenshots = false
+            showStats()
+            return
+        }
+        #endif
+        showWarmUpCard()
+    }
+
+    func showWarmUpCard() {
+        guard let view, view.scene !== warmUpCardScene, finishedWarmUp != nil else { return }
+        view.presentScene(warmUpCardScene)
+    }
+
+    /// Any slice or tap leaves, by hard cut to the career windup the machine is already in.
+    func leaveWarmUpCard() {
+        guard let view, view.scene === warmUpCardScene else { return }
+        view.presentScene(atBatScene)
+    }
+
+    /// `SHARE`: the system sheet with §18's text. The string itself is built in Core, so what
+    /// is shared is a pure function of the result and is tested there.
+    func shareWarmUp() {
+        guard let result = finishedWarmUp, let view,
+              let root = view.window?.rootViewController else { return }
+        let sheet = UIActivityViewController(activityItems: [result.shareText()], applicationActivities: nil)
+        // iPad has no sheet without an anchor, and this app runs on one.
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY,
+                                                                 width: 1, height: 1)
+        root.present(sheet, animated: true)
+    }
+
     // MARK: - The stats board
 
     /// Hard cut to the board. The machine stops ticking while it is up (`StatsScene.ticksMachine`).
@@ -160,6 +288,12 @@ final class GameController {
         self.view = view
         guard view.scene == nil else { return }
         updateLayout(viewSize: view.bounds.size)
+        #if DEBUG
+        if Self.showWarmUpCardForScreenshots {
+            view.presentScene(warmUpCardScene)
+            return
+        }
+        #endif
         view.presentScene(atBatScene)
     }
 
@@ -171,7 +305,7 @@ final class GameController {
         let width = max(320, (224 * aspect).rounded())
         let size = CGSize(width: width, height: 224)
         let designPerPoint = 224 / Double(viewSize.height)
-        for scene in [atBatScene, wideScene, statsScene, contractScene] as [CanvasScene] {
+        for scene in [atBatScene, wideScene, statsScene, contractScene, warmUpCardScene] as [CanvasScene] {
             scene.size = size
             scene.scaleMode = .aspectFit
             scene.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
@@ -188,7 +322,10 @@ final class GameController {
         // whenever a finger is on the glass, however it got there (DESIGN.md §3, issue #20).
         machine.sliceInProgress = atBatScene.fingerDown
         let transitions = machine.tick(clamped)
-        if machine.beat != beatBefore { persist() }
+        if machine.beat != beatBefore {
+            recordWarmUpProgress()
+            persist()
+        }
         #if DEBUG
         // `-showstats`: cut to the board once a robot career is worth looking at (screenshots).
         if Self.showStatsForScreenshots, machine.beat == .windup, machine.tally.pitches >= 12 {
@@ -201,6 +338,9 @@ final class GameController {
         // `.calledUp` arrives in the same list as the `.cutToAtBat` that would draw over the
         // card, so the offer waits until every transition has been handled.
         var offerTheContract = false
+        // `.warmUpEnded` arrives alongside the `.cutToAtBat` that would draw over the card, so
+        // the card waits until every transition has been handled — the same dance as the contract.
+        var finishedCard: WarmUpResult? = nil
         for transition in transitions {
             switch transition {
             case .cutToWide:
@@ -210,7 +350,7 @@ final class GameController {
                 if flash { atBatScene.flashNextFrame = true }
                 view?.presentScene(atBatScene)
             case .pitchThrown:
-                streakAtThePitch = machine.tally.homeRunStreak
+                streakAtThePitch = machine.streakNow
                 lastSwing = nil                 // the record only lives until the next pitch (#4)
                 haptics.prepare()
                 sound.stopOrgan()            // and then silence: nothing sounds during the pitch
@@ -238,7 +378,9 @@ final class GameController {
                 if machine.isAtCeiling { offerTheContract = true }
             case .calledStrikesInARow:
                 if machine.hasOrgan { sound.threeBlindMice() }   // there is no third strike here (#17)
-            case .parkChanged, .flash:
+            case .warmUpEnded(let result):
+                finishedCard = result
+            case .warmUpBegan, .parkChanged, .flash:
                 break
             }
         }
@@ -247,10 +389,11 @@ final class GameController {
         if machine.beat == .result, beatBefore != .result {
             if machine.flight?.homeRun != true {
                 mournStreak(after: 0.35)
-            } else if machine.tally.homeRunStreak == 2, machine.hasOrgan {
+            } else if machine.streakNow == 2, machine.hasOrgan {
                 sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
             }
         }
+        if let finishedCard { finishWarmUp(finishedCard) }
         if offerTheContract { offerContract() }
         if pendingClipURL != nil { presentPendingClipIfCalm() }
     }
@@ -429,12 +572,38 @@ final class GameController {
         return Int(args[i + 1])
     }
 
-    /// A `Tally` with only `homeRunStreak` (and its running best) set, via the same JSON shape
-    /// `SaveStore` and old saves already round-trip through — `Tally.set` is Core-internal, so
-    /// this is the one door the app has into a specific starting number.
-    private static func tally(withHomeRunStreak n: Int) -> Tally {
-        let json = #"{"values":{"homeRunStreak":\#(n),"bestHomeRunStreak":\#(n)}}"#.data(using: .utf8)!
+    /// A `Tally` with only the given stats set, via the same JSON shape `SaveStore` and old
+    /// saves already round-trip through — `Tally.set` is Core-internal, so this is the one door
+    /// the app has into a specific starting number.
+    private static func tally(_ values: [String: Int]) -> Tally {
+        let body = values.keys.sorted().map { "\"\($0)\":\(values[$0]!)" }.joined(separator: ",")
+        let json = "{\"values\":{\(body)}}".data(using: .utf8)!
         return (try? JSONDecoder().decode(Tally.self, from: json)) ?? Tally()
+    }
+
+    /// `-warmup <day>`: force the Warm Up for that `YYYYMMDD`, whatever today is, so the daily
+    /// ten can be screenshotted on a chosen park. Implies `-nosave` (`SaveStore`) — a forced day
+    /// has no business overwriting, or being overwritten by, a real career — and fakes the one
+    /// cleared park the gate asks for. `-warmupcard` implies it for today.
+    private static let debugWarmUpDay: Int? = {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-warmup"), i + 1 < args.count, let day = Int(args[i + 1]) {
+            return day
+        }
+        return args.contains("-warmupcard") ? todayDayNumber : nil
+    }()
+
+    /// `-warmupcard`: jump straight to the result card with a made-up ten, so the card and the
+    /// share row can be looked at without playing forty seconds of Warm Up first. It fakes the
+    /// result the way `-streak` fakes a streak — the glyph row is §18's own example.
+    static let showWarmUpCardForScreenshots = ProcessInfo.processInfo.arguments.contains("-warmupcard")
+
+    private static var sampleWarmUp: SavedWarmUp {
+        let outcomes: [WarmUpOutcome] = [.homeRun, .swingAndMiss, .inPlay, .homeRun, .taken,
+                                         .offTheWall, .homeRun, .inPlay, .swingAndMiss, .homeRun]
+        let feet = [412, 0, 141, 388, 0, 372, 401, 89, 0, 436]
+        return SavedWarmUp(day: debugWarmUpDay ?? todayDayNumber,
+                           pitches: zip(outcomes, feet).map(WarmUpPitch.init), done: true)
     }
     #endif
 

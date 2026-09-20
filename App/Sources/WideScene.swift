@@ -175,8 +175,9 @@ final class WideScene: CanvasScene {
                 if flightResult.homeRun, Int(machine.elapsed * 6) % 2 == 0 {
                     canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", Palette.cap, scale: 3)
                 }
-                if flightResult.homeRun, machine.tally.homeRunStreak >= 2 {
-                    let streak = "STREAK \(machine.tally.homeRunStreak)"
+                // `streakNow`: the Warm Up's streak while one is live, the career's otherwise.
+                if flightResult.homeRun, machine.streakNow >= 2 {
+                    let streak = "STREAK \(machine.streakNow)"
                     canvas.t3(fullWidth / 2 - Double(streak.count) * 4, 116, streak, Palette.score, scale: 2)
                 }
                 if flightResult.wallHit {
@@ -197,7 +198,9 @@ final class WideScene: CanvasScene {
                                  machine: machine, view: view, scenery: scenery)
         }
 
-        let parkName = machine.park.displayName
+        // The same word the outfield scoreboard carries: during a Warm Up this is the day's
+        // park, not a park anyone is trying to clear, and its number is a date (DESIGN.md §18).
+        let parkName = machine.warmUp == nil ? machine.park.displayName : "WARM UP"
         canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
     }
 
