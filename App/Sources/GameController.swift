@@ -14,9 +14,11 @@ final class GameController {
 
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
         let save = SaveStore.load()
-        machine = DerbyMachine(seed: seed,
-                               park: save.map { Park.generate(number: $0.parkNumber) } ?? .first,
-                               tally: save?.tally ?? Tally())
+        var startingPark = save.map { Park.generate(number: $0.parkNumber) } ?? .first
+        #if DEBUG
+        if let n = Self.debugParkNumber { startingPark = Park.generate(number: n) }
+        #endif
+        machine = DerbyMachine(seed: seed, park: startingPark, tally: save?.tally ?? Tally())
         atBatScene = AtBatScene()
         wideScene = WideScene()
         statsScene = StatsScene()
@@ -179,6 +181,14 @@ final class GameController {
 
     #if DEBUG
     private static var showStatsForScreenshots = ProcessInfo.processInfo.arguments.contains("-showstats")
+    /// `-park <n>`: start in park n rather than wherever the save left off, so a screenshot can
+    /// reach a night park or one rung of the ladder. Implies `-nosave` (`SaveStore`), so it
+    /// never reads or writes a real career.
+    private static let debugParkNumber: Int? = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-park"), i + 1 < args.count else { return nil }
+        return Int(args[i + 1])
+    }()
     #endif
 
     /// The ball's position at a given pitch progress, for `Contact.test`'s `ballAt` closure

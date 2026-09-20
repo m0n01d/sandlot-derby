@@ -48,6 +48,21 @@ final class AtBatScene: CanvasScene {
 
     private var xOffset: Double { (Double(size.width) - 320) / 2 }
 
+    private let layout = BackdropLayout.standard
+    /// The horizon above the wall, drawn once per park and canvas and copied after that
+    /// (DESIGN.md §17). Only the clouds are redrawn per frame.
+    private let backdrops = BackdropCache()
+    private var cachedScenery: Scenery?
+
+    /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds
+    /// its cloud stamps fresh every time it is asked.
+    private func scenery(for park: Park) -> Scenery {
+        if let s = cachedScenery, s.parkNumber == park.number { return s }
+        let s = park.scenery
+        cachedScenery = s
+        return s
+    }
+
     // MARK: - Drawing
 
     override func render(into canvas: PixelCanvas) {
@@ -74,6 +89,21 @@ final class AtBatScene: CanvasScene {
         canvas.rect(0, 70, fullWidth, 26, scheme.sky3)
         canvas.dither(0, 42, fullWidth, 4, scheme.sky1, scheme.sky2)
         canvas.dither(0, 68, fullWidth, 4, scheme.sky2, scheme.sky3)
+
+        // The sky and the horizon (DESIGN.md §17). Both sit above y = 96; the strike zone
+        // starts at y = 136, so nothing new here moves anywhere near it.
+        let scenery = self.scenery(for: machine.park)
+        Clouds.draw(into: canvas, clouds: scenery.atBatClouds,
+                    breeze: scenery.breezePixelsPerSecond,
+                    seconds: machine.tally[.secondsPlayed],
+                    width: fullWidth, night: machine.park.isNight)
+        backdrops.layers(
+            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat),
+            height: canvas.height) { b, _ in
+            BackdropArt.atBatHorizon(into: b.canvas, park: machine.park, scenery: scenery,
+                                     width: fullWidth, xOffset: xOff, layout: self.layout)
+        }.behind.blit(onto: canvas)
+
         canvas.rect(0, 96, fullWidth, 8, Palette.wall)
         canvas.rect(0, 96, fullWidth, 1, Palette.chalk)
         canvas.rect(0, 104, fullWidth, H - 104, Palette.grassA)
