@@ -26,10 +26,11 @@ enum SaveStore {
     /// A `-autoslice` run is a robot's career, not the player's: it neither reads nor writes.
     /// `-nosave` does the same for a human: a fresh Single-A every launch. `-contract` is a
     /// `-nosave` that starts in Triple-A, and `-park n` drops you into one park for a screenshot,
-    /// and `-streak n` fakes a streak that never happened; none of them may overwrite a real career. `Store` gates its entitlement cache on this too, so a
-    /// dev run cannot leave a purchase behind in a real one.
+    /// and `-streak n` fakes a streak that never happened, and `-replay <path>` is a robot run
+    /// made to write one clip; none of them may overwrite a real career. `Store` gates its
+    /// entitlement cache on this too, so a dev run cannot leave a purchase behind in a real one.
     static let isEnabled = !ProcessInfo.processInfo.arguments.contains {
-        $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined" || $0 == "-park" || $0 == "-streak"
+        $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined" || $0 == "-park" || $0 == "-streak" || $0 == "-replay"
     }
 
     static func load() -> SaveState? {

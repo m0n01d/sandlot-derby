@@ -71,15 +71,16 @@ final class AtBatScene: CanvasScene {
     // MARK: - Drawing
 
     override func render(into canvas: PixelCanvas) {
-        guard let controller else { return }
-        let machine = controller.machine
+        guard let machine = renderMachine else { return }
 
+        // A replay scene has no controller and no input: its beats are already decided, and its
+        // `contactVisual` was restored from the record before the first frame.
         if machine.beat != trackedBeat {
-            handleBeatChange(to: machine.beat, controller: controller)
+            if let controller { handleBeatChange(to: machine.beat, controller: controller) }
             trackedBeat = machine.beat
         }
         #if DEBUG
-        if Self.autoSlice, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
+        if Self.autoSlice, !isOffScreen, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
         #endif
 
         let scheme = Palette.scheme(isNight: machine.park.isNight)
@@ -378,6 +379,30 @@ final class AtBatScene: CanvasScene {
                 self.fadeTrail = nil
             }
         }
+    }
+
+    // MARK: - The replay record (#4)
+
+    /// The two things the contact freeze draws that the machine knows nothing about: the
+    /// direction of the slash through the ball and the finger's trail behind it. Read by
+    /// `GameController.recordSlice` the moment a swing lands, to go into the `Replay`.
+    var lastContactMarks: (slash: Point, trail: [Point])? {
+        contactVisual.map { ($0.dir, $0.trailPoints) }
+    }
+
+    /// Puts a recorded swing's draw-only marks back, so an off-screen copy of this scene redraws
+    /// the contact freeze exactly as it was. `ReplayRenderer` calls this once, before the first
+    /// frame; the ball, its radius, the swing angle and the power all come from the crossing,
+    /// which is the same one the live scene was handed.
+    func restoreContactVisual(from replay: Replay) {
+        let crossing = replay.swing.crossing
+        contactVisual = ContactVisual(ball: crossing.ball.position,
+                                      radius: crossing.ball.radius,
+                                      dir: replay.marks.slash.point,
+                                      angle: crossing.swingAngleDegrees,
+                                      power: crossing.power,
+                                      trailPoints: replay.marks.trail.map(\.point))
+        trackedBeat = .contact
     }
 
     private func callWord(_ call: Call?) -> String {
