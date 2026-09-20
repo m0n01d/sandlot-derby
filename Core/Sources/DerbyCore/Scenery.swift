@@ -85,15 +85,18 @@ public struct SceneryRules: Equatable {
     /// −3…+3 px/s. Cosmetic today; when §14 ships wind this same number pushes the ball, and
     /// the clouds and flags will already have been showing it.
     public var breeze: ClosedRange<Double> = -3...3
-    /// Two to four clouds per view, each a stamp of three or four blocks.
+    /// Two to four clouds per view, each a stamp of three or four blocks: a wide flat base with
+    /// narrower, taller steps heaped on it. Side by side they read as a shelf; stacked they read
+    /// as a cloud.
     public var cloudsPerView: ClosedRange<Int> = 2...4
     public var cloudBlocks: ClosedRange<Int> = 3...4
-    public var cloudBlockWidth: ClosedRange<Int> = 5...11
-    /// A stamp's end blocks are flat, its middle blocks are the heap.
-    public var cloudEndRise: ClosedRange<Int> = 2...4
-    public var cloudMiddleRise: ClosedRange<Int> = 4...7
-    /// How far one block laps over the last.
-    public var cloudBlockOverlap: ClosedRange<Int> = 1...3
+    public var cloudBaseWidth: ClosedRange<Int> = 15...26
+    public var cloudBaseRise: ClosedRange<Int> = 2...3
+    /// How much taller and how much narrower each step above the base is, and how far it shifts.
+    public var cloudStepRise: ClosedRange<Int> = 2...4
+    public var cloudStepShrink: ClosedRange<Int> = 3...7
+    /// The tallest a stamp may end up, so no cloud ever eats its band.
+    public var cloudMaxRise = 13
     /// Where a cloud's baseline may sit in each view, in design pixels. Both bands are well
     /// clear of the strike zone, the wall band and the scoreboard (§17: nothing new moves near
     /// the zone).
@@ -103,7 +106,7 @@ public struct SceneryRules: Equatable {
     /// How high the stands climb above the ground and how far back they run, in feet, by tier.
     /// The full tier is §17's "about 60 ft at 150 ft back"; the rest of the ladder is Claude's,
     /// unreviewed (2026-09-19).
-    public var fenceTopFeet: Double = 12
+    public var fenceTopFeet: Double = 15
     public var fenceDepthFeet: Double = 40
     public var lowBleacherTopFeet: Double = 18
     public var lowBleacherDepthFeet: Double = 50
@@ -229,15 +232,22 @@ public struct Scenery: Equatable {
             let slice = 1.0 / Double(count)
             let x = (Double(i) + Double.random(in: 0.05...0.75, using: &g)) * slice
             let y = Double.random(in: band, using: &g).rounded()
+            // A heap, not a row: the base spans the stamp and every step above it is narrower,
+            // taller and shifted along. Each block runs from its own top down to the shared
+            // baseline, so the stamp is one solid stepped mound.
             let blockCount = Int.random(in: rules.cloudBlocks, using: &g)
-            var blocks: [Cloud.Block] = []
+            var w = Int.random(in: rules.cloudBaseWidth, using: &g)
+            var rise = Int.random(in: rules.cloudBaseRise, using: &g)
             var dx = 0
-            for j in 0..<blockCount {
-                let w = Int.random(in: rules.cloudBlockWidth, using: &g)
-                let isEnd = j == 0 || j == blockCount - 1
-                let rise = Int.random(in: isEnd ? rules.cloudEndRise : rules.cloudMiddleRise, using: &g)
+            var blocks = [Cloud.Block(dx: dx, rise: rise, w: w)]
+            for _ in 1..<blockCount {
+                let shrink = Int.random(in: rules.cloudStepShrink, using: &g)
+                dx += Int.random(in: 1...max(1, shrink - 1), using: &g)
+                w -= shrink
+                let taller = rise + Int.random(in: rules.cloudStepRise, using: &g)
+                guard w >= 3, taller <= rules.cloudMaxRise else { break }
+                rise = taller
                 blocks.append(Cloud.Block(dx: dx, rise: rise, w: w))
-                dx += w - Int.random(in: rules.cloudBlockOverlap, using: &g)
             }
             out.append(Cloud(xFraction: x, baselineY: y, blocks: blocks))
         }

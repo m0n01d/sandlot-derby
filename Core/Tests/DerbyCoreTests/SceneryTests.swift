@@ -81,16 +81,22 @@ final class SceneryTests: XCTestCase {
                                    (s.sideClouds, rules.sideCloudBand)] {
                 XCTAssertTrue(rules.cloudsPerView.contains(clouds.count), "park \(n): \(clouds.count) clouds")
                 for c in clouds {
-                    XCTAssertTrue(rules.cloudBlocks.contains(c.blocks.count))
+                    XCTAssertTrue((2...rules.cloudBlocks.upperBound).contains(c.blocks.count))
                     XCTAssertTrue(band.contains(c.baselineY), "park \(n) baseline \(c.baselineY)")
                     XCTAssertTrue((0.0..<1.0).contains(c.xFraction))
                     XCTAssertEqual(c.blocks.first?.dx, 0)
-                    XCTAssertGreaterThan(c.width, 0)
-                    XCTAssertGreaterThan(c.height, 0)
-                    for b in c.blocks {
-                        XCTAssertTrue(rules.cloudBlockWidth.contains(b.w))
-                        XCTAssertTrue((rules.cloudEndRise.lowerBound...rules.cloudMiddleRise.upperBound).contains(b.rise))
+                    XCTAssertTrue(rules.cloudBaseWidth.contains(c.blocks[0].w))
+                    XCTAssertTrue(rules.cloudBaseRise.contains(c.blocks[0].rise))
+                    XCTAssertLessThanOrEqual(c.height, rules.cloudMaxRise)
+                    // A heap: every step above the base is narrower, taller and further along.
+                    for (a, b) in zip(c.blocks, c.blocks.dropFirst()) {
+                        XCTAssertGreaterThan(b.dx, a.dx, "park \(n)")
+                        XCTAssertLessThan(b.w, a.w, "park \(n)")
+                        XCTAssertGreaterThan(b.rise, a.rise, "park \(n)")
+                        XCTAssertGreaterThanOrEqual(b.w, 3)
                     }
+                    // And it never overhangs the base it sits on.
+                    XCTAssertEqual(c.width, c.blocks[0].w)
                 }
             }
         }
