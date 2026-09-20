@@ -39,16 +39,17 @@ enum SaveStore {
     /// A `-autoslice` run is a robot's career, not the player's: it neither reads nor writes.
     /// `-nosave` does the same for a human: a fresh Single-A every launch. `-contract` is a
     /// `-nosave` that starts in Triple-A, and `-park n` drops you into one park for a screenshot,
-    /// and `-streak n` fakes a streak that never happened, and `-warmup <day>` forces a day that
-    /// is not today; none of them may overwrite a real career. `Store` gates its entitlement
-    /// cache on this too, so a dev run cannot leave a purchase behind in a real one.
+    /// and `-streak n` fakes a streak that never happened, `-warmup <day>` forces a day that is
+    /// not today, and `-replay <path>` is a robot run made to write one clip; none of them may
+    /// overwrite a real career. `Store` gates its entitlement cache on this too, so a dev run
+    /// cannot leave a purchase behind in a real one.
     ///
     /// It is also what decides whether a Warm Up can start at all (DESIGN.md §18): a run with no
     /// save has no yesterday to differ from, so `-autoslice` and `-nosave` on their own never
     /// start one and every screenshot run stays what it was.
     static let isEnabled = !ProcessInfo.processInfo.arguments.contains {
         $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined"
-            || $0 == "-park" || $0 == "-streak" || $0 == "-warmup" || $0 == "-warmupcard"
+            || $0 == "-park" || $0 == "-streak" || $0 == "-replay" || $0 == "-warmup" || $0 == "-warmupcard"
     }
 
     static func load() -> SaveState? {

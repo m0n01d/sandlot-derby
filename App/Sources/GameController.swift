@@ -351,6 +351,7 @@ final class GameController {
                 view?.presentScene(atBatScene)
             case .pitchThrown:
                 streakAtThePitch = machine.streakNow
+                lastSwing = nil                 // the record only lives until the next pitch (#4)
                 haptics.prepare()
                 sound.stopOrgan()            // and then silence: nothing sounds during the pitch
             case .called(let call):
@@ -394,7 +395,94 @@ final class GameController {
         }
         if let finishedCard { finishWarmUp(finishedCard) }
         if offerTheContract { offerContract() }
+        if pendingClipURL != nil { presentPendingClipIfCalm() }
     }
+
+    // MARK: - The replay clip (#4, DESIGN.md §19)
+
+    /// The last swing, as a record that can draw itself again. Kept only until the next pitch is
+    /// thrown. Taken for every swing, not just the ones that leave the park: it is a few dozen
+    /// bytes, and the alternative is deciding before the flight has been simulated.
+    private(set) var lastSwing: Replay?
+
+    /// True while a clip is being drawn. `CanvasScene` puts the one word on the screen for it.
+    private(set) var isRenderingReplayClip = false
+
+    /// A finished clip with nowhere to go yet, because the player was already swinging again.
+    private var pendingClipURL: URL?
+
+    /// What the long press on the landing number is allowed to do right now (`WideScene`).
+    var canShareLastHomeRun: Bool {
+        !isRenderingReplayClip && pendingClipURL == nil && machine.beat == .result
+            && machine.flight?.homeRun == true && lastSwing != nil
+    }
+
+    /// The long press matured. Drawing a clip takes longer than the hold it was asked in, so it
+    /// runs behind the game and the sheet arrives whenever it arrives — the next pitch is never
+    /// held up for it.
+    func shareLastHomeRunClip() {
+        guard let replay = lastSwing, !isRenderingReplayClip else { return }
+        isRenderingReplayClip = true
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sandlot-derby-park-\(replay.park.number).mp4")
+        Task { @MainActor [weak self] in
+            defer { self?.isRenderingReplayClip = false }
+            do {
+                try await ReplayRenderer.write(replay, to: url)
+                self?.pendingClipURL = url
+                self?.presentPendingClipIfCalm()
+            } catch {
+                // A clip that could not be made says nothing: there are no toasts in this game.
+                print("replay clip failed: \(error)")
+            }
+        }
+    }
+
+    /// The sheet never lands over a swing. If the player is back in the box by the time the clip
+    /// is drawn, it waits for the next quiet beat — a miss or a landing number — which is never
+    /// more than a pitch away.
+    private func presentPendingClipIfCalm() {
+        guard let url = pendingClipURL else { return }
+        switch machine.beat {
+        case .miss, .result:
+            pendingClipURL = nil
+            ReplayShare.present(url, from: view)
+        case .windup, .pitch, .contact, .flight:
+            break
+        }
+    }
+
+    #if DEBUG
+    /// `-replay <path>`: with `-autoslice`, write the first home run's clip out and log where it
+    /// went, so a clip can be made in a simulator with nothing touching the glass. A path
+    /// beginning with `/` is used as given; anything else is a filename in the app's Documents
+    /// directory, which is where `simctl get_app_container … data` points. Implies `-nosave`.
+    private static let debugReplayPath: String? = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-replay"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }()
+    private var debugReplayDone = false
+
+    private func writeDebugReplayIfAsked() {
+        guard !debugReplayDone, let path = Self.debugReplayPath, let replay = lastSwing,
+              machine.flight?.homeRun == true else { return }
+        debugReplayDone = true
+        let url = path.hasPrefix("/")
+            ? URL(fileURLWithPath: path)
+            : URL.documentsDirectory.appendingPathComponent(path)
+        isRenderingReplayClip = true
+        Task { @MainActor [weak self] in
+            defer { self?.isRenderingReplayClip = false }
+            do {
+                let written = try await ReplayRenderer.write(replay, to: url)
+                print("REPLAY CLIP WRITTEN \(written.path)")
+            } catch {
+                print("REPLAY CLIP FAILED \(error)")
+            }
+        }
+    }
+    #endif
 
     // MARK: - Sound and haptics (DESIGN.md §11)
 
@@ -433,10 +521,21 @@ final class GameController {
     /// `DerbyMachine.slice` itself ignores calls made outside `.pitch`.
     func recordSlice(_ crossing: SliceCrossing) {
         let wasPitch = machine.beat == .pitch
+        // Taken on the line above the swing, never after: `Replay` replays `slice(_:)` itself, so
+        // it needs the machine as it stood before the swing was counted (#4).
+        let marks = atBatScene.lastContactMarks
+        let record = wasPitch
+            ? Replay(capturing: machine, crossing: crossing,
+                     slash: marks?.slash ?? Point(x: 1, y: 0), trail: marks?.trail ?? [])
+            : nil
         machine.slice(crossing)
         if wasPitch {
+            lastSwing = record
             sound.crack(strength: contactStrength)
             haptics.contact(strength: contactStrength)
+            #if DEBUG
+            writeDebugReplayIfAsked()
+            #endif
         }
         persist()
     }

@@ -712,4 +712,24 @@ public struct DerbyMachine: Equatable {
         sliceInProgress = false
         enter(.windup)
     }
+
+    // MARK: - Replay (#4)
+
+    /// A machine standing at the moment before a recorded slice: this park, these career numbers,
+    /// this pitch already on its way. `Replay.machine(from:)` is the only caller — `beat` and
+    /// `pitch` are `private(set)`, so a recorded swing cannot be replayed without a door, and this
+    /// is a smaller one than making them settable. Nothing here is random: the generator is seeded
+    /// 0 because a replay never reaches the next pitch.
+    public static func atPitch(park: Park, tally: Tally, pitch: Pitch,
+                               timings: Timings = .standard, sliceRules: SliceRules = .standard,
+                               pitchingRules: PitchingRules = .standard, statRules: StatRules = .standard,
+                               fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) -> DerbyMachine {
+        var m = DerbyMachine(seed: 0, park: park, tally: tally, timings: timings,
+                             sliceRules: sliceRules, pitchingRules: pitchingRules,
+                             statRules: statRules, fireworksRules: fireworksRules, ladder: ladder)
+        m.pitch = pitch
+        m.beat = .pitch
+        m.elapsed = 0
+        return m
+    }
 }

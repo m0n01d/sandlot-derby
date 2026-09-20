@@ -1,4 +1,5 @@
 import SpriteKit
+import DerbyCore
 
 /// Shared machinery for a scene that owns one canvas sprite and ticks `GameController` from
 /// `update(_:)`. Only the presented `SKScene` receives `update(_:)` calls from an `SKView`, so
@@ -16,6 +17,18 @@ class CanvasScene: SKScene {
     /// layout. Backgrounds ignore them; anything that must be seen stays inside.
     var safeLeft = 0.0
     var safeRight = 0.0
+
+    /// Set by `ReplayRenderer` (#4) on an off-screen copy of a scene, so the very same drawing
+    /// code redraws a recorded moment from a rebuilt machine instead of the live one. Nil in the
+    /// game, where the controller's machine is the only one there is.
+    var replayMachine: DerbyMachine?
+
+    /// The machine this frame is drawn from. Every `render(into:)` reads this and nothing else.
+    var renderMachine: DerbyMachine? { replayMachine ?? controller?.machine }
+
+    /// True for a scene the replay renderer made: no view, no `update(_:)`, no input, and it
+    /// draws into the renderer's canvas rather than one of its own, so it needs no texture.
+    var isOffScreen = false
 
     private(set) var canvas: PixelCanvas?
     private var spriteNode: SKSpriteNode?
@@ -47,6 +60,12 @@ class CanvasScene: SKScene {
             flashNextFrame = false
         } else {
             render(into: canvas)
+            // The only thing a clip being made puts on the screen: one word, bottom right, in the
+            // ordinary 3×5 face (#4). Never on the flash frame, which stays a white frame, and
+            // never in the clip itself — the renderer calls `render(into:)` and never this.
+            if controller?.isRenderingReplayClip == true {
+                canvas.t3(Double(canvas.width) - 26, 8, "CLIP", Palette.score)
+            }
         }
         blit(canvas)
     }
@@ -55,6 +74,7 @@ class CanvasScene: SKScene {
     func render(into canvas: PixelCanvas) {}
 
     private func rebuildCanvasIfNeeded() {
+        if isOffScreen { return }
         let w = max(1, Int(size.width.rounded()))
         let h = max(1, Int(size.height.rounded()))
         if let canvas, canvas.width == w, canvas.height == h { return }

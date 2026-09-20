@@ -259,13 +259,13 @@ The batter is a stamp, not scaled art, and is off screen here.
   tick while it is up, and the tap is not a swing.
 - Persist at every beat change (`UserDefaults`, one JSON blob: park number + tally). The pitch
   sequence is not saved.
-- Game Center (M5): best HR streak, fewest pitches to park 100, and the daily card. **Not**
+- Game Center (M5): best HR streak, fewest pitches to park 100, and the Warm Up (#3, §18). **Not**
   longest: exit velo is capped and flight is deterministic, so everyone reaches the same maximum.
-- **Approved 2026-09-19, not built:** a daily card (the first ten pitches of the day are seeded by
-  the date, same park and pitches for everyone, Wordle-style share string; name undecided, not
-  "Daily Ten"), a pixel-perfect **replay** clip as the share artifact (re-rendered from seed +
-  launch through `PixelCanvas`), **more park variety** (seeded landmarks and rare events, same for
-  everyone on park N), and **more feel** (M3). See issues.
+- **Approved 2026-09-19, not built:** the Warm Up (#3, §18; the first ten pitches of the day,
+  seeded by the date, same park and pitches for everyone, Wordle-style share string), a
+  pixel-perfect **replay** clip as the share artifact (re-rendered from seed + launch through
+  `PixelCanvas`), **more park variety** (seeded landmarks and rare events, same for everyone on
+  park N), and **more feel** (M3). See issues.
 
 ## 11. Audio and haptics (M5)
 
@@ -321,7 +321,8 @@ player's own music or podcast keeps playing underneath. `-mute` silences it for 
 
 ## 12. Tuning knobs
 
-All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
+All live in `DerbyCore` structs with doc comments, except a few marked `(App)` — pure layout, no
+gameplay effect, living beside the scene that draws them. Defaults are the prototype's.
 
 | Knob | Where | Default | Effect |
 |---|---|---|---|
@@ -336,10 +337,11 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `strikeZone` | `PitchingRules` | 40×50 | thumb-sized; shrink only if it feels like a cheat |
 | speed ranges | `PitchType` | table | difficulty lever |
 | `flightSpeed` | `Timings` | 2× | 1× is too slow, verified in the prototype |
-| `contactHold` | `Timings` | 0.35 s | the slash freeze |
+| `contactHoldWeak` / `contactHoldBarrel` | `Timings` | 0.22 s / 0.50 s | the slash freeze, interpolated linearly on the swing's contact quality (issue #20) |
 | `liftCoefficient` | `FlightParams` | 0.15 | under-rewards high spinny hits on purpose |
 | wall ranges | `Park.Rules` | 330–410 / 6–26 | park variety |
 | every column of the minors table (§10) | `Ladder` → `Rung` | table | how gentle each rung is, and what help it shows |
+| `Rung.organ` | `Ladder` → `Rung` | false (Single-A) / true (Double-A, Triple-A, The Show) | whether the rung has a ballpark organ; gates every organ cue |
 | `guideAngleDegrees`, `coachLowAngle` / `coachHighAngle` / `coachWeakExitVelocity` | `Ladder` | 28°, 12° / 42° / 88 mph | the swing guide's angle and when each coaching word fires |
 | `closeReachFeet` / `closeLeadFeet` | `CameraRules` | 60 / 100 ft | which balls earn the close camera, and how early it cuts in |
 | `takenBallKeepsStreak` | `StatRules` | true | whether a taken ball ends the HR streak |
@@ -347,6 +349,13 @@ All live in `DerbyCore` structs with doc comments. Defaults are the prototype's.
 | `noDoubterMarginFeet` / `wallScraperMarginFeet` | `StatRules` | 50 / 12 | how far past the wall a HR landed |
 | `moonshotApexFeet` / `laserMaxAngle` | `StatRules` | 150 ft / 20° | the other two HR kinds |
 | `lineDriveFrom` / `flyBallFrom` / `popUpFrom` | `StatRules` | 10° / 25° / 50° | Statcast batted-ball classes |
+| `threeBlindMiceBPM` / `funeralMarchBPM` / `takeMeOutBPM` | `Synth` | 300 / 225 / 150 | tempo of the three organ tunes (§11) |
+| `statsOrganDelay` | `SoundBoard` | 1.0 s | delay before *Take Me Out* starts over the stats board |
+| the streak table, plus shell timing and shape | `FireworksRules` | table | how many shells a HR streak (or the call-up) earns, and how each shell launches, bursts and falls (§17) |
+| the cloud, breeze, stands and night-sky ranges | `SceneryRules` | table | clouds, breeze, stands height/depth by tier, night towers and moon odds (§17) |
+| the horizon, stands and cloud-drift ranges | `BackdropLayout` / `Clouds.Rules` (App) | table | horizon band, stands profile, crowd density, cloud drift rate and colours (§17) |
+| the card's panel, text and signature-line geometry | `ContractCardLayout` (App) | table | where the contract card draws each line (§16) |
+| `contractRowBand` / `contractMinimumSliceLength` | `StatsScene` (App) | 6 / 12 | hit test for the stats-board contract row (§16) |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.
@@ -360,11 +369,15 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
 - **M2 — at-bat view and slice.** `AtBatScene`, pitcher, batter, ball path, `UIPanGesture` /
   touch samples → `Contact.test` each move, `DerbyMachine` driving both scenes, the cut.
 - **M3 — feel.** Miss markers, contact freeze with slash and readout, flash frame, hitstop.
-  Retune `fullPowerSpeed` and `hitMarginPixels` on a real phone.
+  Retune `fullPowerSpeed` and `hitMarginPixels` on a real phone. Closed 2026-09-19; the leftovers
+  (hitstop by quality, `BARREL` call, third pitcher pose, held-finger swing-miss) were built in
+  #23.
 - **M4 — parks and score.** Seeded parks, night swap, tally persistence, park advance on HR.
-- **M5 — ship.** Audio, haptics, app icon (a ball on a chalk line), Game Center, TestFlight,
-  screenshots, store listing. Name decision. The contract card and the one purchase (§16), which
-  wants the daily card (#3) shipped first.
+- **M5 — ship.** Built: audio and haptics, the organ tunes, `parkCeiling`, the contract card, and
+  StoreKit 2 wiring with a local `.storekit` file. Not built or not exercised: the purchase,
+  pending, refund and restore paths have never been run for real — a `.storekit` configuration
+  only takes effect when the app is launched from Xcode, never from `simctl` — plus the app icon,
+  Game Center, TestFlight, the store listing, and the Warm Up (#3, §18).
 
 ## 14. Open questions
 
@@ -398,7 +411,7 @@ reach, would wreck the pitch → cut rhythm and the 16-colour canvas, and throw 
 tricks", which is the pitch to players and press. At ~10k installs all three earn about the same
 small money, so price for reach and brand.
 
-**What is free, forever:** the minors (parks 1–3), the daily card (#3, played in a Show-league
+**What is free, forever:** the minors (parks 1–3), the Warm Up (#3, §18; played in a Show-league
 park so it is a taste of what is sold), replay sharing (#4), the stats board and every stat, the
 daily and HR-streak leaderboards. A paywalled share loop is a dead share loop.
 
@@ -496,8 +509,8 @@ or a rewarded video.
 on TestFlight → ~~grandfathering~~ (done) → listing copy.
 
 **Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
-the trial can be short. Median pitches-to-call-up says how short, and the free daily card (#3) is
-what keeps a non-payer around, so ship it first.
+the trial can be short. Median pitches-to-call-up says how short, and the free Warm Up (#3, §18)
+is what keeps a non-payer around, so ship it first.
 
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
@@ -703,7 +716,7 @@ point of the flight that is inside the profile the stands were drawn from.
 
 ## 18. The Warm Up: the first ten pitches of the day
 
-Issue #3; what §16 and §13 call "the daily card". Decided by Dwight 2026-09-19: the name ("first 10
+Issue #3; what §16 and §13 used to call "the daily card" before this section existed. Decided by Dwight 2026-09-19: the name ("first 10
 pitches is a Warm Up"), the day ("whatever wordle does": the **local calendar day**), and what it
 counts toward ("professional batters have to warm up too": everything but the cost). The rest of
 this section is Claude's and unreviewed. **Built 2026-09-19** (Claude, unreviewed) — see "What the
@@ -842,3 +855,93 @@ and `streakNow`, with tests~~ → ~~the save~~ → ~~headline and scoreboard~~ �
    kinder to a beginner; sooner gives a non-payer the daily habit §16 is counting on.
 4. The Watch (`docs/watch.md`) leaves this phone-only in v1. Ten pitches is a very wrist-sized
    game; revisit if the watch gets past its W2.
+
+## 19. The replay clip
+
+> **Status: built 2026-09-19 (#4), unreviewed.** Dwight approved the idea ("Replay is a great
+> idea", #2 item 4); every decision below is Claude's unless it is quoted from the issue.
+
+A home run is re-rendered off screen, frame by frame, into an H.264 `.mp4` and handed to the
+system share sheet. Not a screen recording: there is no ReplayKit, no permission prompt, and
+nothing the player sees is captured. The clip is drawn again from a record of how the swing
+happened, by the same code that drew it live.
+
+**Why it is possible at all.** Every frame is already a pure function of `DerbyMachine` and the
+park (§8, §17). Flight is integrated once at contact and played back; the sky, the clouds, the
+stands and the fireworks are functions of the park number and the machine's own clock, never of
+`Date()`. So a machine rebuilt from the right few numbers draws the identical picture.
+
+**The record** (`Core/Sources/DerbyCore/Replay.swift`). `Codable`, `Equatable`, about half a
+kilobyte. It keeps the *inputs*, never anything derived:
+
+- the park by value (number, wall distance, wall height, night), so a clip does not move if the
+  `Ladder` or `Park.Rules` later move the wall;
+- the pitch (type by name, speed, strike, target);
+- the `SliceCrossing` the finger made;
+- the whole `Tally` as it stood **the instant before** `slice(_:)` ran;
+- `marks`: the slash direction and the finger's trail, the only two things the contact freeze
+  draws that the machine knows nothing about (§3).
+
+`Replay.machine(from:)` builds a machine at that pitch (`DerbyMachine.atPitch`, the one door that
+exists for it) and replays the single `slice(_:)` call. The launch, the flight, the cue indices,
+the hitstop, the fireworks seed and the landing number are therefore all recomputed by the game's
+own code and cannot drift from it. `ReplayTests` ticks the original and the rebuild side by side
+at 1/60 and asserts every number a frame reads is equal on every frame, from the contact freeze
+to the end of the landing number — including the drawn fireworks particles.
+
+**The clip.** §3's beats and nothing else: the contact freeze, one white frame, the flight across
+both cameras, the landing number. `ReplayRenderer` calls the very same `AtBatScene.render(into:)`
+and `WideScene.render(into:)` on off-screen copies of those scenes, so there is no second copy of
+the drawing code to keep in step. Frames go up by a whole number with nearest neighbour; no
+filtering, ever. Always 320×224 at heart, never the phone's wider canvas, so a clip made on any
+phone is the same picture. The park number and, at two or more, the streak are already on those
+frames (§10, §17), which is the stamp the issue asks for — "always stamp the park number so the
+reply is *let me try park 87*".
+
+**The trigger.** A long press anywhere during the result hold of a home run. No button, no menu,
+no toast: for 1.30 s the landing number is the only thing on the screen, so it is the target. The
+press has to mature *during* the hold, so `WideScene` watches the clock rather than waiting for
+the finger to lift — a finger still down at the cut would otherwise never be answered. Drawing
+takes longer than the hold it was asked in, so it runs behind the game: the next pitch is never
+held up, and if the player is already swinging again the sheet waits for the next miss or landing
+number. While a clip is being drawn one word, `CLIP`, sits in the corner in the ordinary 3×5 face.
+That is the whole of the interface.
+
+**Knobs** (`ReplayClipRules`, `App/Sources/ReplayRenderer.swift`):
+
+| Knob | Value | What it is |
+|---|---|---|
+| `canvasWidth` × `canvasHeight` | 320 × 224 | the design frame, fixed for clips whatever the phone is |
+| `scale` | 4 | whole-number upscale, nearest neighbour → 1280 × 896 |
+| `framesPerSecond` | 60 | and the exact `dt` the machine is ticked at |
+| `bitrate` | 12 Mbit/s | generous, so one white frame survives as one white frame |
+| `maxSeconds` | 20 | a stop, not a length; a home run is about four |
+| `framesPerYield` | 1 | frames drawn between yields, so the game stays playable behind it |
+| `crop` | `.landscape` | v1 is the native frame; see below |
+| `WideScene.longPressSeconds` | 0.35 | long enough not to misfire, twice over inside the hold |
+
+DEBUG: `-replay <path>` with `-autoslice` writes the first home run's clip and logs the path, so a
+clip can be made with nothing touching the glass. Absolute paths are used as given, anything else
+is a filename in Documents. It is in `SaveStore`'s no-save list and `Store`'s robot list.
+
+**Open:**
+1. **Crop.** The game is landscape and the clip is its native frame. TikTok and Reels want square
+   or vertical, which would mean either pillar-boxing (honest, wastes half the frame) or a second
+   framing that is not the one the player saw. The knob is there; the variant is not built, and it
+   is a design question, not a rendering one.
+2. **Audio.** None in v1. `Synth`/`SoundBoard` are pure and already drive off the same cues
+   `DerbyMachine.tick` returns, so the crack, the crowd and the fireworks pops could be rendered
+   to a buffer on the same fixed clock and muxed in as a second `AVAssetWriter` track. Worth doing
+   before this is a share loop anyone uses; a silent clip of a pixel home run is half the brag.
+3. **The link.** `Replay` is `Codable` and tiny, so the clip could carry a park number and a swing
+   that another player could *play*, not just watch. Nothing is built for it and §14 Q4 still says
+   sharing is a screenshot, so this needs a yes before anyone builds a URL scheme for it.
+4. **Where the clip goes.** It is written to the temporary directory and never cleaned up
+   explicitly; iOS reclaims it. If sharing becomes common that should become a real cache policy.
+5. **What it costs to draw.** Measured in the simulator on a **Debug** build: about 5 s of wall
+   time for a 5.5 s clip, with the game behind it at ~20 fps (it was 7 fps at `framesPerYield` 3,
+   which is why that knob is 1). The clip is a second full software frame plus a 1.1-megapixel
+   upscale per display frame, and `PixelCanvas` says in its own comments that a Debug build's
+   bounds and exclusivity checks alone cost the 60 Hz budget — so Release should be far cheaper.
+   **Not measured in Release, and not measured on a phone.** If it is still this visible there,
+   the answer is probably to drop the clip to 30 fps rather than to draw it any coarser.
