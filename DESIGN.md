@@ -298,13 +298,18 @@ against the real songs yet): three more tunes through the same voice, all public
 purpose — *Three Blind Mice* (trad., 1609), the opening of Chopin's *Marche funèbre* (1837, from
 his Piano Sonata No. 2), and the first two lines of *Take Me Out to the Ball Game*
 (Norworth/Von Tilzer, 1908), none of them transcribed from a score, so treat the exact notes as a
-best effort pending a listen (the Chopin especially — it is compressed hard off its real Lento to
-clear the gap before the next pitch, the same trade `chargeRun` already makes). Also undecided by
-the issue, so Claude's call: **Single-A has no organist.** `Rung.organ` is `false` there and `true`
-in Double-A and Triple-A; The Show has no rung and always has one. `DerbyMachine.hasOrgan` reads
-it, and every organ cue in the table above — the existing charge prompt included — is gated on it.
-Where Single-A would have played Chopin (a streak of 5+ dying), it just gets the ordinary three
-notes down instead, same as a streak of 3–4; nothing is silent there that used to make a sound.
+best effort pending a listen. The Chopin is tempo'd differently from the other two on purpose: its
+real tempo is a slow Lento, so rather than compress the whole phrase to fit (which would lose the
+dotted "dum, dum-da-dum" that makes it recognisable), only its first bar is paced to clear the
+tightest gap before the next windup (~1.6 s); the turn that follows is left at its natural speed
+and is **not** guaranteed to finish — `.pitchThrown` is free to cut it off dead mid-phrase, exactly
+as it already does to the charge prompt. That's the organ's normal behaviour here, not a bug. Also
+undecided by the issue, so Claude's call: **Single-A has no organist.** `Rung.organ` is `false`
+there and `true` in Double-A and Triple-A; The Show has no rung and always has one.
+`DerbyMachine.hasOrgan` reads it, and every organ cue in the table above — the existing charge
+prompt included — is gated on it. Where Single-A would have played Chopin (a streak of 5+ dying),
+it just gets the ordinary three notes down instead, same as a streak of 3–4; nothing is silent
+there that used to make a sound.
 
 The cues are `Transition`s that fire as playback reaches the moment, so the crowd reacts when the
 ball clears the wall, not when the bat meets it. **Nothing sounds during the pitch: silence is the

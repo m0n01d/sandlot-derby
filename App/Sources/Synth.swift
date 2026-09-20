@@ -306,48 +306,52 @@ enum Synth {
     /// Beats → seconds at a tune's own tempo, so each tune reads as a note table plus one knob.
     private static func beats(_ n: Double, bpm: Double) -> Double { n * 60 / bpm }
 
+    /// Turns a `(midi, beats)` table into the `(midi, seconds)` one `organ` wants, at `bpm`.
+    private static func timed(_ tune: [(midi: Int?, beats: Double)], bpm: Double) -> [(midi: Int?, seconds: Double)] {
+        tune.map { (midi: $0.midi, seconds: beats($0.beats, bpm: bpm)) }
+    }
+
     /// *Three Blind Mice*, the opening call — "Three blind mice, three blind mice", mi-re-do
-    /// twice. There is no third strike in this game, so the cue is two called strikes in a row
-    /// (`DerbyMachine.calledStrikesInARow`); it fires with no lead-in, so it must clear the gap
-    /// (`missHold` + `windup`, ~1.7 s) on its own, which this comfortably does at 1.5 s.
-    static let threeBlindMiceBPM = 240.0
-    static func threeBlindMice() -> [Float] {
-        let b = { Self.beats($0, bpm: threeBlindMiceBPM) }
-        let tune: [(midi: Int?, seconds: Double)] = [
-            (64, b(1)), (62, b(1)), (60, b(1)), (64, b(1)), (62, b(1)), (60, b(1)),
-        ]
-        return organ(tune, gain: 0.5)
-    }
+    /// twice, the third note of each pair held. There is no third strike in this game, so the
+    /// cue is two called strikes in a row (`DerbyMachine.calledStrikesInARow`); it fires with no
+    /// lead-in, so it must clear the gap (`missHold` + `windup`, ~1.7 s) on its own, which this
+    /// clears at ~1.6 s.
+    static let threeBlindMiceBPM = 300.0
+    static let threeBlindMiceTune: [(midi: Int?, beats: Double)] = [
+        (64, 1), (62, 1), (60, 2), (64, 1), (62, 1), (60, 2),
+    ]
+    static func threeBlindMice() -> [Float] { organ(timed(threeBlindMiceTune, bpm: threeBlindMiceBPM), gain: 0.5) }
 
-    /// Chopin's *Marche funèbre*, the opening bars' repeated-note figure in B-flat minor: three
-    /// beats on the tonic and a turn, twice. Fires (with `mournStreak`'s usual lead-in) when a
-    /// home-run streak of 5+ dies — `streakOver`'s three notes down still cover 3–4, unchanged.
-    /// Real tempo is a slow Lento; this is compressed hard, the same trade `chargeRun` makes, to
-    /// clear the tightest gap (a called strike ending the streak) at well under a second.
-    static let funeralMarchBPM = 300.0
-    static func funeralMarch() -> [Float] {
-        let b = { Self.beats($0, bpm: funeralMarchBPM) }
-        func cell(landingOn turn: Int) -> [(midi: Int?, seconds: Double)] {
-            [(58, b(0.5)), (58, b(0.5)), (58, b(0.5)), (turn, b(1))]
-        }
-        return organ(cell(landingOn: 61) + cell(landingOn: 58), gain: 0.5)   // Bb3 x3, Db4, then home
-    }
+    /// Chopin's *Marche funèbre*, the opening bars' motif in B-flat minor: a dotted "dum,
+    /// dum-da-dum" on the tonic (the first bar, 6 beats), then a turn down through the
+    /// neighbour tones and back — "Db-C, C-Bb, Bb-A-Bb" (the next 8). Fires (with
+    /// `mournStreak`'s usual lead-in) when a home-run streak of 5+ dies — `streakOver`'s three
+    /// notes down still cover 3–4, unchanged. The real tempo is a slow Lento; this is only fast
+    /// enough that the first bar clears the tightest gap before the next windup, at ~1.6 s — the
+    /// turn is **not** guaranteed to fit. `.pitchThrown` cuts the organ off dead if the pitch
+    /// gets there first, same as the charge prompt: that's the organ's normal behaviour (§11),
+    /// not a bug, so this is deliberately *not* compressed to always finish.
+    static let funeralMarchBPM = 225.0
+    static let funeralMarchTune: [(midi: Int?, beats: Double)] = [
+        (58, 2), (58, 1.5), (58, 0.5), (58, 2),
+        (61, 1.5), (60, 0.5), (60, 1.5), (58, 0.5), (58, 1.5), (57, 0.5), (58, 2),
+    ]
+    static func funeralMarch() -> [Float] { organ(timed(funeralMarchTune, bpm: funeralMarchBPM), gain: 0.5) }
 
-    /// *Take Me Out to the Ball Game*, the chorus's first two lines — "Take me out to the ball
-    /// game, take me out with the crowd" (DESIGN.md §11's "first 8 bars" by default). Plays over
-    /// the stats board, which stops the machine clock, so there is no gap to clear here.
+    /// *Take Me Out to the Ball Game*, the chorus's first two lines, in 3/4 — "Take(low) me(up an
+    /// octave) out to the ball game, take me out with the crowd." The octave leap on "Take me" is
+    /// the tune's signature. Plays over the stats board, which stops the machine clock, so there
+    /// is no gap to clear here.
     static let takeMeOutBPM = 150.0
-    static func takeMeOut() -> [Float] {
-        let b = { Self.beats($0, bpm: takeMeOutBPM) }
-        let tune: [(midi: Int?, seconds: Double)] = [
-            (72, b(1)), (72, b(1)), (67, b(1)), (64, b(1)), (62, b(1)), (62, b(1)), (60, b(1.5)),
-            (72, b(1)), (72, b(1)), (67, b(1)), (64, b(1)), (62, b(1)), (62, b(1.5)),
-        ]
-        return organ(tune, gain: 0.45)
-    }
+    static let takeMeOutTune: [(midi: Int?, beats: Double)] = [
+        (60, 2), (72, 1), (69, 1), (67, 1), (64, 1), (67, 3), (62, 3),
+        (60, 2), (72, 1), (69, 1), (67, 1), (64, 1), (67, 6),
+    ]
+    static func takeMeOut() -> [Float] { organ(timed(takeMeOutTune, bpm: takeMeOutBPM), gain: 0.45) }
 
-    /// How long `takeMeOut` lasts: when the stats board's organ may loop it once more.
-    static let takeMeOutSeconds = 5.6
+    /// How long `takeMeOut` lasts: when the stats board's organ may loop it once more. Computed
+    /// from the table itself, not a literal, so it can never drift from it again.
+    static let takeMeOutSeconds = takeMeOutTune.reduce(0) { $0 + beats($1.beats, bpm: takeMeOutBPM) }
 
     // MARK: - Beeps and boops
 
