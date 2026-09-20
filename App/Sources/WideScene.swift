@@ -175,8 +175,9 @@ final class WideScene: CanvasScene {
                 if flightResult.homeRun, Int(machine.elapsed * 6) % 2 == 0 {
                     canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", Palette.cap, scale: 3)
                 }
-                if flightResult.homeRun, machine.tally.homeRunStreak >= 2 {
-                    let streak = "STREAK \(machine.tally.homeRunStreak)"
+                // `streakNow`: the Warm Up's streak while one is live, the career's otherwise.
+                if flightResult.homeRun, machine.streakNow >= 2 {
+                    let streak = "STREAK \(machine.streakNow)"
                     canvas.t3(fullWidth / 2 - Double(streak.count) * 4, 116, streak, Palette.score, scale: 2)
                 }
                 if flightResult.wallHit {

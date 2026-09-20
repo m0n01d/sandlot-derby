@@ -16,6 +16,19 @@ struct SaveState: Codable {
     /// Entitled for good because this save was already in The Show on the first launch of the
     /// paywalled build. nil means the question has not been asked of this save yet.
     var grandfathered: Bool?
+    /// The day's Warm Up (DESIGN.md §18): the only day ever stored, replaced when the next one
+    /// starts. nil is a save written before the Warm Up existed, or one that has never played.
+    var warmUp: SavedWarmUp?
+}
+
+/// One day's Warm Up as it survives a relaunch: which day it was, one entry per **spent** pitch,
+/// and whether the tenth has played out. Interrupted at pitch six, it resumes at pitch seven; a
+/// pitch that was in the air when the app quit was already written down as taken, so it cannot
+/// be peeked at by quitting.
+struct SavedWarmUp: Codable {
+    var day: Int
+    var pitches: [WarmUpPitch]
+    var done: Bool
 }
 
 /// `UserDefaults`, one JSON blob (DESIGN.md §2). `Tally` is a keyed bag, so a save from an
@@ -26,10 +39,16 @@ enum SaveStore {
     /// A `-autoslice` run is a robot's career, not the player's: it neither reads nor writes.
     /// `-nosave` does the same for a human: a fresh Single-A every launch. `-contract` is a
     /// `-nosave` that starts in Triple-A, and `-park n` drops you into one park for a screenshot,
-    /// and `-streak n` fakes a streak that never happened; none of them may overwrite a real career. `Store` gates its entitlement cache on this too, so a
-    /// dev run cannot leave a purchase behind in a real one.
+    /// and `-streak n` fakes a streak that never happened, and `-warmup <day>` forces a day that
+    /// is not today; none of them may overwrite a real career. `Store` gates its entitlement
+    /// cache on this too, so a dev run cannot leave a purchase behind in a real one.
+    ///
+    /// It is also what decides whether a Warm Up can start at all (DESIGN.md §18): a run with no
+    /// save has no yesterday to differ from, so `-autoslice` and `-nosave` on their own never
+    /// start one and every screenshot run stays what it was.
     static let isEnabled = !ProcessInfo.processInfo.arguments.contains {
-        $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined" || $0 == "-park" || $0 == "-streak"
+        $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined"
+            || $0 == "-park" || $0 == "-streak" || $0 == "-warmup" || $0 == "-warmupcard"
     }
 
     static func load() -> SaveState? {

@@ -13,6 +13,9 @@ final class StatsScene: CanvasScene {
         /// The one row that is not a number: the contract, for a player who has not signed it
         /// (DESIGN.md §16). Slicing it opens the card.
         var isContract = false
+        /// The day's finished Warm Up (DESIGN.md §18). Slicing it opens the share sheet. It
+        /// stands until tomorrow's replaces it, and it is the only day the board ever shows.
+        var isWarmUp = false
     }
 
     /// How far either side of the contract row's baseline a slice still counts, in design
@@ -22,9 +25,10 @@ final class StatsScene: CanvasScene {
     /// board as every other tap does.
     private static let contractMinimumSliceLength = 12.0
 
-    /// Where the contract row was last drawn, in design space, or nil when there is no such row.
-    /// Set during `render` because the board's columns are laid out as they are drawn.
+    /// Where the two sliceable rows were last drawn, in design space, or nil when there is no
+    /// such row. Set during `render` because the board's columns are laid out as they are drawn.
     private var contractRow: (x: Double, y: Double, width: Double)?
+    private var warmUpRow: (x: Double, y: Double, width: Double)?
 
     override func render(into canvas: PixelCanvas) {
         guard let controller else { return }
@@ -45,6 +49,7 @@ final class StatsScene: CanvasScene {
 
         var column = 0, row = 0
         contractRow = nil
+        warmUpRow = nil
         for section in sections(controller.machine) {
             let needed = section.rows.count + 1
             if row > 0, row + needed > rowsPerColumn, needed <= rowsPerColumn { column += 1; row = 0 }
@@ -59,6 +64,7 @@ final class StatsScene: CanvasScene {
                 canvas.t3(x, y, r.label, Palette.chalk)
                 canvas.t3(x + columnWidth - Double(r.value.count) * 4, y, r.value, Palette.score)
                 if section.isContract { contractRow = (x: x, y: y, width: columnWidth) }
+                if section.isWarmUp { warmUpRow = (x: x, y: y, width: columnWidth) }
                 row += 1
             }
             row += 1
@@ -69,7 +75,8 @@ final class StatsScene: CanvasScene {
 
     private var dragStart: CGPoint?
     private var dragLast: CGPoint?
-    private var openedContract = false
+    /// One slice does one thing, however far the finger carries on afterwards.
+    private var actedOnARow = false
 
     private func designPoint(for touch: UITouch) -> CGPoint {
         let p = touch.location(in: self)
@@ -80,28 +87,38 @@ final class StatsScene: CanvasScene {
         guard let touch = touches.first else { return }
         dragStart = designPoint(for: touch)
         dragLast = dragStart
-        openedContract = false
+        actedOnARow = false
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first, let start = dragStart, let last = dragLast else { return }
         let p = designPoint(for: touch)
         dragLast = p
-        guard !openedContract, let row = contractRow else { return }
+        guard !actedOnARow else { return }
         guard hypot(p.x - start.x, p.y - start.y) >= Self.contractMinimumSliceLength else { return }
+        if crossed(contractRow, from: last, to: p) {
+            actedOnARow = true
+            controller?.showContract()
+        } else if crossed(warmUpRow, from: last, to: p) {
+            actedOnARow = true
+            controller?.shareWarmUp()
+        }
+    }
+
+    /// A straddle of the row's band, anywhere across its width.
+    private func crossed(_ row: (x: Double, y: Double, width: Double)?,
+                         from last: CGPoint, to p: CGPoint) -> Bool {
+        guard let row else { return false }
         let band = Self.contractRowBand
         let top = row.y - band, bottom = row.y + 5 + band
-        // A straddle of the row's band, anywhere across its width.
-        let crossed = (last.y < top && p.y >= top) || (last.y > bottom && p.y <= bottom)
+        let straddled = (last.y < top && p.y >= top) || (last.y > bottom && p.y <= bottom)
             || (min(last.y, p.y) >= top && max(last.y, p.y) <= bottom)
-        guard crossed, max(last.x, p.x) >= row.x, min(last.x, p.x) <= row.x + row.width else { return }
-        openedContract = true
-        controller?.showContract()
+        return straddled && max(last.x, p.x) >= row.x && min(last.x, p.x) <= row.x + row.width
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         defer { dragStart = nil; dragLast = nil }
-        guard !openedContract else { return }
+        guard !actedOnARow else { return }
         controller?.hideStats()
     }
 
@@ -135,6 +152,15 @@ final class StatsScene: CanvasScene {
             board.append(Section(title: "THE SHOW",
                                  rows: [(controller.store.boardPriceText ?? "-", "SLICE TO SIGN")],
                                  isContract: true))
+        }
+
+        // The day's card, once it is finished, until tomorrow's replaces it (DESIGN.md §18).
+        // Near the front for the same reason the contract is: the board drops whatever is last
+        // on a narrow screen, and a row nobody can reach is not an offer.
+        if let result = controller?.finishedWarmUp {
+            board.append(Section(title: "WARM UP \(result.number())",
+                                 rows: [("\(grouped(result.totalFeet)) FT", "SHARE")],
+                                 isWarmUp: true))
         }
 
         board += [
@@ -186,6 +212,14 @@ final class StatsScene: CanvasScene {
                 ("WALL SCRAPERS", n(.wallScrapers)),
                 ("MOONSHOTS", n(.moonshots)),
                 ("LASERS", n(.lasers)),
+            ]),
+            // Days in a row is counted here and dangled nowhere else (DESIGN.md §18).
+            Section(title: "THE WARM UP", rows: [
+                ("DAYS PLAYED", n(.warmUps)),
+                ("DAYS IN A ROW", n(.warmUpDaysInARow)),
+                ("BEST IN A ROW", n(.bestWarmUpDaysInARow)),
+                ("BEST FEET", n(.warmUpBestFeet)),
+                ("BEST HOME RUNS", n(.warmUpBestHomeRuns)),
             ]),
             Section(title: "BY PITCH  SEEN/HIT/HR", rows: PitchType.all.map {
                 ($0.name, "\(t.count(.seen($0)))/\(t.count(.hits($0)))/\(t.count(.homeRuns($0)))")

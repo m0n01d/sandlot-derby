@@ -140,7 +140,10 @@ final class PixelCanvas {
         "J": Array("001001001101111"), "Q": Array("111101101111001"), "X": Array("101101010101101"),
         "Z": Array("111001010100111"), ".": Array("000000000000010"), ":": Array("000010000010000"),
         "-": Array("000000111000000"), "%": Array("101001010100101"), "/": Array("001001010100100"),
-        ",": Array("000000000010100")
+        ",": Array("000000000010100"),
+        // The Warm Up's headline separator, `WARM UP · 3/10` (DESIGN.md §18). One pixel is what
+        // a middle dot is at this size; any more and it reads as a full stop.
+        "·": Array("000000010000000")
         // No currency symbols here on purpose (DESIGN.md §16): a 3×5 cell has no room for the
         // stroke that has to overshoot the `S` top and bottom, and without it a `$` reads as a
         // blocky `5`. The price is drawn in the 5×7 face below, which has the rows for it.
