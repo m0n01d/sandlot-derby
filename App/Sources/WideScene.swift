@@ -9,21 +9,10 @@ import UIKit
 /// The wide framing is a port of the prototype's `drawWide` (prototypes/03-camera-cut-and-
 /// slice.html ~L426-455), minus its "wide only" debug drawing of the pitch and the miss.
 final class WideScene: CanvasScene {
-    private let groundY = 176.0
-    /// Wide: the view starts 24 ft behind the plate (DESIGN.md §8).
-    private let wideLeftFeet = -24.0
-    /// Wide: the field gets the screen. The wall sits this far across, so what is behind it is
-    /// the last third and no more, and every park is framed to its own wall.
-    private let wideWallAt = 2.0 / 3.0
-    /// Wide: unless this ball needs more. Its farthest point stays this far inside the right
-    /// edge and its apex this far under the top, by pulling back just enough for this flight.
-    private let landingMarginFeet = 20.0
-    private let apexMarginPixels = 16.0
-    /// Close: this many times the park's wide scale, with the wall this far across the screen.
-    private let closeScale = 2.0
-    private let closeWallAt = 0.55   // the ball cuts in about a quarter of the way across, clear of the island
-    /// Close: the ground drops out of frame rather than let the ball leave the top.
-    private let closeHeadroom = 24.0
+    /// How the two framings are built lives in Core (`SideViewRules`): a rare event is judged
+    /// against where the ball is *drawn*, so the framing had to become something Core can work
+    /// out and a test can check (#5). The scene still owns every other number it draws with.
+    private let sideRules = SideViewRules.standard
 
     private let layout = BackdropLayout.standard
     /// Everything behind the wall that does not move, drawn once per park, canvas and framing
@@ -33,46 +22,14 @@ final class WideScene: CanvasScene {
     /// `Park.scenery` is computed; this keeps the one the frame needs instead of rebuilding it.
     private var cachedScenery: Scenery?
 
-    /// World feet → canvas pixels for one frame.
-    private struct Framing {
-        let scale: Double       // px per foot
-        let originX: Double     // canvas x of 0 ft
-        let ground: Double      // canvas y of 0 ft
-        func x(_ feet: Double) -> Double { originX + feet * scale }
-        func y(_ feet: Double) -> Double { ground - feet * scale }
-    }
-
-    private func framing(_ machine: DerbyMachine, width: Double) -> (Framing, FlightCamera) {
-        // The field starts inside the safe area so the batter isn't under the Dynamic Island;
-        // sky and grass still run edge to edge.
-        let usable = width - safeLeft - safeRight
-        let parkScale = usable * wideWallAt / (machine.park.wallDistanceFeet - wideLeftFeet)
+    /// The framing for this frame, and which camera it is. The field starts inside the safe area
+    /// so the batter isn't under the Dynamic Island; sky and grass still run edge to edge.
+    private func framing(_ machine: DerbyMachine, width: Double) -> (SideView, FlightCamera) {
         let camera = machine.flightCamera
-        switch camera {
-        case .wide:
-            // A pure function of the park and the flight, so it holds still for the whole
-            // flight and the result, and a replay frames it the same way.
-            // Framed on where the ball first comes down, not where it rolls to: the roll of a
-            // home run is behind the wall and nobody's business.
-            var s = parkScale
-            if let f = machine.flight {
-                s = min(s, usable / (f.distanceFeet + landingMarginFeet - wideLeftFeet))
-                s = min(s, (groundY - apexMarginPixels) / max(1, f.apexFeet))
-            }
-            return (Framing(scale: s, originX: safeLeft - wideLeftFeet * s, ground: groundY), camera)
-        case .close:
-            // Twice the park's scale, eased off only for a ball that lands so far past the wall
-            // that it would come down off the right edge.
-            var s = parkScale * closeScale
-            if let f = machine.flight, f.distanceFeet > machine.park.wallDistanceFeet {
-                let room = width * (1 - closeWallAt) - safeRight
-                s = min(s, room / (f.distanceFeet - machine.park.wallDistanceFeet + landingMarginFeet))
-            }
-            let ballUp = (machine.playbackPoint?.yFeet ?? 0) * s
-            let lift = max(0, closeHeadroom - (groundY - ballUp))
-            let originX = width * closeWallAt - machine.park.wallDistanceFeet * s
-            return (Framing(scale: s, originX: originX, ground: groundY + lift), camera)
-        }
+        return (SideView.framing(camera: camera, park: machine.park, flight: machine.flight,
+                                 ballFeet: machine.playbackPoint?.yFeet ?? 0,
+                                 width: width, safeLeft: safeLeft, safeRight: safeRight,
+                                 rules: sideRules), camera)
     }
 
     override func render(into canvas: PixelCanvas) {
@@ -80,18 +37,18 @@ final class WideScene: CanvasScene {
         let scheme = Palette.scheme(isNight: machine.park.isNight)
         let H = 224.0
         let fullWidth = Double(canvas.width)
-        let (view, camera) = framing(machine, width: fullWidth)
-        let ground = view.ground
+        let (frame, camera) = framing(machine, width: fullWidth)
+        let ground = frame.ground
 
         let scenery = self.scenery(for: machine.park)
         let (behind, front) = backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width,
                              camera: camera == .close ? .close : .wide,
-                             scale: view.scale, originX: view.originX),
+                             scale: frame.scale, originX: frame.originX),
             height: canvas.height) { b, f in
             BackdropArt.sideBackdrop(behind: b.canvas, front: f.canvas,
                                      park: machine.park, scenery: scenery,
-                                     scale: view.scale, originX: view.originX,
+                                     scale: frame.scale, originX: frame.originX,
                                      width: fullWidth, layout: self.layout)
         }
         // The layers are drawn with the ground at its canonical place; the close camera lifts it.
@@ -109,12 +66,22 @@ final class WideScene: CanvasScene {
         // crowd → text. Everything that moves reads one clock, the machine's own.
         let now = SceneryClock.now(machine)
         let towers = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
-                                            scale: view.scale, originX: view.originX,
+                                            scale: frame.scale, originX: frame.originX,
                                             ground: ground, time: now,
-                                            chasing: machine.crowdIsUp, layout: layout)
+                                            chasing: machine.crowdIsUp,
+                                            isOut: machine.bankIsOut, layout: layout)
         if machine.park.isNight {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, layout: layout)
+        }
+
+        // What a long career has arrived at, never announced (#5). A Warm Up is played in a park
+        // numbered by the *day*, which would clear every threshold there is by accident, so the
+        // day's ten see the seeded landmarks and none of these (DESIGN.md §18).
+        if machine.showsMilestones {
+            SkyArt.comet(into: canvas, scenery: scenery, view: .side, time: now, width: fullWidth)
+            SkyArt.searchlights(into: canvas, scenery: scenery, time: now, width: fullWidth,
+                                footY: ground - scenery.standsTopFeet * frame.scale, layout: layout)
         }
 
         Clouds.draw(into: canvas, clouds: scenery.sideClouds,
@@ -125,7 +92,16 @@ final class WideScene: CanvasScene {
         drawFireworks(canvas, machine, fullWidth: fullWidth)
 
         SkyArt.birds(into: canvas, scenery: scenery, view: .side, time: now,
-                     width: fullWidth, night: machine.park.isNight)
+                     width: fullWidth, night: machine.park.isNight,
+                     skipping: machine.struckBird)
+        if machine.showsMilestones {
+            SkyArt.blimp(into: canvas, scenery: scenery, view: .side, time: now,
+                         width: fullWidth, night: machine.park.isNight, layout: layout)
+        }
+        // Feathers, where the ball went through something (#5). In the sky, with the thing it
+        // happened to, and before the field goes in on top.
+        drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth,
+                   kinds: [.birdStrike, .blimpHit])
 
         behind.blit(onto: canvas, dy: backdropDY)
 
@@ -133,25 +109,27 @@ final class WideScene: CanvasScene {
         // Lighter than the sky, not `ink`: this pole climbs through `night` and `ink`.
         SkyArt.towers(into: canvas, frames: towers, width: fullWidth,
                       poleColour: Palette.nightSky3, layout: layout)
+        // …and the sparks off a bank that has just gone out, over the bank they came from.
+        drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth, kinds: [.lightsOut])
 
         // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
         canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
-        let stripe = max(4, (16 * view.scale).rounded())
-        var gx = view.x(0).truncatingRemainder(dividingBy: stripe * 2) - stripe * 2
+        let stripe = max(4, (16 * frame.scale).rounded())
+        var gx = frame.x(0).truncatingRemainder(dividingBy: stripe * 2) - stripe * 2
         while gx < fullWidth { canvas.rect(gx, ground, stripe, H - ground, Palette.grassB); gx += stripe * 2 }
 
-        let wallX = view.x(machine.park.wallDistanceFeet)
-        let wallH = machine.park.wallHeightFeet * view.scale
+        let wallX = frame.x(machine.park.wallDistanceFeet)
+        let wallH = machine.park.wallHeightFeet * frame.scale
         canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, Palette.wall)
         canvas.rect(wallX, ground - wallH, fullWidth - wallX, 1, Palette.chalk)
         canvas.rect(wallX, ground - wallH - 1, 2, wallH + 1, Palette.chalk)
 
         var f = 100.0
-        let tick = max(1, (view.scale / 0.75).rounded())
-        while view.x(f) < fullWidth { canvas.rect(view.x(f), ground, tick, 4 * tick, Palette.chalk); f += 100 }
+        let tick = max(1, (frame.scale / 0.75).rounded())
+        while frame.x(f) < fullWidth { canvas.rect(frame.x(f), ground, tick, 4 * tick, Palette.chalk); f += 100 }
 
-        canvas.rect(view.x(-6), ground, 12 * view.scale, 3, Palette.dirt)
-        drawBatter(canvas, x: view.x(0), y: ground, scale: view.scale, machine: machine)
+        canvas.rect(frame.x(-6), ground, 12 * frame.scale, 3, Palette.dirt)
+        drawBatter(canvas, x: frame.x(0), y: ground, scale: frame.scale, machine: machine)
 
         if let flightResult = machine.flight, !flightResult.points.isEmpty {
             let points = flightResult.points
@@ -160,11 +138,11 @@ final class WideScene: CanvasScene {
             var k = 0
             while k < i {
                 let pt = points[k]
-                canvas.px(view.x(pt.xFeet), view.y(pt.yFeet) - 2, Palette.chalk)
+                canvas.px(frame.x(pt.xFeet), frame.y(pt.yFeet) - 2, Palette.chalk)
                 k += camera == .close ? 4 : 8
             }
             let b = points[i]
-            let X = view.x(b.xFeet), Y = view.y(b.yFeet) - 3
+            let X = frame.x(b.xFeet), Y = frame.y(b.yFeet) - 3
             switch camera {
             case .wide:
                 canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
@@ -177,7 +155,7 @@ final class WideScene: CanvasScene {
             }
 
             drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
-                                 machine: machine, view: view, scenery: scenery)
+                                 machine: machine, frame: frame, scenery: scenery)
 
             if let launch = machine.launch {
                 canvas.t3(8, 8, "\(Int(launch.exitVelocityMPH.rounded())) MPH", Palette.score, scale: 2)
@@ -216,7 +194,7 @@ final class WideScene: CanvasScene {
             }
         } else {
             drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
-                                 machine: machine, view: view, scenery: scenery)
+                                 machine: machine, frame: frame, scenery: scenery)
         }
 
         // The same word the outfield scoreboard carries: during a Warm Up this is the day's
@@ -238,7 +216,7 @@ final class WideScene: CanvasScene {
     /// number. §17's draw order puts the stands after the trail and the ball — which is what
     /// makes a home run drop into the crowd and be gone — and the text after everything.
     private func drawInFrontOfTheBall(_ canvas: PixelCanvas, front: BackdropLayer, dy: Int,
-                                      machine: DerbyMachine, view: Framing, scenery: Scenery) {
+                                      machine: DerbyMachine, frame: SideView, scenery: Scenery) {
         front.blit(onto: canvas, dy: dy)
 
         // The crowd and the flags are the parts of the stands that move, so they are not in the
@@ -247,13 +225,21 @@ final class WideScene: CanvasScene {
         let now = SceneryClock.now(machine)
         let fullWidth = Double(canvas.width)
         BackdropArt.crowd(into: canvas, park: machine.park, scenery: scenery,
-                          scale: view.scale, originX: view.originX, width: fullWidth,
-                          ground: view.ground, time: now, cheering: machine.crowdIsUp,
+                          scale: frame.scale, originX: frame.originX, width: fullWidth,
+                          ground: frame.ground, time: now, cheering: machine.crowdIsUp,
                           layout: layout)
         BackdropArt.standsFlags(into: canvas, park: machine.park, scenery: scenery,
-                                scale: view.scale, originX: view.originX, width: fullWidth,
-                                ground: view.ground, frame: SkyLife.flutterFrame(at: now),
+                                scale: frame.scale, originX: frame.originX, width: fullWidth,
+                                ground: frame.ground, frame: SkyLife.flutterFrame(at: now),
                                 layout: layout)
+
+        // What this park already carries: dents that stay and a pane that has gone (#5). Over
+        // the cached board, and with the shards of the shot on screen on top of them.
+        BackdropArt.boardDamage(into: canvas, park: machine.park, scenery: scenery,
+                                scars: machine.parkScars, scale: frame.scale,
+                                originX: frame.originX, ground: frame.ground, layout: layout)
+        drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth,
+                   kinds: [.scoreboardDent, .windowBroken])
 
         if let entry = vanishPoint(machine, scenery: scenery),
            machine.playbackIndex >= Double(entry.index) {
@@ -267,8 +253,8 @@ final class WideScene: CanvasScene {
             if since < layout.popSeconds {
                 // Two frames, no alpha: a big pop, then a small one, then nothing.
                 let r = since < layout.popSeconds / 2 ? layout.popRadius : layout.popRadius - 1
-                let x = view.x(entry.point.xFeet).rounded()
-                let y = view.y(entry.point.yFeet).rounded()
+                let x = frame.x(entry.point.xFeet).rounded()
+                let y = frame.y(entry.point.yFeet).rounded()
                 canvas.rect(x - r, y, r * 2 + 1, 1, Palette.chalk)
                 canvas.rect(x, y - r, 1, r * 2 + 1, Palette.chalk)
                 canvas.px(x - r + 1, y - r + 1, Palette.chalk)
@@ -278,16 +264,40 @@ final class WideScene: CanvasScene {
             }
         }
 
-        let wallX = view.x(machine.park.wallDistanceFeet)
-        let wallH = machine.park.wallHeightFeet * view.scale
+        let wallX = frame.x(machine.park.wallDistanceFeet)
+        let wallH = machine.park.wallHeightFeet * frame.scale
         // On the wall when it is tall enough to carry a 5 px face, above it when it is not.
-        let wallLabelY = wallH >= 11 ? view.ground - wallH + 3 : view.ground - wallH - 8
+        let wallLabelY = wallH >= 11 ? frame.ground - wallH + 3 : frame.ground - wallH - 8
         // On an `ink` plate, which is what `ink` is for (docs/palette.md: "label backgrounds").
         // In the close camera the wall fills so much of the frame that `score` on `wall` was
         // hard to read, and against the crowd above it, worse (review nit, 2026-09-19).
         let label = "\(Int(machine.park.wallDistanceFeet))"
         canvas.rect(wallX + 5, wallLabelY - 1, Double(label.count) * 4 + 1, 7, Palette.ink)
         canvas.t3(wallX + 6, wallLabelY, label, Palette.score)
+    }
+
+    /// The bursts of whichever rare things have happened by now (#5). `DerbyMachine` says what
+    /// happened and how long ago — off its own clocks, never a timer in a scene — and
+    /// `DerbyCore.RareEvents` says where every speck is; this only picks the place out of the
+    /// event and hands it over. The sky's events are in screen space and the field's in feet,
+    /// because that is where the things they happened to are.
+    private func drawBursts(_ canvas: PixelCanvas, _ machine: DerbyMachine,
+                            frame: SideView, fullWidth: Double, kinds: Set<ParkEventKind>) {
+        for (i, event) in machine.parkEvents.enumerated() where kinds.contains(event.kind) {
+            guard let since = machine.secondsSince(event) else { continue }
+            let x: Double, y: Double
+            switch event.place {
+            case let .sky(xFraction, skyY):
+                x = (xFraction * fullWidth).rounded()
+                y = skyY.rounded()
+            case let .field(xFeet, yFeet):
+                x = frame.x(xFeet).rounded()
+                y = frame.y(yFeet).rounded()
+            }
+            SkyArt.burst(into: canvas, kind: event.kind,
+                         seed: UInt64(machine.park.number) &* 0x9E37_79B9 &+ UInt64(i + 1),
+                         since: since, at: x, y: y, rules: machine.rareEventRules)
+        }
     }
 
     /// The first point of the flight that is inside the stands: where the ball is swallowed.

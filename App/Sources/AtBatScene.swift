@@ -115,12 +115,25 @@ final class AtBatScene: CanvasScene {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, layout: layout)
         }
+        // Things a long career arrives at, never announced (#5). The at-bat sky is where a
+        // player spends most of their time, so the blimp and the comet cross it too — with
+        // their own seeds, like the birds, because you are looking the other way down the park.
+        // The searchlights are not here: they rise from behind the stands, which is behind you.
+        // A Warm Up is played in a park numbered by the day, which would clear every threshold
+        // there is by accident, so its ten see none of them (DESIGN.md §18).
+        if machine.showsMilestones {
+            SkyArt.comet(into: canvas, scenery: scenery, view: .atBat, time: now, width: fullWidth)
+        }
         Clouds.draw(into: canvas, clouds: scenery.atBatClouds,
                     breeze: scenery.breezePixelsPerSecond,
                     seconds: now,
                     width: fullWidth, night: machine.park.isNight)
         SkyArt.birds(into: canvas, scenery: scenery, view: .atBat, time: now,
                      width: fullWidth, night: machine.park.isNight)
+        if machine.showsMilestones {
+            SkyArt.blimp(into: canvas, scenery: scenery, view: .atBat, time: now,
+                         width: fullWidth, night: machine.park.isNight, layout: layout)
+        }
         backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat),
             height: canvas.height) { b, _ in
@@ -516,13 +529,21 @@ final class AtBatScene: CanvasScene {
     /// without `-autoslice` (or the space-bar dev slice) also firing the swing.
     private static let autoBarrel = ProcessInfo.processInfo.arguments.contains("-autobarrel")
 
+    /// `-autoloft` launch argument (#5 screenshots): the dev swing takes a steep stroke instead
+    /// of the usual 27°, so it puts up a towering fly. The birds and the blimp fly at design
+    /// y 18–52, which nothing reaches until the close camera pins a ball near the top of the
+    /// frame — and the flat 27° robot never gets high enough to be pinned. Like `-autobarrel`
+    /// it changes only the stroke, fakes no career state, and does nothing on its own.
+    private static let autoLoft = ProcessInfo.processInfo.arguments.contains("-autoloft")
+    private static let loftDegrees = 53.0
+
     /// A medium 27° stroke through the ball, wherever it is, run through the real hit test so
     /// an early press is judged like an early finger. Space bar calls this.
     func devSlice() {
         guard let controller, controller.machine.beat == .pitch else { return }
         let machine = controller.machine
         let ball = machine.ballNow.position
-        let radians = 27.0 * Double.pi / 180
+        let radians = (Self.autoLoft ? Self.loftDegrees : 27.0) * Double.pi / 180
         let dir = Point(x: cos(radians), y: -sin(radians))
         func along(_ d: Double) -> Point { Point(x: ball.x + dir.x * d, y: ball.y + dir.y * d) }
         let speed = Self.autoBarrel ? machine.sliceRules.fullPowerSpeed : 0.7 * machine.sliceRules.fullPowerSpeed

@@ -51,9 +51,60 @@ public struct Bird: Equatable {
     /// Two flap frames and no more (§17). Neighbours in a flock are on opposite beats, so a
     /// flock ripples rather than marching.
     public let wingsUp: Bool
+    /// Which crossing this bird belongs to and where it is in the line. Not decoration: a bird
+    /// a ball has gone through has to stay gone for the rest of that crossing (#5), and there is
+    /// no bird state anywhere to mark — so the strike names the bird and the sky leaves it out.
+    public let slot: Int
+    public let index: Int
 
-    public init(x: Double, y: Double, wingsUp: Bool) {
+    public init(x: Double, y: Double, wingsUp: Bool, slot: Int = 0, index: Int = 0) {
         self.x = x; self.y = y; self.wingsUp = wingsUp
+        self.slot = slot; self.index = index
+    }
+}
+
+/// A blimp, crossing very slowly and very high. Past park 100 and never announced (#5). Like
+/// everything else in the sky it is `f(seed, t)` with no state of its own.
+public struct Blimp: Equatable {
+    /// Fraction of the view's width, and design pixels down: the middle of the envelope.
+    public let x: Double
+    public let y: Double
+    /// Which way the nose points, which is the way it is drifting.
+    public let facingRight: Bool
+    /// Its tail beacon, the two-frame animation a thing that does not flap is allowed (§9).
+    public let beaconOn: Bool
+
+    public init(x: Double, y: Double, facingRight: Bool, beaconOn: Bool) {
+        self.x = x; self.y = y; self.facingRight = facingRight; self.beaconOn = beaconOn
+    }
+}
+
+/// One beam, sweeping. Past park 500 (#5).
+public struct Searchlight: Equatable {
+    /// Where its foot stands, as a fraction of the view's width, and how high off the ground.
+    public let xFraction: Double
+    public let footY: Double
+    /// Degrees from straight up, positive to the right, in whole stepped degrees.
+    public let angleDegrees: Double
+    public let lengthPixels: Double
+
+    public init(xFraction: Double, footY: Double, angleDegrees: Double, lengthPixels: Double) {
+        self.xFraction = xFraction; self.footY = footY
+        self.angleDegrees = angleDegrees; self.lengthPixels = lengthPixels
+    }
+}
+
+/// A comet across the top of the sky, past park 1,000 (#5). It never hurries and it never leaves:
+/// by the time a player has come this far, the sky owes them something that is simply always there.
+public struct Comet: Equatable {
+    public let x: Double
+    public let y: Double
+    /// How long the tail is, in pixels, and which way it trails.
+    public let tailPixels: Double
+    public let movingRight: Bool
+
+    public init(x: Double, y: Double, tailPixels: Double, movingRight: Bool) {
+        self.x = x; self.y = y; self.tailPixels = tailPixels; self.movingRight = movingRight
     }
 }
 
@@ -111,8 +162,58 @@ public struct SkyLifeRules: Equatable {
     /// added to a speed that is a fraction of the width.
     public var designWidth = 320.0
 
+    // MARK: Things past park 100 / 500 / 1,000 (#5)
+
+    /// A blimp crosses on its own slot, built exactly the way a flock's is but ten times slower
+    /// and three times longer: it is up for about half the time, which is what makes it
+    /// something you notice rather than something you wait for.
+    public var blimpSlotSeconds = 90.0
+    public var blimpStartJitter = 30.0
+    public var blimpSpeedFraction: ClosedRange<Double> = 0.018...0.030
+    public var blimpMargin = 0.16
+    /// Its tail beacon is on for a moment this often. Two frames: a thing that does not flap
+    /// still only gets two (§9).
+    public var blimpBeaconPeriod = 2.0
+    public var blimpBeaconOnSeconds = 0.5
+
+    /// Two beams, sweeping this far either side of straight up, once this often, in whole
+    /// stepped degrees at this rate — the same 5 Hz the flags flutter at.
+    public var searchlightCount = 2
+    public var searchlightSweepDegrees = 32.0
+    public var searchlightPeriodSeconds = 11.0
+    public var searchlightStepsPerSecond = 5.0
+    /// Where the two beams stand, as fractions of the view's width, and how long they reach.
+    public var searchlightFeet: [Double] = [0.72, 0.9]
+    public var searchlightLengthPixels = 150.0
+
+    /// A comet crosses the top of the sky once in this long and trails this far behind itself.
+    public var cometCrossSeconds = 300.0
+    public var cometTailPixels = 9.0
+
     public init() {}
     public static let standard = SkyLifeRules()
+}
+
+/// The two directions the game looks in. They have their own skies, so their own seeds: the
+/// at-bat view and the side view never share a bird or a blimp (DESIGN.md §17).
+///
+/// The seeds were `SkyArt`'s until #5: a rare event is *detected* in Core and only drawn in the
+/// app, so the number that decides which birds are up had to be somewhere both can ask. The
+/// arithmetic is unchanged, and `SkyLifeTests` fingerprints it — no park's flock moved.
+public enum SkyView: Equatable, CaseIterable {
+    case atBat, side
+
+    var tag: UInt64 { self == .atBat ? 0x17 : 0x51 }
+
+    public func birdSeed(parkNumber: Int) -> UInt64 {
+        UInt64(max(0, parkNumber)) &* 0x9E37_79B9_7F4A_7C15 &+ tag
+    }
+    public func blimpSeed(parkNumber: Int) -> UInt64 {
+        birdSeed(parkNumber: parkNumber) &+ 0xB11E_B11E_B11E_B11E
+    }
+    public func cometSeed(parkNumber: Int) -> UInt64 {
+        birdSeed(parkNumber: parkNumber) &+ 0xC0_4E_7A_C0_4E_7A_C0
+    }
 }
 
 /// The sky's life, and the crowd's: stars that wink, banks that chase, flags that flutter, a
@@ -212,9 +313,87 @@ public enum SkyLife {
             let dy = Double(Int.random(in: -rules.flockSpreadPixels...rules.flockSpreadPixels, using: &bg))
             // Neighbours beat on opposite frames, so the flock ripples instead of marching.
             out.append(Bird(x: lead - back * direction, y: lineY + dy,
-                            wingsUp: (beat &+ i).isMultiple(of: 2)))
+                            wingsUp: (beat &+ i).isMultiple(of: 2),
+                            slot: Int(slot), index: i))
         }
         return out
+    }
+
+    // MARK: - The blimp (#5, past park 100)
+
+    /// The blimp over the park at `time`, or nil for the stretch between crossings. Built the
+    /// same way a flock is — one slot with a jittered start — so it is closed form, has no state
+    /// and reproduces in a clip.
+    public static func blimp(seed: UInt64, at time: Double, breeze: Double,
+                             rules: SkyLifeRules = .standard,
+                             scenery: SceneryRules = .standard) -> Blimp? {
+        guard time >= 0, rules.blimpSlotSeconds > 0 else { return nil }
+        let slot = (time / rules.blimpSlotSeconds).rounded(.down)
+        // A blimp takes far longer than its own slot to cross, so up to three are asked after.
+        for s in [slot - 2, slot - 1, slot] where s >= 0 {
+            if let b = blimp(seed: seed, slot: s, at: time, breeze: breeze,
+                             rules: rules, scenery: scenery) { return b }
+        }
+        return nil
+    }
+
+    private static func blimp(seed: UInt64, slot: Double, at time: Double, breeze: Double,
+                              rules: SkyLifeRules, scenery: SceneryRules) -> Blimp? {
+        var g = SplitMix64(seed: seed &+ UInt64(slot) &* 0x94D0_49BB_1331_11EB &+ 0xB11E)
+        let start = slot * rules.blimpSlotSeconds
+            + Double.random(in: 0...rules.blimpStartJitter, using: &g)
+        let y = Double.random(in: scenery.blimpBand, using: &g).rounded()
+        let base = Double.random(in: rules.blimpSpeedFraction, using: &g)
+        let ownWay = Bool.random(using: &g) ? 1.0 : -1.0
+
+        let direction = breeze > 0 ? 1.0 : (breeze < 0 ? -1.0 : ownWay)
+        let speed = (base + abs(breeze) / rules.designWidth / 8) * direction
+        guard speed != 0 else { return nil }
+
+        let span = 1 + 2 * rules.blimpMargin
+        guard time >= start, time - start < span / abs(speed) else { return nil }
+
+        // Whole steps on the same grid as everything else in the sky.
+        let stepped = max(0, (time * rules.stepsPerSecond).rounded(.down) / rules.stepsPerSecond - start)
+        let x = (direction > 0 ? -rules.blimpMargin : 1 + rules.blimpMargin) + speed * stepped
+        var phase = time.truncatingRemainder(dividingBy: rules.blimpBeaconPeriod)
+        if phase < 0 { phase += rules.blimpBeaconPeriod }
+        return Blimp(x: x, y: y, facingRight: direction > 0,
+                     beaconOn: phase < rules.blimpBeaconOnSeconds)
+    }
+
+    // MARK: - Searchlights (#5, past park 500)
+
+    /// The beams this instant. They sweep in whole stepped degrees, and the two of them are half
+    /// a period apart so they cross rather than march together.
+    public static func searchlights(at time: Double, rules: SkyLifeRules = .standard) -> [Searchlight] {
+        guard rules.searchlightPeriodSeconds > 0, rules.searchlightStepsPerSecond > 0 else { return [] }
+        let stepped = (time * rules.searchlightStepsPerSecond).rounded(.down) / rules.searchlightStepsPerSecond
+        return (0..<min(rules.searchlightCount, rules.searchlightFeet.count)).map { i in
+            let phase = (stepped / rules.searchlightPeriodSeconds
+                         + Double(i) / Double(max(1, rules.searchlightCount))) * 2 * .pi
+            return Searchlight(xFraction: rules.searchlightFeet[i],
+                               footY: 0,
+                               angleDegrees: (sin(phase) * rules.searchlightSweepDegrees).rounded(),
+                               lengthPixels: rules.searchlightLengthPixels)
+        }
+    }
+
+    // MARK: - The comet (#5, past park 1,000)
+
+    /// The comet, always up, always crossing. A whole-pixel step like everything else.
+    public static func comet(seed: UInt64, at time: Double, rules: SkyLifeRules = .standard,
+                             scenery: SceneryRules = .standard) -> Comet {
+        var g = SplitMix64(seed: seed &+ 0xC0_4E_7A)
+        let y = Double.random(in: scenery.cometBand, using: &g).rounded()
+        let right = Bool.random(using: &g)
+        let stepped = (time * rules.stepsPerSecond).rounded(.down) / rules.stepsPerSecond
+        var t = (stepped / max(1, rules.cometCrossSeconds)).truncatingRemainder(dividingBy: 1)
+        if t < 0 { t += 1 }
+        let span = 1.2
+        let travelled = -0.1 + t * span
+        return Comet(x: right ? travelled : 1 - travelled,
+                     y: y, tailPixels: rules.cometTailPixels, movingRight: right)
     }
 
     // MARK: - Steps

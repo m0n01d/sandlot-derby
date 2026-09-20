@@ -215,6 +215,17 @@ final class StatsScene: CanvasScene {
                 ("MOONSHOTS", n(.moonshots)),
                 ("LASERS", n(.lasers)),
             ]),
+            // The rare things (#5). Counted here and nowhere else: never announced, never
+            // explained, and the only place a player finds out that the park had a board in it
+            // is the row that says they have dented one. A save from a build before these
+            // existed reads them as 0, which is what a keyed tally is for.
+            Section(title: "ODDITIES", rows: [
+                ("BIRDS HIT", n(.birdsHit)),
+                ("WINDOWS BROKEN", n(.windowsBroken)),
+                ("BOARD DENTS", n(.scoreboardDents)),
+                ("LIGHTS OUT", n(.lightsOut)),
+                ("BLIMPS HIT", n(.blimpsHit)),
+            ]),
             // Days in a row is counted here and dangled nowhere else (DESIGN.md §18).
             Section(title: "THE WARM UP", rows: [
                 ("DAYS PLAYED", n(.warmUps)),

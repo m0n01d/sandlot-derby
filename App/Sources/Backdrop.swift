@@ -18,8 +18,6 @@ struct BackdropLayout {
     var scoreboardFlagOffsets = [6.0, 55.0]
     var scoreboardFlagPoleHeight = 8.0
 
-    /// Side view: how many steps the bleacher profile climbs in.
-    var standsSteps = 6
     /// Side view: the far piece rises this many pixels above the top of the stands.
     var sideFarRisePixels = 13.0
     /// Side view: the foul pole stands this many feet above the top of the wall.
@@ -98,6 +96,29 @@ struct BackdropLayout {
         case .theShow: return foulPoleHeightTheShow
         }
     }
+
+    // MARK: - Landmarks and the milestone sky (#5)
+
+    /// The out-of-town board: the rows of lettering across its face, how far its legs are set in
+    /// from its edges, and how wide they are. Where it stands and how big it is are in feet in
+    /// `SceneryRules` — a ball hits it in the park, not on the screen.
+    var boardRowPitch = 4.0
+    var boardLegInsetFeet = 6.0
+    var boardLegWidth = 2.0
+    /// A dent in the board: a bright scar with rays, the way a dent in a metal panel catches the
+    /// light. (A broken pane keeps no cracks — see `boardDamage`: there is no room for them.)
+    var dentRadius = 2.0
+
+    /// The blimp's envelope and its tail fin, in design pixels. Big enough to read as a blimp at
+    /// 320 across and no bigger: it shares the sky with the birds and must not crowd them.
+    var blimpWidth = 21.0
+    var blimpHeight = 7.0
+    var blimpFin = 4.0
+
+    /// A searchlight beam starts this far along its own line — inside that it is behind the
+    /// stands — and widens by this much per pixel travelled.
+    var searchlightStartPixels = 4.0
+    var searchlightSpread = 0.055
 
     /// Every cached layer is drawn with the ground here and copied `dy` rows down, so the close
     /// camera lifting the ground out of frame does not cost a rebuild.
@@ -261,22 +282,96 @@ enum BackdropArt {
 
     // MARK: - The side view (DESIGN.md §17)
 
-    /// How high the stands stand, in feet, at `feet` from the plate: the stepped bleacher
-    /// profile, flat at its top once past the back row. Zero where nothing is built, which is
-    /// Single-A — the one park where you watch the ball all the way down.
-    ///
-    /// This is the same number the drawing uses and the same one that decides where a home run
-    /// disappears, so the pop is always exactly where the ball went in.
+    /// How high the stands stand, in feet, at `feet` from the plate. The sum moved into Core
+    /// with #5 (`Scenery.standsHeightFeet`): it decides where a home run disappears and what a
+    /// landmark on the stands is standing on, which makes it game geometry and not drawing.
     static func standsHeightFeet(at feet: Double, park: Park, scenery: Scenery,
                                  layout: BackdropLayout = .standard) -> Double {
-        guard scenery.stands.swallowsTheBall else { return 0 }
-        let back = feet - park.wallDistanceFeet
-        guard back >= 0 else { return 0 }
-        guard back < scenery.standsDepthFeet else { return scenery.standsTopFeet }
-        let steps = Double(layout.standsSteps)
-        let i = (back / scenery.standsDepthFeet * steps).rounded(.down)
-        return park.wallHeightFeet
-            + (scenery.standsTopFeet - park.wallHeightFeet) * (i + 1) / steps
+        scenery.standsHeightFeet(at: feet, park: park)
+    }
+
+    // MARK: - The out-of-town board (#5)
+
+    /// The board over the stands: a dark panel on two legs, with rows of lettering and the
+    /// operator's lit pane in one top corner. Cached with the stands and drawn **in front of the
+    /// ball** like them, so a ball that reaches it goes into it and is gone — and a dent is left
+    /// where it went in.
+    ///
+    /// Drawn with the ground at `BackdropLayout.canonicalGround`, like everything else cached.
+    static func outfieldBoard(into c: PixelCanvas, park: Park, scenery: Scenery,
+                              scale: Double, originX: Double, width: Double,
+                              layout: BackdropLayout = .standard) {
+        guard let board = scenery.board else { return }
+        let ground = BackdropLayout.canonicalGround
+        func x(_ feet: Double) -> Double { originX + feet * scale }
+        func y(_ feet: Double) -> Double { ground - feet * scale }
+        let w = park.wallDistanceFeet
+
+        let left = x(board.nearFeet(wallDistanceFeet: w))
+        let right = x(board.farFeet(wallDistanceFeet: w))
+        let top = y(board.topFeet), bottom = y(board.bottomFeet)
+        guard right > 0, left < width, bottom - top >= 4, right - left >= 6 else { return }
+
+        // Two legs first, so the panel sits on top of them.
+        let legInset = layout.boardLegInsetFeet * scale
+        for lx in [left + legInset, right - legInset - layout.boardLegWidth] {
+            c.rect(lx, bottom, layout.boardLegWidth, ground - bottom, Palette.ink)
+        }
+
+        // The panel: `ink` like the stands' mass, with a `wall` lip so its top edge reads
+        // against the sky the way every deck's does.
+        c.rect(left, top, right - left, bottom - top, Palette.ink)
+        c.rect(left, top, right - left, 1, Palette.wall)
+
+        // Rows of lettering, dashed: at this size a board says "there is writing here" and
+        // nothing more. `chalk` on `ink`, which is what `ink` is for (docs/palette.md).
+        var row = top + 3
+        while row < bottom - 2 {
+            var dx = left + 2
+            while dx < right - 2 {
+                c.rect(dx, row, 2, 1, Palette.chalk)
+                dx += 4
+            }
+            row += layout.boardRowPitch
+        }
+
+        // The operator's pane, lit, in its seeded top corner. It is the smaller target inside
+        // the bigger one, and the one that can break.
+        let pane = board.pane(wallDistanceFeet: w)
+        c.rect(x(pane.near), y(pane.top), max(2, (pane.far - pane.near) * scale),
+               max(2, (pane.top - pane.bottom) * scale), Palette.score)
+    }
+
+    /// What a ball has already done to the board, drawn per frame over the cached panel: the
+    /// dents that stay for the rest of the park, and a pane that is not there any more (#5).
+    static func boardDamage(into c: PixelCanvas, park: Park, scenery: Scenery, scars: ParkScars,
+                            scale: Double, originX: Double, ground: Double,
+                            layout: BackdropLayout = .standard) {
+        guard let board = scenery.board else { return }
+        func x(_ feet: Double) -> Double { originX + feet * scale }
+        func y(_ feet: Double) -> Double { ground - feet * scale }
+        let w = park.wallDistanceFeet
+
+        if scars.paneIsBroken {
+            let pane = board.pane(wallDistanceFeet: w)
+            let px = x(pane.near), py = y(pane.top)
+            let pw = max(2, (pane.far - pane.near) * scale)
+            let ph = max(2, (pane.top - pane.bottom) * scale)
+            c.rect(px, py, pw, ph, Palette.ink)                       // the dark where a light was
+            // Two corners of glass still in the frame, and no more: a pane is four pixels by
+            // three at this scale, and cracks drawn across one read as a scribble.
+            c.px(px, py, Palette.chalk)
+            c.px(px + pw - 1, py + ph - 1, Palette.chalk)
+        }
+
+        for dent in scars.dents {
+            let dx = x(dent.x).rounded(), dy = y(dent.y).rounded(), r = layout.dentRadius
+            // A star, not a disc: a dent in a metal panel is a bright scar with rays.
+            c.rect(dx - r, dy, r * 2 + 1, 1, Palette.chalk)
+            c.rect(dx, dy - r, 1, r * 2 + 1, Palette.chalk)
+            c.px(dx - r + 1, dy - r + 1, Palette.chalk)
+            c.px(dx + r - 1, dy + r - 1, Palette.chalk)
+        }
     }
 
     /// Everything behind the wall in the side view, into the two cached layers. `behind` is
@@ -336,6 +431,11 @@ enum BackdropArt {
         let poleHeight = layout.foulPoleFeet * scale
         let poleWidth = max(1, (scale * 1.5).rounded())
         front.rect(wallX, wallTopY - poleHeight, poleWidth, poleHeight, Palette.score)
+
+        // The out-of-town board, in one seeded park in three (#5). In front of the ball with the
+        // stands, so a ball that reaches it goes into it.
+        outfieldBoard(into: front, park: park, scenery: scenery,
+                      scale: scale, originX: originX, width: width, layout: layout)
     }
 
     /// The stepped bleacher profile and the wall's own face — the parts of the stands that hold
@@ -348,7 +448,7 @@ enum BackdropArt {
         func y(_ feet: Double) -> Double { ground - feet * scale }
         let wallTopY = y(park.wallHeightFeet)
         let wallX = x(park.wallDistanceFeet)
-        let steps = layout.standsSteps
+        let steps = scenery.standsSteps
 
         // The wall's own face belongs in this layer too, drawn exactly as the field already
         // draws it. Everything past the wall is behind it, and without this a ball that had
