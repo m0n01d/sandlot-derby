@@ -80,15 +80,16 @@ final class AtBatScene: CanvasScene {
     // MARK: - Drawing
 
     override func render(into canvas: PixelCanvas) {
-        guard let controller else { return }
-        let machine = controller.machine
+        guard let machine = renderMachine else { return }
 
+        // A replay scene has no controller and no input: its beats are already decided, and its
+        // `contactVisual` was restored from the record before the first frame.
         if machine.beat != trackedBeat {
-            handleBeatChange(to: machine.beat, controller: controller)
+            if let controller { handleBeatChange(to: machine.beat, controller: controller) }
             trackedBeat = machine.beat
         }
         #if DEBUG
-        if Self.autoSlice, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
+        if Self.autoSlice, !isOffScreen, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
         #endif
 
         let scheme = Palette.scheme(isNight: machine.park.isNight)
@@ -149,7 +150,9 @@ final class AtBatScene: CanvasScene {
         canvas.rect(wx(128), 80, 64, 16, Palette.wall)
         canvas.rect(wx(128), 80, 64, 1, Palette.chalk)
         canvas.t3(wx(134), 84, "\(Int(machine.park.wallDistanceFeet)) FT", Palette.score)
-        canvas.t3(wx(134), 91, machine.park.displayName, Palette.chalk)
+        // The outfield scoreboard says where you are — or that these ten are not the career
+        // (DESIGN.md §18). Same board, same place, one word swapped.
+        canvas.t3(wx(134), 91, machine.warmUp == nil ? machine.park.displayName : "WARM UP", Palette.chalk)
 
         // The two little flags on the scoreboard, fluttering in two frames (§17, step 5).
         BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
@@ -209,12 +212,19 @@ final class AtBatScene: CanvasScene {
 
         // HUD anchors to the true edges of the canvas, not the centred column.
         // The headline: where you are and what it has cost (DESIGN.md §10).
-        let pitches = machine.tally.pitches
-        canvas.t3(8, 8, "\(machine.park.displayName)  \(pitches) \(pitches == 1 ? "PITCH" : "PITCHES")", Palette.chalk)
+        if let run = machine.warmUp {
+            // Where the career's cost would be, the day's count instead: the Warm Up has no
+            // cost, and the only thing worth knowing is how many are left (DESIGN.md §18).
+            canvas.t3(8, 8, "WARM UP · \(run.spent)/\(run.total)", Palette.chalk)
+        } else {
+            let pitches = machine.tally.pitches
+            canvas.t3(8, 8, "\(machine.park.displayName)  \(pitches) \(pitches == 1 ? "PITCH" : "PITCHES")", Palette.chalk)
+        }
         // Not during the contact freeze: the tally already knows how the ball lands, and a
-        // streak line appearing or vanishing here would spoil the cut.
-        if machine.tally.homeRunStreak >= 2, machine.beat != .contact {
-            canvas.t3(8, 16, "HR STREAK \(machine.tally.homeRunStreak)", Palette.score)
+        // streak line appearing or vanishing here would spoil the cut. `streakNow` so the line
+        // follows whichever streak is live.
+        if machine.streakNow >= 2, machine.beat != .contact {
+            canvas.t3(8, 16, "HR STREAK \(machine.streakNow)", Palette.score)
         }
 
         drawLiveTrail(canvas: canvas, wx: wx)
@@ -412,6 +422,30 @@ final class AtBatScene: CanvasScene {
                 self.fadeTrail = nil
             }
         }
+    }
+
+    // MARK: - The replay record (#4)
+
+    /// The two things the contact freeze draws that the machine knows nothing about: the
+    /// direction of the slash through the ball and the finger's trail behind it. Read by
+    /// `GameController.recordSlice` the moment a swing lands, to go into the `Replay`.
+    var lastContactMarks: (slash: Point, trail: [Point])? {
+        contactVisual.map { ($0.dir, $0.trailPoints) }
+    }
+
+    /// Puts a recorded swing's draw-only marks back, so an off-screen copy of this scene redraws
+    /// the contact freeze exactly as it was. `ReplayRenderer` calls this once, before the first
+    /// frame; the ball, its radius, the swing angle and the power all come from the crossing,
+    /// which is the same one the live scene was handed.
+    func restoreContactVisual(from replay: Replay) {
+        let crossing = replay.swing.crossing
+        contactVisual = ContactVisual(ball: crossing.ball.position,
+                                      radius: crossing.ball.radius,
+                                      dir: replay.marks.slash.point,
+                                      angle: crossing.swingAngleDegrees,
+                                      power: crossing.power,
+                                      trailPoints: replay.marks.trail.map(\.point))
+        trackedBeat = .contact
     }
 
     private func callWord(_ call: Call?) -> String {
