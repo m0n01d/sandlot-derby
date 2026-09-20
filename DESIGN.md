@@ -578,6 +578,11 @@ exactly. Scenes only draw.
   at-bat view and the side view look in different directions, so each has its own clouds; wide and
   close share one sky. The breeze is cosmetic today and is the tell for **wind** when §14 ships it:
   the same number will push the ball, and the clouds and flags will already be showing it.
+  **Built 2026-09-19** (Claude's, unreviewed). A stamp is a heap, not a row: a wide flat base
+  with two or three narrower, taller steps on it, every block running down to a shared baseline
+  whose bottom row is the `sky3` underside. Laid side by side as the spec's wording allows, the
+  three or four rectangles read as a shelf and not as a cloud. The breeze is rounded, not
+  truncated, or it would never reach ±3 and a dead calm would be twice as likely as any other.
 - **Birds.** Every 20–40 s (seeded) a flock of one to five crosses high, y < 60, well above the
   scoreboard and nowhere near the zone: 3 px `ink` marks, two flap frames at 4 Hz, with the breeze.
   *Later, with #5:* in the side view a bird can be on the flight path; a ball passing within 2 px
@@ -625,13 +630,40 @@ exactly. Scenes only draw.
   From park 5 the backdrop is drawn from a kit, a pure function of N: skyline, mountains, treeline,
   water tower, smokestacks, bridge, palms, ferris wheel. One far piece and one near piece per park.
 
+**Built 2026-09-19** (steps 1 and 2; all of it Claude's and unreviewed). Four things the spec did
+not settle, settled by looking at the frames:
+
+- **The stands are `ink` with `wall` deck lips, not the other way round.** In `wall` the stands and
+  the outfield wall were one green shape and the wall stopped reading as a wall.
+- **The wall's own face is drawn in the same layer as the stands**, after the ball. Without it a
+  home run vanished into the crowd and then fell back out of it: past the wall and below its top
+  line the ball was painting over the wall it had just cleared. The wall looks exactly as it did.
+- **Night turns the side view's backdrop round.** It sits in the `sky2` band, and at night that
+  band *is* `ink`, so an `ink` silhouette there is invisible. After dark the far and near pieces
+  are lighter than the sky behind them (`#446688`, holes in `ink`), the way a city's glow really
+  does pick them out. The at-bat horizon keeps §17's `ink`: its band is `#446688`, where `ink` reads.
+- **The Show has no towers**, though the table above lists them: the prose is the tie-breaker
+  ("the first lights a player sees are a seeded park's: something to arrive at"), and parks 1–4 are
+  day games. Towers are seeded 2–4 for night parks only.
+
+The stands climb in six steps. `SceneryRules` carries each tier's height and depth in feet, so the
+place a ball disappears is one number and not a drawing accident: the pop is drawn at the first
+point of the flight that is inside the profile the stands were drawn from.
+
 ### Building it
 
 - **`Park.scenery`** in Core: backdrop pieces, cloud seeds, breeze, moon, flags. Seeded, Equatable,
-  tested for determinism and for the ladder's fixed entries. No drawing knowledge.
+  tested for determinism and for the ladder's fixed entries. No drawing knowledge. **Built**: a
+  computed property on its own RNG stream, so no park's wall, height or night flag moved —
+  `ParkTests` fingerprints all 200 of them to keep it that way.
 - **A backdrop cache** in the app: everything that does not move is drawn once per (park, canvas
   width, camera) into a `PixelCanvas` and copied each frame. Only clouds, birds, flags, the crowd
-  and fireworks are drawn per frame, a few hundred pixel writes.
+  and fireworks are drawn per frame, a few hundred pixel writes. **Built** as two layers — what
+  sits behind the field and what sits in front of the ball — each a sprite on the palette's
+  sixteenth entry, transparent, copied by colour key rather than blended. Each is drawn with the
+  ground at a canonical 176 and copied down by however far the close camera has lifted it, so the
+  lift costs no rebuild; the key is park, canvas width, camera, scale and origin, which in the
+  side view means about one rebuild per home run.
 - **`Fireworks`**: a pure `particles(seed:time:) → [(x, y, size, colour)]` in the app, unit-testable
   without a scene.
 - **Draw order, side view:** sky → stars / moon → light halos → clouds → fireworks → birds → towers
@@ -639,7 +671,11 @@ exactly. Scenes only draw.
 - **Order of work:** (1) backdrop cache, stands in the side view, horizon in the at-bat view;
   (2) clouds and breeze; (3) fireworks and pops; (4) night kit: stars, moon, stadium lights and
   their chase; (5) birds, flags, crowd bounce; (6) the bird strike, the lights-out shot and their
-  stats, with #5.
+  stats, with #5. **(1) and (2) are built** (2026-09-19). The flags and the crowd are drawn but
+  still: their flutter and their bounce are step 5, which is where the clock that drives them
+  belongs.
+- **`-park <n>`**, DEBUG only, starts in park n and implies `-nosave`: the ladder's four rungs and
+  a night park are otherwise hours of play away from a screenshot.
 
 **Open:**
 1. ~~Fireworks on every home run or only notable ones?~~ Answered 2026-09-19: they build with the

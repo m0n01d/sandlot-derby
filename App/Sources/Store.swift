@@ -203,7 +203,7 @@ final class Store {
     static let forcedEntitlement: Bool? = {
         if arguments.contains(where: { $0 == "-contract" || $0 == "-declined" }) { return false }
         if arguments.contains("-entitled") { return true }
-        if arguments.contains(where: { $0 == "-autoslice" || $0 == "-nosave" }) { return true }
+        if arguments.contains(where: { $0 == "-autoslice" || $0 == "-nosave" || $0 == "-park" || $0 == "-streak" }) { return true }
         return nil
     }()
 

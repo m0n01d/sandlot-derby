@@ -26,7 +26,9 @@ final class GameController {
         let save = SaveStore.load()
         #if DEBUG
         // `-contract`: start where the card is earned, so it can be reached in one home run.
-        let startPark = Self.startInTripleA ? Park.generate(number: League.theShow.rawValue - 1) : nil
+        // `-park n`: drop into one park for a screenshot.
+        let startPark = Self.startInTripleA ? Park.generate(number: League.theShow.rawValue - 1)
+            : Self.debugParkNumber.map { Park.generate(number: $0) }
         #else
         let startPark: Park? = nil
         #endif
@@ -303,6 +305,14 @@ final class GameController {
 
     #if DEBUG
     private static var showStatsForScreenshots = ProcessInfo.processInfo.arguments.contains("-showstats")
+    /// `-park <n>`: start in park n rather than wherever the save left off, so a screenshot can
+    /// reach a night park or one rung of the ladder. Implies `-nosave` (`SaveStore`), so it
+    /// never reads or writes a real career.
+    private static let debugParkNumber: Int? = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-park"), i + 1 < args.count else { return nil }
+        return Int(args[i + 1])
+    }()
     #endif
 
     /// The ball's position at a given pitch progress, for `Contact.test`'s `ballAt` closure
