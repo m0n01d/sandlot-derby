@@ -69,6 +69,7 @@ overrides whatever StoreKit itself would say.
 | `-autoslice` | swings at every pitch (a robot career) | yes | yes |
 | `-autobarrel` | with `-autoslice`, swings at full power (1.0× not 0.7×) so every contact clears the barrel threshold; no effect on its own | no | no |
 | `-autosign` | on the contract card, signs the dotted line ~1 s after it appears, through the real hit test | no | no |
+| `-cardphase <name>` | with `-contract`, forces the card's one word for a screenshot: `noconnection`, `notavailable`, `nothingtorestore`, `cancelled` or `pending` (#47) | yes | no (forced by `-contract`) |
 | `-contract` | start in Triple-A, not entitled, card not yet offered | yes | no (forced) |
 | `-declined` | like `-contract`, but the card has already been offered and turned down | yes | no (forced) |
 | `-entitled` | force entitled, whatever else is passed | no | yes (forced) |
@@ -118,7 +119,11 @@ overrides whatever StoreKit itself would say.
     window takes dense bursts (short `GAP`, high `FRAMES`) and retries, not one lucky shot.
   - A `.storekit` configuration only applies when the app is launched from Xcode (or an
     `SKTestSession`, which this project doesn't have) — never from `simctl`. A `shots.sh` run
-    against `ContractScene` will always show `NO CONNECTION`; that is not a bug in the card.
+    against `ContractScene` finds no store at all, so signing shows `NOT AVAILABLE` (it said
+    `NO CONNECTION` for every failure until #48); that is not a bug in the card. The default
+    scheme carries the local file; `SandlotDerby (Sandbox)` leaves it out so a Run from Xcode
+    reaches Apple's sandbox once `show.contract` exists there (DESIGN.md §16, "Testing the
+    purchase").
   - An agent working in a worktree must pass that worktree's path to `shots.sh` literally (its
     first argument) — it cannot assume the checkout root, and it must not `cd` to the main
     checkout to build.
