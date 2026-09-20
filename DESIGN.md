@@ -794,3 +794,93 @@ from. Nothing is stored about other days.
    kinder to a beginner; sooner gives a non-payer the daily habit §16 is counting on.
 4. The Watch (`docs/watch.md`) leaves this phone-only in v1. Ten pitches is a very wrist-sized
    game; revisit if the watch gets past its W2.
+
+## 19. The replay clip
+
+> **Status: built 2026-09-19 (#4), unreviewed.** Dwight approved the idea ("Replay is a great
+> idea", #2 item 4); every decision below is Claude's unless it is quoted from the issue.
+
+A home run is re-rendered off screen, frame by frame, into an H.264 `.mp4` and handed to the
+system share sheet. Not a screen recording: there is no ReplayKit, no permission prompt, and
+nothing the player sees is captured. The clip is drawn again from a record of how the swing
+happened, by the same code that drew it live.
+
+**Why it is possible at all.** Every frame is already a pure function of `DerbyMachine` and the
+park (§8, §17). Flight is integrated once at contact and played back; the sky, the clouds, the
+stands and the fireworks are functions of the park number and the machine's own clock, never of
+`Date()`. So a machine rebuilt from the right few numbers draws the identical picture.
+
+**The record** (`Core/Sources/DerbyCore/Replay.swift`). `Codable`, `Equatable`, about half a
+kilobyte. It keeps the *inputs*, never anything derived:
+
+- the park by value (number, wall distance, wall height, night), so a clip does not move if the
+  `Ladder` or `Park.Rules` later move the wall;
+- the pitch (type by name, speed, strike, target);
+- the `SliceCrossing` the finger made;
+- the whole `Tally` as it stood **the instant before** `slice(_:)` ran;
+- `marks`: the slash direction and the finger's trail, the only two things the contact freeze
+  draws that the machine knows nothing about (§3).
+
+`Replay.machine(from:)` builds a machine at that pitch (`DerbyMachine.atPitch`, the one door that
+exists for it) and replays the single `slice(_:)` call. The launch, the flight, the cue indices,
+the hitstop, the fireworks seed and the landing number are therefore all recomputed by the game's
+own code and cannot drift from it. `ReplayTests` ticks the original and the rebuild side by side
+at 1/60 and asserts every number a frame reads is equal on every frame, from the contact freeze
+to the end of the landing number — including the drawn fireworks particles.
+
+**The clip.** §3's beats and nothing else: the contact freeze, one white frame, the flight across
+both cameras, the landing number. `ReplayRenderer` calls the very same `AtBatScene.render(into:)`
+and `WideScene.render(into:)` on off-screen copies of those scenes, so there is no second copy of
+the drawing code to keep in step. Frames go up by a whole number with nearest neighbour; no
+filtering, ever. Always 320×224 at heart, never the phone's wider canvas, so a clip made on any
+phone is the same picture. The park number and, at two or more, the streak are already on those
+frames (§10, §17), which is the stamp the issue asks for — "always stamp the park number so the
+reply is *let me try park 87*".
+
+**The trigger.** A long press anywhere during the result hold of a home run. No button, no menu,
+no toast: for 1.30 s the landing number is the only thing on the screen, so it is the target. The
+press has to mature *during* the hold, so `WideScene` watches the clock rather than waiting for
+the finger to lift — a finger still down at the cut would otherwise never be answered. Drawing
+takes longer than the hold it was asked in, so it runs behind the game: the next pitch is never
+held up, and if the player is already swinging again the sheet waits for the next miss or landing
+number. While a clip is being drawn one word, `CLIP`, sits in the corner in the ordinary 3×5 face.
+That is the whole of the interface.
+
+**Knobs** (`ReplayClipRules`, `App/Sources/ReplayRenderer.swift`):
+
+| Knob | Value | What it is |
+|---|---|---|
+| `canvasWidth` × `canvasHeight` | 320 × 224 | the design frame, fixed for clips whatever the phone is |
+| `scale` | 4 | whole-number upscale, nearest neighbour → 1280 × 896 |
+| `framesPerSecond` | 60 | and the exact `dt` the machine is ticked at |
+| `bitrate` | 12 Mbit/s | generous, so one white frame survives as one white frame |
+| `maxSeconds` | 20 | a stop, not a length; a home run is about four |
+| `framesPerYield` | 1 | frames drawn between yields, so the game stays playable behind it |
+| `crop` | `.landscape` | v1 is the native frame; see below |
+| `WideScene.longPressSeconds` | 0.35 | long enough not to misfire, twice over inside the hold |
+
+DEBUG: `-replay <path>` with `-autoslice` writes the first home run's clip and logs the path, so a
+clip can be made with nothing touching the glass. Absolute paths are used as given, anything else
+is a filename in Documents. It is in `SaveStore`'s no-save list and `Store`'s robot list.
+
+**Open:**
+1. **Crop.** The game is landscape and the clip is its native frame. TikTok and Reels want square
+   or vertical, which would mean either pillar-boxing (honest, wastes half the frame) or a second
+   framing that is not the one the player saw. The knob is there; the variant is not built, and it
+   is a design question, not a rendering one.
+2. **Audio.** None in v1. `Synth`/`SoundBoard` are pure and already drive off the same cues
+   `DerbyMachine.tick` returns, so the crack, the crowd and the fireworks pops could be rendered
+   to a buffer on the same fixed clock and muxed in as a second `AVAssetWriter` track. Worth doing
+   before this is a share loop anyone uses; a silent clip of a pixel home run is half the brag.
+3. **The link.** `Replay` is `Codable` and tiny, so the clip could carry a park number and a swing
+   that another player could *play*, not just watch. Nothing is built for it and §14 Q4 still says
+   sharing is a screenshot, so this needs a yes before anyone builds a URL scheme for it.
+4. **Where the clip goes.** It is written to the temporary directory and never cleaned up
+   explicitly; iOS reclaims it. If sharing becomes common that should become a real cache policy.
+5. **What it costs to draw.** Measured in the simulator on a **Debug** build: about 5 s of wall
+   time for a 5.5 s clip, with the game behind it at ~20 fps (it was 7 fps at `framesPerYield` 3,
+   which is why that knob is 1). The clip is a second full software frame plus a 1.1-megapixel
+   upscale per display frame, and `PixelCanvas` says in its own comments that a Debug build's
+   bounds and exclusivity checks alone cost the 60 Hz budget — so Release should be far cheaper.
+   **Not measured in Release, and not measured on a phone.** If it is still this visible there,
+   the answer is probably to drop the clip to 30 fps rather than to draw it any coarser.

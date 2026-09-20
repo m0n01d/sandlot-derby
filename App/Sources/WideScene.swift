@@ -1,5 +1,6 @@
 import SpriteKit
 import DerbyCore
+import UIKit
 
 /// The two flight cameras, side on: the batted ball travelling with real drag, and the landing
 /// number. `DerbyMachine.flightCamera` says which framing is up; this scene only draws it, and
@@ -75,8 +76,7 @@ final class WideScene: CanvasScene {
     }
 
     override func render(into canvas: PixelCanvas) {
-        guard let controller else { return }
-        let machine = controller.machine
+        guard let machine = renderMachine else { return }
         let scheme = Palette.scheme(isNight: machine.park.isNight)
         let H = 224.0
         let fullWidth = Double(canvas.width)
@@ -318,5 +318,44 @@ final class WideScene: CanvasScene {
         case 1: canvas.line(handsX, handsY, handsX + h * 0.7, handsY - 1, Palette.bat, thickness: thick)  // contact
         default: canvas.line(left, handsY, left - h * 0.5, by - h * 1.15, Palette.bat, thickness: thick)  // follow-through
         }
+    }
+
+    // MARK: - The replay clip's trigger (#4)
+
+    /// How long a finger stays down on the landing number to ask for a clip. Long enough that no
+    /// stray touch fires it, short enough to fit twice inside `Timings.resultHold` (1.30 s).
+    /// Claude's, unreviewed (DESIGN.md §19).
+    private let longPressSeconds = 0.35
+    private var pressStartedAt: TimeInterval?
+    private var pressHasFired = false
+
+    /// The whole trigger: no button and no target, because for 1.30 s the landing number is the
+    /// only thing on the screen. The press has to mature *during* the hold, so this watches the
+    /// clock rather than waiting for the finger to lift — a finger still down when the hold ends
+    /// would otherwise never be answered.
+    override func update(_ currentTime: TimeInterval) {
+        super.update(currentTime)
+        guard controller?.canShareLastHomeRun == true else {
+            pressStartedAt = nil                // the hold is over: a half-made press is dropped
+            return
+        }
+        guard let started = pressStartedAt, !pressHasFired,
+              currentTime - started >= longPressSeconds else { return }
+        pressHasFired = true
+        controller?.shareLastHomeRunClip()
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard controller?.canShareLastHomeRun == true else { return }
+        pressStartedAt = CACurrentMediaTime()
+        pressHasFired = false
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        pressStartedAt = nil
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        pressStartedAt = nil
     }
 }
