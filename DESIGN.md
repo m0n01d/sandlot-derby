@@ -61,23 +61,26 @@ games) were bolt-ons inside full sims. The bare loop is open.
 |---|---|---|---|---|
 | 1 | **windup** | at-bat | 0.50 s | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
-| 3 | **contact** | at-bat | 0.35 s | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. One white frame at start. |
+| 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
-progress at that moment it resolves as a miss with markers; otherwise it is a called strike or
-ball. Taken pitches count as pitches. Only contact counts as a hit.
+progress at that moment (`DerbyMachine.sliceInProgress`, mirrored every frame from whether a
+finger is on the glass — `AtBatScene.fingerDown` — however that finger got there) it resolves
+exactly as `sliceMissed()` does — a swing and a miss, with markers, streak rules as for any miss,
+never a call; otherwise it is a called strike or ball. Taken pitches count as pitches. Only contact
+counts as a hit.
 
 State machine (`DerbyMachine`): six beats, one scene-changing edge (contact → flight; the wide and
 close framings are one scene and `flightCamera` picks between them), no knowledge of nodes.
 
 ```
-windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.35s─▶ flight ─playback ends─▶ result
-                 │                                    (CUT)                            │
-                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────┘
+windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.22-0.50s─▶ flight ─playback ends─▶ result
+                 │                                       (CUT)                             │
+                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────────┘
 ```
 
 ## 4. Pitching
@@ -617,3 +620,97 @@ exactly. Scenes only draw.
    good"). The landing number is a projected distance.
 4. Crowd murmur as ambience between pitches would add life and break "silence is the tension".
    Claude says no; worth hearing once before deciding.
+
+## 18. The Warm Up: the first ten pitches of the day
+
+Issue #3; what §16 and §13 call "the daily card". Decided by Dwight 2026-09-19: the name ("first 10
+pitches is a Warm Up"), the day ("whatever wordle does": the **local calendar day**), and what it
+counts toward ("professional batters have to warm up too": everything but the cost). The rest of
+this section is Claude's and unreviewed. **Spec only, nothing built.**
+
+**What it is.** The first ten pitches of each day are the same for everyone: one park and one pitch
+sequence, seeded by the date. There is no menu and no mode to pick: it is how the day starts. Ten
+pitches, a result card, a hard cut to your own park's windup. It is free forever (§16) and it is
+played in a Show-league park under The Show's rules, so it is a daily taste of what is sold.
+
+**When it starts.** At launch, and whenever the app comes back to the foreground, the app hands
+Core today's day number (`YYYYMMDD`, local calendar, local time zone). Core never reads a clock. If
+that day is not the saved `warmUp.day`, the Warm Up begins **at the next windup**, never in the
+middle of a pitch. Two exceptions:
+
+- **Not before the player can swing.** A save that has not cleared Single-A
+  (`parksCleared < WarmUpRules.minParksCleared`, 1) gets no Warm Up: ten Show-league pitches with
+  no swing guide are a bad first minute. It starts the first day after they have hit one out.
+- `-autoslice` and `-nosave` on their own never start one, so screenshot runs stay what they were.
+  DEBUG `-warmup <day>` forces one for that day number and implies `-nosave`.
+
+**The day's card, in Core.** `WarmUp.generate(day:rules:) -> WarmUp`: a pure function of the day
+number, like a park is of its number. It holds the park (a wall from the ordinary seeded ranges,
+night allowed, league The Show, scenery from §17 seeded by the day) and **all ten pitches,
+generated up front** from a `SplitMix64` seeded by the day, so the sequence cannot depend on what
+the player does. The career's own generator is never drawn from: the career pitch sequence is
+identical whether or not the Warm Up was played. Tested: same day, same card; different days
+differ; ten pitches whatever the swings; the career machine is bit-for-bit what it was apart from
+the stats below.
+
+**In the machine.** `DerbyMachine.beginWarmUp(_:)` queues it for the next windup, the same way an
+owed advance is paid (§16). While it runs, `machine.warmUp` is non-nil, the career park and pitch
+are set aside, and the beats are exactly the usual five and a miss. A home run does not change the
+park, never emits `.parkChanged` or `.calledUp`, and ignores `parkCeiling`. New transitions:
+`.warmUpBegan`, and `.warmUpEnded(WarmUpResult)` when the tenth pitch has resolved and its hold
+has played out, after which the machine is back in the career windup. A pitch is spent at
+`.pitchThrown`: quit with one in the air and it comes back as taken, so a pitch cannot be peeked
+at by quitting.
+
+**What it counts toward.** Every stat in the tally, **except the cost**: `pitches`,
+`pitchesThisPark`, and with them `pitchesToTheShow` and `fewestPitchesToClearPark`. They are thrown
+in the day's park, not the one being cleared, and a warm-up that made `PARK n · PITCHES` worse
+would punish showing up. The career `homeRunStreak` is neither fed nor ended by a Warm Up swing;
+the Warm Up has **its own streak**, and `machine.streakNow` is whichever is live, so the fireworks
+(§17) and the streak cues (§11) follow it without knowing. New stats: `warmUps` (days played),
+`warmUpBestFeet`, `warmUpBestHomeRuns`, `warmUpDaysInARow` and its best. The days-in-a-row count is
+on the stats board and nowhere else: it is counted, never dangled.
+
+**On screen.** The headline reads `WARM UP · 3/10` where `PARK n · PITCHES` would be, and the
+scoreboard says `WARM UP`. Nothing else changes: same cameras, same cuts, same sounds.
+
+**The result card.** A scoreboard-styled card like the contract card (§16), shown by hard cut on
+`.warmUpEnded`, the machine not ticking: `WARM UP 212` (the day's number, counted from
+`WarmUpRules.epochDay`, set when the game ships), the ten pitches as ten cells in the palette, the
+total feet big in the 5×7 face, home runs, and the day's longest. **Any slice or tap leaves**, by
+hard cut to the career windup. `SHARE` sits in a corner the way `RESTORE` does on the contract
+card. Afterwards the card is one row on the stats board (`WARM UP 212  1847 FT  SHARE`) until
+tomorrow's replaces it.
+
+**The share string.** Text, because it has to paste anywhere:
+
+```
+WARM UP 212 · 1,847 FT
+💥⬜🟩💥⬛🟨💥🟩⬜💥
+<link>
+```
+
+One glyph per pitch: 💥 home run, 🟨 off the wall, 🟩 in play, ⬜ swing and miss, ⬛ taken. Emoji
+squares are outside the sixteen colours and that is fine: the string lives in other people's apps,
+not in the game. The replay clip (#4), when it exists, can ride along.
+
+**The save.** `SaveState` gains an optional `warmUp: { day, results, done }`, so older blobs still
+decode. `results` is one entry per spent pitch (outcome and feet), which is what lets a Warm Up
+interrupted at pitch six resume at pitch seven, and what the card and the share string are drawn
+from. Nothing is stored about other days.
+
+**Knobs:** `WarmUpRules`: `pitches` 10, `minParksCleared` 1, `epochDay` (at ship).
+
+**Build order:** `WarmUp.generate` and its tests → the machine's warm-up state, stat routing and
+`streakNow`, with tests → the save → headline and scoreboard → the result card → the share sheet
+→ the stats-board row. After wave 1 of the in-flight work lands, because it edits `DerbyMachine`,
+`GameController` and `SaveStore`.
+
+**Open:**
+1. The glyphs. Squares and one 💥, or all baseballs and bats?
+2. A Game Center board for the day's feet at launch, or later? §16 lists "the daily … leaderboard"
+   as free; M5 owns Game Center.
+3. Should the first Warm Up wait for the call-up instead of the first cleared park? Later is
+   kinder to a beginner; sooner gives a non-payer the daily habit §16 is counting on.
+4. The Watch (`docs/watch.md`) leaves this phone-only in v1. Ten pitches is a very wrist-sized
+   game; revisit if the watch gets past its W2.
