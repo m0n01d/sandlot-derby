@@ -31,6 +31,9 @@ final class SoundBoard {
     private let whiffBuffer, strikeBuffer, ballBuffer, groanBuffer: AVAudioPCMBuffer
     private let wallBuffer, groundBuffer, streakOverBuffer, calledUpBuffer: AVAudioPCMBuffer
     private let wompBuffer, chargeRunBuffer, shoutBuffer: AVAudioPCMBuffer
+    // The rest of the organ (#17). The three longest buffers in the game: rendered off the main
+    // thread the first time each is needed, never eagerly at launch like everything above.
+    private var threeBlindMiceBuffer, funeralMarchBuffer, takeMeOutBuffer: AVAudioPCMBuffer?
 
     init() {
         let format = self.format
@@ -136,6 +139,85 @@ final class SoundBoard {
         promptID += 1
         if organ.isPlaying { organ.stop() }
     }
+
+    // MARK: - The rest of the organ (#17)
+
+    /// Builds a buffer off the main thread. Free of `self`, so it is safe to call from
+    /// `Task.detached`.
+    private nonisolated static func makeBuffer(_ samples: [Float]) -> AVAudioPCMBuffer {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Synth.sampleRate, channels: 1)!
+        let b = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(1, samples.count)))!
+        b.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { b.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        return b
+    }
+
+    /// *Three Blind Mice*'s cue (#17): two called strikes in a row. No delay; the gap before the
+    /// next windup is short. Rendered off the main thread the first time it is needed.
+    func threeBlindMice() {
+        guard !isMuted else { return }
+        promptID += 1
+        let id = promptID
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let buffer: AVAudioPCMBuffer
+            if let cached = self.threeBlindMiceBuffer { buffer = cached }
+            else {
+                buffer = await Task.detached(priority: .utility) { Self.makeBuffer(Synth.threeBlindMice()) }.value
+                self.threeBlindMiceBuffer = buffer
+            }
+            guard self.promptID == id else { return }         // the pitch beat us to it
+            self.play(buffer, on: self.organ)
+        }
+    }
+
+    /// Chopin's cue (#17): a home-run streak of 5+ just died. `streakOver` still plays for a
+    /// streak of 3–4; this doesn't replace it. Rendered off the main thread on first use.
+    func funeralMarch(after seconds: Double) {
+        guard !isMuted else { return }
+        promptID += 1
+        let id = promptID
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard let self, self.promptID == id else { return }
+            let buffer: AVAudioPCMBuffer
+            if let cached = self.funeralMarchBuffer { buffer = cached }
+            else {
+                buffer = await Task.detached(priority: .utility) { Self.makeBuffer(Synth.funeralMarch()) }.value
+                self.funeralMarchBuffer = buffer
+            }
+            guard self.promptID == id else { return }
+            self.play(buffer, on: self.organ)
+        }
+    }
+
+    /// How long after the stats board opens its organ starts (#17).
+    static let statsOrganDelay = 1.0
+
+    /// Starts *Take Me Out to the Ball Game* over the stats board, after `statsOrganDelay` (#17).
+    /// Loops once if the board is still up when it ends, then stops for good — `stopOrgan` (from
+    /// `hideStats`) always wins, mid-note if need be, same as everywhere else the organ plays.
+    func startStatsOrgan() {
+        guard !isMuted else { return }
+        promptID += 1
+        let id = promptID
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.statsOrganDelay * 1_000_000_000))
+            guard let self, self.promptID == id else { return }
+            let buffer: AVAudioPCMBuffer
+            if let cached = self.takeMeOutBuffer { buffer = cached }
+            else {
+                buffer = await Task.detached(priority: .utility) { Self.makeBuffer(Synth.takeMeOut()) }.value
+                self.takeMeOutBuffer = buffer
+            }
+            guard self.promptID == id else { return }
+            self.play(buffer, on: self.organ)
+            try? await Task.sleep(nanoseconds: UInt64(Synth.takeMeOutSeconds * 1_000_000_000))
+            guard self.promptID == id else { return }          // stats board was closed already
+            self.play(buffer, on: self.organ)
+        }
+    }
+
     func landed() { play(groundBuffer) }
     func streakOver(after seconds: Double) { play(streakOverBuffer, after: seconds) }
     func calledUp() { play(calledUpBuffer, after: 0.5) }

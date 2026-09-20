@@ -12,8 +12,12 @@ public enum Call: Equatable {
 /// Beat durations in seconds. DESIGN.md §3.
 public struct Timings: Equatable {
     public var windup: Double = 0.5
-    /// Freeze on the slash before the cut.
-    public var contactHold: Double = 0.35
+    /// Freeze on the slash before the cut, weakest contact (`SliceCrossing.quality` 0). Starting
+    /// value, Claude's, 2026-09-19 (issue #20).
+    public var contactHoldWeak: Double = 0.22
+    /// Freeze on the slash before the cut, best contact (`SliceCrossing.quality` 1). Starting
+    /// value, Claude's, 2026-09-19 (issue #20).
+    public var contactHoldBarrel: Double = 0.50
     /// Freeze on the miss markers.
     public var missHold: Double = 1.2
     /// Hold on the landing number.
@@ -193,6 +197,9 @@ public enum Transition: Equatable {
     case hitWall
     /// First touch of the ground.
     case landed
+    /// Two called strikes taken in a row (there is no third in this game, so no called-out
+    /// version). Fires once, on the second; a longer streak doesn't repeat it. #17.
+    case calledStrikesInARow
 }
 
 /// Pure game state. Scenes call `tick`, `slice`, `sliceMissed`, and draw from the properties.
@@ -208,21 +215,36 @@ public struct DerbyMachine: Equatable {
     public private(set) var playbackIndex: Double = 0
     public private(set) var tally = Tally()
     public private(set) var lastCall: Call? = nil
+    /// Called strikes taken back to back, reset by any swing or a taken ball. #17: two in a row
+    /// is *Three Blind Mice*'s cue (there is no third strike here).
+    public private(set) var calledStrikesInARow = 0
     public var timings: Timings
     /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
     public var majorsSliceRules: SliceRules
     public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
     public var ladder: Ladder
+    /// Whether a finger is on the glass right now, mirrored in every frame by the app (whatever
+    /// the beat is or where the finger landed — a slice is "in progress" whenever a finger is
+    /// down, DESIGN.md §3). If the pitch times out while this is true, `tick` resolves it as a
+    /// miss, not a take. Also reset to false at the start of every new pitch, so a caller driving
+    /// `DerbyMachine` directly (as the Core tests do) doesn't have to clear it back down itself.
+    public var sliceInProgress = false
     private var rng: SplitMix64
     private var wallCueIndex: Int? = nil
     private var landCueIndex: Int? = nil
+    /// The quality of the swing that made contact, 0…1, carried from `slice(_:)` into
+    /// `contactHoldNow`.
+    private var contactQuality: Double = 0
 
     /// The rules in force in this park. Scenes read these, never the majors' ones.
     public var sliceRules: SliceRules { ladder.sliceRules(majorsSliceRules, for: park.league) }
     public var pitchingRules: PitchingRules { ladder.pitchingRules(majorsPitchingRules, for: park.league) }
     /// The help this park gives, nil from The Show on.
     public var rung: Rung? { ladder.rung(for: park.league) }
+    /// Whether this park has a ballpark organ (#17). The Show always does; a rung follows its
+    /// own `organ` flag — a sandlot has no organist. Claude's call, unreviewed (DESIGN.md §11).
+    public var hasOrgan: Bool { rung?.organ ?? true }
 
     /// `park` and `tally` are what a save restores; everything else starts fresh.
     public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
@@ -254,6 +276,20 @@ public struct DerbyMachine: Equatable {
     /// True through the result hold of the home run that clears Triple-A.
     public var isBeingCalledUp: Bool {
         beat == .result && park.league == .tripleA && (flight?.homeRun ?? false)
+    }
+
+    /// The hitstop to hold for right now: `contactHoldWeak` at quality 0, `contactHoldBarrel`
+    /// at quality 1, linear between. Meaningful only once `slice(_:)` has set `contactQuality`;
+    /// before the first contact it reads as the weak hold.
+    public var contactHoldNow: Double {
+        timings.contactHoldWeak + (timings.contactHoldBarrel - timings.contactHoldWeak) * contactQuality
+    }
+
+    /// True while the contact freeze is showing a barrelled ball (`StatRules.isBarrel`), so the
+    /// scene can draw the call. False outside `.contact` and whenever there is no launch.
+    public var isBarrelNow: Bool {
+        guard beat == .contact, let l = launch else { return false }
+        return statRules.isBarrel(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees)
     }
 
     /// Pitch progress, 0 at release and 1 at the plate. Only meaningful during `.pitch`.
@@ -300,6 +336,7 @@ public struct DerbyMachine: Equatable {
     /// Called by the scene when `Contact.test` returned `.contact` during `.pitch`.
     public mutating func slice(_ crossing: SliceCrossing) {
         guard beat == .pitch else { return }
+        calledStrikesInARow = 0
         let l = Contact.resolve(crossing, pitch: pitch, rules: sliceRules)
         let f = Flight.simulate(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees,
                                 wallDistanceFeet: park.wallDistanceFeet, wallHeightFeet: park.wallHeightFeet)
@@ -314,12 +351,14 @@ public struct DerbyMachine: Equatable {
         landCueIndex = f.hangTime.flatMap { hang in f.points.firstIndex(where: { $0.time >= hang }) }
         playbackIndex = 0
         lastCall = nil
+        contactQuality = min(1, max(0, crossing.quality))
         enter(.contact)
     }
 
     /// Called when the finger lifts during `.pitch` without a contact.
     public mutating func sliceMissed() {
         guard beat == .pitch else { return }
+        calledStrikesInARow = 0
         countPitch()
         tally.add(.swings)
         tally.add(.whiffs)
@@ -402,23 +441,33 @@ public struct DerbyMachine: Equatable {
             } else if elapsed > timings.windup { enter(.pitch); out.append(.pitchThrown) }
         case .pitch:
             if elapsed > pitch.duration * timings.pitchOverrun + timings.takeGrace {
-                countPitch()
-                if pitch.isStrike {
-                    tally.add(.calledStrikes)
-                    endStreaks()
+                if sliceInProgress {
+                    // A slice was in progress when the pitch timed out: it resolves as a swing
+                    // and a miss, with markers, exactly like `sliceMissed()` — never a call
+                    // (DESIGN.md §3).
+                    sliceMissed()
                 } else {
-                    tally.add(.ballsTaken)
-                    if !statRules.takenBallKeepsStreak { endStreaks() }
+                    countPitch()
+                    if pitch.isStrike {
+                        tally.add(.calledStrikes)
+                        endStreaks()
+                        calledStrikesInARow += 1
+                        if calledStrikesInARow == 2 { out.append(.calledStrikesInARow) }
+                    } else {
+                        tally.add(.ballsTaken)
+                        if !statRules.takenBallKeepsStreak { endStreaks() }
+                        calledStrikesInARow = 0
+                    }
+                    let call: Call = pitch.isStrike ? .strike : .ball
+                    lastCall = call
+                    out.append(.called(call))
+                    enter(.miss)
                 }
-                let call: Call = pitch.isStrike ? .strike : .ball
-                lastCall = call
-                out.append(.called(call))
-                enter(.miss)
             }
         case .miss:
             if elapsed > timings.missHold { newPitch() }
         case .contact:
-            if elapsed > timings.contactHold { enter(.flight); out.append(.flash); out.append(.cutToWide) }
+            if elapsed > contactHoldNow { enter(.flight); out.append(.flash); out.append(.cutToWide) }
         case .flight:
             guard let f = flight else { enter(.result); break }
             let before = Int(playbackIndex)
@@ -472,6 +521,7 @@ public struct DerbyMachine: Equatable {
 
     private mutating func newPitch() {
         pitch = Pitching.generate(using: &rng, rules: pitchingRules)
+        sliceInProgress = false
         enter(.windup)
     }
 }

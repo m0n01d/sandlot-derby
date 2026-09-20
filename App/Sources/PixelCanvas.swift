@@ -168,6 +168,9 @@ final class PixelCanvas {
         "F": Array("11111100001000011110100001000010000"), "T": Array("11111001000010000100001000010000100"),
         "H": Array("10001100011000111111100011000110001"), "R": Array("11110100011000111110101001001010001"),
         " ": Array("00000000000000000000000000000000000"),
+        // Added for the `BARREL` call (DESIGN.md §3, issue #20), same block-letter style as the rest.
+        "B": Array("11110100011000111110100011000111110"), "A": Array("01110100011000111111100011000110001"),
+        "E": Array("11111100001000011110100001000011111"), "L": Array("10000100001000010000100001000011111"),
         // Not in the prototype: the contract card's price (DESIGN.md §16). Seven rows are the
         // point — the `$`'s stroke overshoots the `S` above and below, which is the one thing
         // that stops it reading as a `5`, and 3×5 has no room for it.

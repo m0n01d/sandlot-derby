@@ -15,6 +15,13 @@ final class MachineTests: XCTestCase {
                       ball: m.ballNow, crossingPoint: m.ballNow.position)
     }
 
+    /// Quality 0.2, well short of a barrel: `StatRules.isBarrel` needs 98 mph, and this blend
+    /// lands nowhere near it.
+    private func weakCrossing(_ m: DerbyMachine) -> SliceCrossing {
+        SliceCrossing(quality: 0.2, progress: 1, swingAngleDegrees: 20, power: 0.3,
+                      ball: m.ballNow, crossingPoint: m.ballNow.position)
+    }
+
     func testWindupThenPitch() {
         var m = DerbyMachine(seed: 1)
         XCTAssertEqual(m.beat, .windup)
@@ -56,7 +63,8 @@ final class MachineTests: XCTestCase {
         XCTAssertEqual(m.tally.hits, 1)
         XCTAssertEqual(m.tally.pitches, 1)
         XCTAssertGreaterThan(m.tally.totalFeet, 380)
-        let t1 = run(&m, seconds: 0.4)
+        // Quality-1 contact holds at `contactHoldBarrel` (0.50 s), longer than the old flat 0.35 s.
+        let t1 = run(&m, seconds: 0.55)
         XCTAssertEqual(m.beat, .flight)
         XCTAssertTrue(t1.contains(.cutToWide))
         XCTAssertTrue(t1.contains(.flash))
@@ -107,7 +115,7 @@ final class MachineTests: XCTestCase {
         run(&m, seconds: 0.6)
         m.slice(perfectCrossing(m))
         XCTAssertEqual(m.flightCamera, .wide)               // contact freeze
-        run(&m, seconds: 0.4)
+        run(&m, seconds: 0.55)                              // clears the quality-1 contactHoldBarrel
         XCTAssertEqual(m.beat, .flight)
         XCTAssertEqual(m.flightCamera, .wide)               // the ball leaves the bat wide
         var waited = 0.0
@@ -143,5 +151,101 @@ final class MachineTests: XCTestCase {
         var a = DerbyMachine(seed: 99), b = DerbyMachine(seed: 99)
         run(&a, seconds: 5); run(&b, seconds: 5)
         XCTAssertEqual(a, b)
+    }
+
+    // MARK: - Issue #20: hitstop scaled by quality
+
+    func testContactHoldScalesWithQuality() {
+        var weak = DerbyMachine(seed: 3)
+        run(&weak, seconds: 0.6)
+        weak.slice(weakCrossing(weak))
+        let weakHold = weak.contactHoldNow
+
+        var barrel = DerbyMachine(seed: 3)
+        run(&barrel, seconds: 0.6)
+        barrel.slice(perfectCrossing(barrel))
+        let barrelHold = barrel.contactHoldNow
+
+        XCTAssertGreaterThan(barrelHold, weakHold)
+        XCTAssertGreaterThanOrEqual(weakHold, weak.timings.contactHoldWeak - 1e-9)
+        XCTAssertLessThanOrEqual(weakHold, weak.timings.contactHoldBarrel + 1e-9)
+        XCTAssertGreaterThanOrEqual(barrelHold, weak.timings.contactHoldWeak - 1e-9)
+        XCTAssertLessThanOrEqual(barrelHold, weak.timings.contactHoldBarrel + 1e-9)
+    }
+
+    func testContactToFlightEdgeStillFlashesAndCutsForAWeakContact() {
+        var m = DerbyMachine(seed: 3)
+        run(&m, seconds: 0.6)
+        m.slice(weakCrossing(m))
+        XCTAssertEqual(m.beat, .contact)
+        let hold = m.contactHoldNow
+        run(&m, seconds: max(0, hold - 0.05))
+        XCTAssertEqual(m.beat, .contact)          // still short of its own (shorter) hold
+        let t = run(&m, seconds: 0.1)
+        XCTAssertEqual(m.beat, .flight)
+        XCTAssertTrue(t.contains(.flash))
+        XCTAssertTrue(t.contains(.cutToWide))
+    }
+
+    // MARK: - Issue #20: BARREL call
+
+    func testIsBarrelNowOnlyDuringTheContactFreeze() {
+        var m = DerbyMachine(seed: 3)
+        run(&m, seconds: 0.6)
+        XCTAssertFalse(m.isBarrelNow)             // no contact yet
+        m.slice(perfectCrossing(m))               // 115 mph at 28°: a barrel
+        XCTAssertEqual(m.beat, .contact)
+        XCTAssertTrue(m.isBarrelNow)
+        run(&m, seconds: m.contactHoldNow + 0.05)
+        XCTAssertEqual(m.beat, .flight)
+        XCTAssertFalse(m.isBarrelNow)              // only true during .contact
+    }
+
+    func testIsBarrelNowFalseForWeakContact() {
+        var m = DerbyMachine(seed: 3)
+        run(&m, seconds: 0.6)
+        m.slice(weakCrossing(m))
+        XCTAssertEqual(m.beat, .contact)
+        XCTAssertFalse(m.isBarrelNow)
+    }
+
+    // MARK: - Issue #20: swing-miss on a held finger
+
+    func testHeldFingerAtPitchTimeoutResolvesAsASwingAndMiss() {
+        var m = DerbyMachine(seed: 1)
+        run(&m, seconds: 0.6)
+        XCTAssertEqual(m.beat, .pitch)
+        m.sliceInProgress = true
+        let t = run(&m, seconds: m.pitch.duration * 1.15 + 0.1)
+        XCTAssertEqual(m.beat, .miss)
+        XCTAssertEqual(m.lastCall, .miss)
+        XCTAssertFalse(t.contains { if case .called = $0 { return true }; return false })
+        XCTAssertEqual(m.tally.count(.swings), 1)
+        XCTAssertEqual(m.tally.count(.whiffs), 1)
+        XCTAssertEqual(m.tally.count(.calledStrikes), 0)
+        XCTAssertEqual(m.tally.count(.ballsTaken), 0)
+    }
+
+    func testUnheldFingerAtPitchTimeoutIsStillACalledPitch() {
+        var m = DerbyMachine(seed: 1)
+        run(&m, seconds: 0.6)
+        XCTAssertFalse(m.sliceInProgress)
+        let expected: Call = m.pitch.isStrike ? .strike : .ball
+        let t = run(&m, seconds: m.pitch.duration * 1.15 + 0.1)
+        XCTAssertEqual(m.beat, .miss)
+        XCTAssertEqual(m.lastCall, expected)
+        XCTAssertTrue(t.contains(.called(expected)))
+        XCTAssertEqual(m.tally.count(.swings), 0)
+    }
+
+    func testSliceInProgressResetsAtEveryNewPitch() {
+        var m = DerbyMachine(seed: 1)
+        run(&m, seconds: 0.6)
+        m.sliceInProgress = true
+        run(&m, seconds: m.pitch.duration * 1.15 + 0.1)
+        XCTAssertEqual(m.beat, .miss)
+        run(&m, seconds: 1.3)
+        XCTAssertEqual(m.beat, .windup)
+        XCTAssertFalse(m.sliceInProgress)
     }
 }
