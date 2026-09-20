@@ -15,9 +15,13 @@ struct ContractCardLayout {
     /// `THE SHOW`, the only thing on the card as big as the scoreboard's own heading.
     var titleY = 36.0
     var titleScale = 3
-    /// The price, in the scoreboard's yellow. Whatever the store charges today.
-    var priceY = 62.0
-    var priceScale = 3
+    /// The price. Whatever the store charges today, drawn in the 5×7 face because that is the
+    /// only one with room for a `$` that cannot be read as a `5` (DESIGN.md §16).
+    var priceY = 60.0
+    var priceScale = 2
+    /// A price the 5×7 face cannot spell arrives as an ISO code (`BRL 14.90`) and is drawn in
+    /// the 3×5 face instead, one step larger so it keeps roughly the same weight.
+    var priceFallbackScale = 3
     /// `ONE TIME`.
     var termY = 92.0
     var termScale = 2
@@ -98,7 +102,11 @@ final class ContractScene: CanvasScene {
 
         centred(canvas, "THE SHOW", y: l.titleY, scale: l.titleScale, Palette.score, centre)
         if let price = store.priceText {
-            centred(canvas, price, y: l.priceY, scale: l.priceScale, Palette.chalk, centre)
+            if PixelCanvas.hasGlyphs5(for: price) {
+                centred5(canvas, price, y: l.priceY, scale: l.priceScale, Palette.chalk, centre)
+            } else {
+                centred(canvas, price, y: l.priceY, scale: l.priceFallbackScale, Palette.chalk, centre)
+            }
         }
         centred(canvas, "ONE TIME", y: l.termY, scale: l.termScale, Palette.chalk, centre)
         centred(canvas, "NO ADS  NO SUBSCRIPTION", y: l.promiseY, scale: l.promiseScale,
@@ -167,6 +175,12 @@ final class ContractScene: CanvasScene {
                          _ colour: Palette.RGBA8, _ centre: Double) {
         let width = Double(text.count * 4 * scale) - Double(scale)   // no gap after the last glyph
         canvas.t3((centre - width / 2).rounded(), y, text, colour, scale: scale)
+    }
+
+    private func centred5(_ canvas: PixelCanvas, _ text: String, y: Double, scale: Int,
+                          _ colour: Palette.RGBA8, _ centre: Double) {
+        let width = Double(text.count * 6 * scale) - Double(scale)
+        canvas.t5((centre - width / 2).rounded(), y, text, colour, scale: scale)
     }
 
     // MARK: - Input: one slice signs, one tap declines

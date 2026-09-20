@@ -398,8 +398,13 @@ the player is not entitled, the cut back goes to the **contract card** instead o
   player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
   automatically exactly once per career. After that it lives on the stats board as one row
   (`THE SHOW  $1.99  SLICE TO SIGN`). No timers, sale banners, badges or reminders.
-- The price is the store's localized `displayPrice`. The 3×5 face gains `$ € £ ¥`; any other
-  currency is shown as its ISO code (`BRL 14.90`), which the face already has.
+- The price is the store's localized `displayPrice`, drawn on the card in the **5×7** face, which
+  gains `$ € £ ¥` plus `.` and `,`. Not the 3×5 face, as this section first said: a 3×5 cell has
+  no room for the stroke that has to overshoot the `S` above and below, and without it a `$`
+  reads as a blocky `5` — "$1.99" came out as "51.99" (corrected 2026-09-19). Any currency the
+  5×7 face cannot spell is shown as its ISO code (`BRL 14.90`) in the 3×5 face. The stats-board
+  row always uses the ISO form (`USD 1.99`): its rows are 7 px apart and its grammar is 3×5
+  throughout, so a 7 px-tall glyph would touch its neighbours.
 
 **Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
 not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
@@ -453,8 +458,10 @@ or a rewarded video.
 - **The board row goes first, not last.** The board runs out of columns on a 320-wide canvas and
   drops whatever is last, and a row nobody can reach is not an offer.
 - **The price is `-` until the store answers**, rather than a number the game made up.
-- **`$` is this face's own `S` with the middle column filled.** The zigzag-plus-stroke the tiny
-  fonts use reads as `£` at 3×5.
+- **The currency glyphs are in the 5×7 face, not the 3×5 one**, and the 3×5 face has none, so
+  the bad `$` cannot be drawn again. Two 3×5 attempts were tried and both failed to read: a
+  zigzag-plus-stroke came out as `£`, and the face's own `S` with the middle column filled came
+  out as `5`. Seven rows are what the symbol needs.
 - **Not built, because it cannot be reached from `simctl`:** the purchase, pending, refund and
   restore paths were never exercised. A `.storekit` file only takes effect when the app is
   launched from Xcode, so every screenshot was taken against no store at all.

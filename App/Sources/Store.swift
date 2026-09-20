@@ -78,12 +78,26 @@ final class Store {
     // MARK: - The price
 
     /// The price as the card should draw it: the store's own localized `displayPrice` when the
-    /// 3×5 face has every glyph in it, and the ISO code with the number when it does not
-    /// (`BRL 14.90`). Nil when the store has not answered, which is when there is no store.
+    /// **5×7** face has every glyph in it — that is the face the card draws the price in — and
+    /// the ISO code with the number when it does not (`BRL 14.90`). Nil when the store has not
+    /// answered, which is when there is no store.
     var priceText: String? {
         guard let product else { return Self.placeholderPrice }
         let display = product.displayPrice
-        if PixelCanvas.hasGlyphs(for: display) { return display }
+        if PixelCanvas.hasGlyphs5(for: display) { return display }
+        return isoPriceText
+    }
+
+    /// The price the stats board draws: always the ISO code and the number, never a symbol. The
+    /// board's rows are 7 px apart and its whole grammar is the 3×5 face, which has no `$` — so
+    /// rather than mix faces in one row, that row says `USD 1.99` and is unambiguous everywhere.
+    var boardPriceText: String? {
+        guard product != nil else { return Self.placeholderBoardPrice }
+        return isoPriceText
+    }
+
+    private var isoPriceText: String? {
+        guard let product else { return nil }
         let amount = NSDecimalNumber(decimal: product.price).doubleValue
         return "\(product.priceFormatStyle.currencyCode) \(String(format: "%.2f", amount))"
     }
@@ -197,9 +211,18 @@ final class Store {
     /// `Product.products` comes back empty and the card would have no price to draw. A
     /// `-contract` screenshot run gets this instead. Signing still fails, with `NO CONNECTION`.
     private static var placeholderPrice: String? {
-        arguments.contains(where: { $0 == "-contract" || $0 == "-declined" }) ? "$1.99" : nil
+        hasContractArgument ? "$1.99" : nil
+    }
+
+    private static var placeholderBoardPrice: String? {
+        hasContractArgument ? "USD 1.99" : nil
+    }
+
+    private static var hasContractArgument: Bool {
+        arguments.contains { $0 == "-contract" || $0 == "-declined" }
     }
     #else
     private static let placeholderPrice: String? = nil
+    private static let placeholderBoardPrice: String? = nil
     #endif
 }

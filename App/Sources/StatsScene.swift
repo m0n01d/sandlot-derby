@@ -126,10 +126,14 @@ final class StatsScene: CanvasScene {
         // columns on a narrow screen and drops whatever is last, and a row nobody can reach is
         // not an offer. Gone for good once it is signed. The price is "-" until the store
         // answers, rather than a number the game made up.
+        //
+        // The price is the ISO form (`USD 1.99`), not the symbol: the board's rows are 7 px
+        // apart and its whole grammar is the 3×5 face, which has no `$` — a 7 px-tall 5×7 glyph
+        // would touch the rows above and below, and one row in two faces looks like a mistake.
         var board: [Section] = []
         if let controller, !controller.isEntitled {
             board.append(Section(title: "THE SHOW",
-                                 rows: [(controller.store.priceText ?? "-", "SLICE TO SIGN")],
+                                 rows: [(controller.store.boardPriceText ?? "-", "SLICE TO SIGN")],
                                  isContract: true))
         }
 
