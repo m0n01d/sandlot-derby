@@ -23,6 +23,18 @@ final class LadderTests: XCTestCase {
         return out
     }
 
+    /// Perfect swings until this park's count is made (#40), left standing in the clearing home
+    /// run's result hold — the one that advances, announces and is owed. Every swing is the same;
+    /// only the last one clears.
+    private func homerToTheCount(_ m: inout DerbyMachine) {
+        for _ in 0..<m.homeRunsToClearPark {
+            toNextPitch(&m)
+            m.slice(crossing(m, quality: 1, power: 1, angle: 28))
+            if m.homeRunsThisPark < m.homeRunsToClearPark { run(&m, until: .windup) }
+        }
+        run(&m, until: .result)
+    }
+
     func testTheLadderIsThreeRungsThenTheShow() {
         let walls = (1...4).map { Park.generate(number: $0) }
         XCTAssertEqual(walls.map(\.wallDistanceFeet), [280, 320, 350, 380])
@@ -91,29 +103,24 @@ final class LadderTests: XCTestCase {
         var m = DerbyMachine(seed: 3, park: Park.generate(number: 3))
         toNextPitch(&m)
         m.sliceMissed()
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
-        run(&m, until: .result)
+        homerToTheCount(&m)                    // the call-up is the *clearing* home run now (#40)
         XCTAssertTrue(m.isBeingCalledUp)
         let t = run(&m, until: .windup)
         XCTAssertTrue(t.contains(.calledUp))
         XCTAssertEqual(m.park.number, 4)
-        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 2)
+        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 4)      // the miss and the three of them
         XCTAssertFalse(m.isBeingCalledUp)
 
         // The next park up is just a park.
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
+        homerToTheCount(&m)
         let later = run(&m, until: .windup)
         XCTAssertFalse(later.contains(.calledUp))
-        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 2)
+        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 4)
     }
 
     func testClearingSingleAIsNotACallUp() {
         var m = DerbyMachine(seed: 3)
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
-        run(&m, until: .result)
+        homerToTheCount(&m)
         XCTAssertFalse(m.isBeingCalledUp)
         let t = run(&m, until: .windup)
         XCTAssertFalse(t.contains(.calledUp))
@@ -174,13 +181,12 @@ final class LadderTests: XCTestCase {
 
     // MARK: - The ceiling (DESIGN.md §16)
 
-    /// Homers in Triple-A with the ceiling at 3 and plays it out to the next windup.
+    /// Makes Triple-A's count with the ceiling at 3 and plays the clearing home run out to the
+    /// next windup. Three of them, not one, since #40: the advance is owed on the one that clears.
     private func homerAtTheCeiling(seed: UInt64 = 3) -> (DerbyMachine, [Transition]) {
         var m = DerbyMachine(seed: seed, park: Park.generate(number: 3))
         m.parkCeiling = 3
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
-        run(&m, until: .result)
+        homerToTheCount(&m)
         XCTAssertTrue(m.isBeingCalledUp)               // CALLED UP still plays: the player earned it
         let t = run(&m, until: .windup)
         return (m, t)
@@ -193,12 +199,13 @@ final class LadderTests: XCTestCase {
         XCTAssertTrue(t.contains(.cutToAtBat))
         XCTAssertEqual(m.park.number, 3)
         XCTAssertTrue(m.isAtCeiling)
-        // A home run in every other way.
-        XCTAssertEqual(m.tally.count(.homeRuns), 1)
-        XCTAssertEqual(m.tally.count(.homeRunStreak), 1)
-        // The park's books stay open.
+        // Home runs in every other way.
+        XCTAssertEqual(m.tally.count(.homeRuns), 3)
+        XCTAssertEqual(m.tally.count(.homeRunStreak), 3)
+        // The park's books stay open, and so does its count: the park never changed (#40).
         XCTAssertEqual(m.tally.count(.parksCleared), 0)
-        XCTAssertEqual(m.tally.count(.pitchesThisPark), 1)
+        XCTAssertEqual(m.tally.count(.pitchesThisPark), 3)
+        XCTAssertEqual(m.homeRunsThisPark, 3)
         XCTAssertNil(m.tally.value(ifRecorded: .pitchesToTheShow))
     }
 
@@ -207,10 +214,12 @@ final class LadderTests: XCTestCase {
         toNextPitch(&m)
         m.slice(crossing(m, quality: 1, power: 1, angle: 28))
         let t = run(&m, until: .windup)
+        // The count stays met at the ceiling, so a fourth home run announces it again — which is
+        // §16's open question 3, unchanged by #40.
         XCTAssertTrue(t.contains(.calledUp))
         XCTAssertEqual(m.park.number, 3)
-        XCTAssertEqual(m.tally.count(.homeRuns), 2)
-        XCTAssertEqual(m.tally.count(.homeRunStreak), 2)
+        XCTAssertEqual(m.tally.count(.homeRuns), 4)
+        XCTAssertEqual(m.tally.count(.homeRunStreak), 4)
     }
 
     func testLiftingTheCeilingPaysTheOwedAdvanceAtTheNextWindup() {
@@ -223,13 +232,13 @@ final class LadderTests: XCTestCase {
         XCTAssertEqual(m.elapsed, 0)                   // a whole windup in the new park
         XCTAssertEqual(m.tally.count(.parksCleared), 1)
         XCTAssertEqual(m.tally.count(.pitchesThisPark), 0)
-        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 1)
+        XCTAssertEqual(m.homeRunsThisPark, 0)          // the new park asks for its own three (#40)
+        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 3)
         XCTAssertFalse(m.isAtCeiling)
 
         // Paid once. The Show is then just parks.
         XCTAssertEqual(m.tick(1.0 / 60), [])
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
+        homerToTheCount(&m)
         let later = run(&m, until: .windup)
         XCTAssertFalse(later.contains(.calledUp))
         XCTAssertEqual(m.park.number, 5)
@@ -246,7 +255,7 @@ final class LadderTests: XCTestCase {
         XCTAssertEqual(t.filter { if case .parkChanged = $0 { return true } else { return false } }.count, 0)
         m.tick(1.0 / 60)
         XCTAssertEqual(m.park.number, 4)
-        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 2)
+        XCTAssertEqual(m.tally.count(.pitchesToTheShow), 4)   // three home runs and the miss
     }
 
     func testLiftingTheCeilingWithNothingOwedChangesNothing() {
@@ -259,15 +268,18 @@ final class LadderTests: XCTestCase {
         XCTAssertEqual(m.tick(1.0 / 60), [])
         XCTAssertEqual(m.park.number, 3)
         // And the call-up is then the ordinary one.
-        toNextPitch(&m)
-        m.slice(crossing(m, quality: 1, power: 1, angle: 28))
+        homerToTheCount(&m)
         let t = run(&m, until: .windup)
         XCTAssertTrue(t.contains(.calledUp))
         XCTAssertEqual(m.park.number, 4)
     }
 
+    /// About the ceiling drawing nothing, not about the count: one home run a park keeps the two
+    /// machines walking the ladder in two swings, exactly as this test was written to do (#40).
     func testACeilingAboveThePlayerIsInvisible() {
         var capped = DerbyMachine(seed: 3), free = DerbyMachine(seed: 3)
+        capped.progressRules.homeRunsToClear = 1
+        free.progressRules.homeRunsToClear = 1
         capped.parkCeiling = 3
         for _ in 0..<2 {
             toNextPitch(&capped); toNextPitch(&free)
@@ -281,10 +293,12 @@ final class LadderTests: XCTestCase {
         XCTAssertEqual(capped.pitch, free.pitch)       // same seed, same pitches: the ceiling draws nothing
     }
 
-    /// A refund puts the ceiling where the player stands (§16): nothing is taken away.
+    /// A refund puts the ceiling where the player stands (§16): nothing is taken away. One home
+    /// run a park so that what stops the advance is the ceiling and not an unmade count (#40).
     func testACeilingAtOrBelowTheCurrentParkStopsTheAdvance() {
         for ceiling in [3, 57] {
             var m = DerbyMachine(seed: 9, park: Park.generate(number: 57))
+            m.progressRules.homeRunsToClear = 1
             m.parkCeiling = ceiling
             XCTAssertTrue(m.isAtCeiling)
             toNextPitch(&m)

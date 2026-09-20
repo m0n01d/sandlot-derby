@@ -78,16 +78,32 @@ final class MachineTests: XCTestCase {
         XCTAssertNil(m.flight)
     }
 
-    func testHomeRunAdvancesThePark() {
+    /// A park takes a count of home runs now, not one (#40): two leave you where you were, and
+    /// the third moves you on at the end of its result hold.
+    func testTheParkTakesACountOfHomeRuns() {
         var m = DerbyMachine(seed: 3)
-        run(&m, seconds: 0.6)
-        m.slice(perfectCrossing(m))          // 115 mph at 28° at park 1 is a home run
-        XCTAssertTrue(m.flight?.homeRun ?? false)
-        let t = run(&m, seconds: 12)
+        XCTAssertEqual(m.homeRunsToClearPark, 3)
+        var t: [Transition] = []
+        for hit in 1...3 {
+            var waited = 0.0
+            while m.beat != .pitch && waited < 30 { m.tick(1.0 / 60); waited += 1.0 / 60 }
+            XCTAssertEqual(m.beat, .pitch)
+            m.slice(perfectCrossing(m))      // 115 mph at 28° at park 1 is a home run
+            XCTAssertTrue(m.flight?.homeRun ?? false)
+            XCTAssertEqual(m.homeRunsThisPark, hit)
+            t = []
+            waited = 0
+            while m.beat != .windup && waited < 30 { t += m.tick(1.0 / 60); waited += 1.0 / 60 }
+            if hit < 3 {
+                XCTAssertEqual(m.park.number, 1, "two home runs do not clear a park")
+                XCTAssertFalse(t.contains { if case .parkChanged = $0 { return true } else { return false } })
+            }
+        }
         XCTAssertEqual(m.park.number, 2)
         XCTAssertEqual(m.park, Park.generate(number: 2))
         XCTAssertTrue(t.contains(.parkChanged(m.park)))
-        XCTAssertEqual(m.tally.homeRuns, 1)
+        XCTAssertEqual(m.tally.homeRuns, 3)
+        XCTAssertEqual(m.homeRunsThisPark, 0)          // the new park starts its own count
     }
 
     func testSliceOutsideThePitchBeatIsIgnored() {

@@ -62,6 +62,16 @@ final class AtBatScene: CanvasScene {
     private let foulLineRightX = 280.0
     private let foulLineWallY = 104.0
 
+    /// The progress lamps on the outfield scoreboard: one per home run this park asks for, lit
+    /// as each one lands (#40). To the right of `380 FT`, on its own line and centred on its cap
+    /// height — the board's widest line is `SINGLE-A` at 32 px, so from 166 there is room for a
+    /// count of five (166…189) inside the 64 px board. Sat over the board's top rule at first
+    /// and read as part of the `2` in `280`. (App) — pure layout, no gameplay effect.
+    private let progressLampX = 166.0
+    private let progressLampY = 85.0
+    private let progressLampSize = 3.0
+    private let progressLampGap = 2.0
+
     private let layout = BackdropLayout.standard
     /// The horizon above the wall, drawn once per park and canvas and copied after that
     /// (DESIGN.md §17). Only the clouds are redrawn per frame.
@@ -166,6 +176,7 @@ final class AtBatScene: CanvasScene {
         // The outfield scoreboard says where you are — or that these ten are not the career
         // (DESIGN.md §18). Same board, same place, one word swapped.
         canvas.t3(wx(134), 91, machine.warmUp == nil ? machine.park.displayName : "WARM UP", Palette.chalk)
+        drawProgressLamps(canvas: canvas, wx: wx, machine: machine)
 
         // The two little flags on the scoreboard, fluttering in two frames (§17, step 5).
         BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
@@ -241,6 +252,23 @@ final class AtBatScene: CanvasScene {
         }
 
         drawLiveTrail(canvas: canvas, wx: wx)
+    }
+
+    /// How many home runs this park still wants, as lamps on its own scoreboard (#40): one per
+    /// home run the count asks for, lit in `score` as each lands and dark in `ink` until it does.
+    /// No number and no word — the board is a board, and three lamps of which two are lit is the
+    /// whole sentence.
+    ///
+    /// Nothing during a Warm Up: those ten are played in the day's park and clear nothing
+    /// (DESIGN.md §18), so a row of lamps there would be a promise the day cannot keep.
+    private func drawProgressLamps(canvas: PixelCanvas, wx: (Double) -> Double, machine: DerbyMachine) {
+        guard machine.warmUp == nil else { return }
+        let lit = machine.homeRunsThisPark
+        for i in 0..<machine.homeRunsToClearPark {
+            let x = wx(progressLampX + Double(i) * (progressLampSize + progressLampGap))
+            canvas.rect(x, progressLampY, progressLampSize, progressLampSize,
+                        i < lit ? Palette.score : Palette.ink)
+        }
     }
 
     /// The help a minor-league `Rung` gives (DESIGN.md §10). No words: a line for *where and

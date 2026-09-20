@@ -53,7 +53,7 @@ final class WarmUpTests: XCTestCase {
             seen += out
             t += 1.0 / 60
             for transition in out {
-                if case .warmUpEnded(let r) = transition { return (r, seen) }
+                if case .warmUpEnded(let r, _) = transition { return (r, seen) }
             }
         }
         return (nil, seen)

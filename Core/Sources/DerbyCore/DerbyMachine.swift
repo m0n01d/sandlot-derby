@@ -41,6 +41,10 @@ public struct Stat: Hashable {
     public static let pitches = Stat("pitches")
     public static let parksCleared = Stat("parksCleared")
     public static let pitchesThisPark = Stat("pitchesThisPark")
+    /// Home runs hit **in this park**, not in a row: what `ProgressRules.homeRunsToClear` is
+    /// counted against (#40). Reset by the park change, and never fed by a Warm Up (§18). A save
+    /// written before this existed reads 0, which is where a park starts anyway.
+    public static let homeRunsThisPark = Stat("homeRunsThisPark")
     /// Absent until the first park is cleared.
     public static let fewestPitchesToClearPark = Stat("fewestPitchesToClearPark")
     public static let secondsPlayed = Stat("secondsPlayed")
@@ -91,6 +95,11 @@ public struct Stat: Hashable {
     // Streaks.
     public static let homeRunStreak = Stat("homeRunStreak")
     public static let bestHomeRunStreak = Stat("bestHomeRunStreak")
+    /// The career best the live home-run streak had to beat when it began. Bookkeeping, not a
+    /// number anyone is shown — the same kind of key `warmUpLastDay` is. It is what lets a streak
+    /// record fire once, on the home run that *passes* the old best, and not on every one after
+    /// it: by then the best is this streak's own and beating it is only extending it (#41).
+    public static let bestHomeRunStreakAtStreakStart = Stat("bestHomeRunStreakAtStreakStart")
     public static let hitStreak = Stat("hitStreak")
     public static let bestHitStreak = Stat("bestHitStreak")
 
@@ -188,6 +197,17 @@ public enum FlightCamera: Equatable {
     case close
 }
 
+/// What a park asks for before it is cleared (DESIGN.md §10, issue #40).
+public struct ProgressRules: Equatable {
+    /// Home runs **in this park** that clear it — a count, not a streak: in a row is what the
+    /// home-run streak is for, and in The Show three in a row would be brutal. One number for
+    /// every park, the minors included; per-league values are a later tweak. Dwight, 2026-09-20:
+    /// "lets start with 3."
+    public var homeRunsToClear = 3
+    public init() {}
+    public static let standard = ProgressRules()
+}
+
 public struct CameraRules: Equatable {
     /// A ball earns the close camera only if it ever gets within this many feet of the wall.
     /// Everything else is watched from the wide camera start to finish.
@@ -207,6 +227,9 @@ public enum Transition: Equatable {
     case parkChanged(Park)
     /// Triple-A cleared: the next pitch is in The Show. Once per career.
     case calledUp
+    /// A career number just fell, at the moment the number that set it goes up on screen: the
+    /// start of the result hold (#41). At most one a swing, and never without a previous best.
+    case newRecord(RecordKind)
     // Moments worth a sound or a haptic. They fire as playback reaches them, once each, so the
     // crowd reacts when the ball clears the wall and not when the bat meets it.
     /// A pitch was taken: the umpire's call.
@@ -224,8 +247,11 @@ public enum Transition: Equatable {
     /// are set aside until `.warmUpEnded`; the beats in between are the usual five and a miss.
     case warmUpBegan
     /// The tenth pitch has resolved and its hold has played out: the result card, and behind it
-    /// the career windup the machine is already standing in.
-    case warmUpEnded(WarmUpResult)
+    /// the career windup the machine is already standing in. The `WarmUpBests` is what the day
+    /// beat, worked out as its books closed — by the time the card is drawn the bests have been
+    /// raised to it and there is nothing left to compare against (#41). It travels here rather
+    /// than on the machine because nothing of a Warm Up may be left standing behind it (§18).
+    case warmUpEnded(WarmUpResult, WarmUpBests)
 }
 
 /// Pure game state. Scenes call `tick`, `slice`, `sliceMissed`, and draw from the properties.
@@ -252,6 +278,10 @@ public struct DerbyMachine: Equatable {
     /// Empty for every beat that is not a flight or its result, and empty again at the cut back
     /// to the plate — the same window `fireworks` lives in.
     public private(set) var parkEvents: [ParkEvent] = []
+    /// The record this swing set, for exactly as long as the number that set it is on screen:
+    /// set as the result hold begins and nil at every other beat, the same window `fireworks`
+    /// and `parkEvents` live in (#41). The scenes read it; nothing in Core does.
+    public private(set) var recordNow: RecordKind? = nil
     /// What this park still carries: a dark bank, a dent, a broken pane. It survives the cut to
     /// the plate and dies with the park, which is what #5 means by "until the park changes".
     public private(set) var parkScars = ParkScars()
@@ -273,6 +303,10 @@ public struct DerbyMachine: Equatable {
     public var statRules: StatRules
     public var fireworksRules: FireworksRules
     public var rareEventRules: RareEventRules = .standard
+    /// What this park asks for before it is cleared (#40). Settable like `cameraRules`, so a
+    /// test — or a later per-league tweak — can move the count without touching the machine.
+    public var progressRules: ProgressRules = .standard
+    public var recordRules: RecordRules = .standard
     public var ladder: Ladder
     /// Whether a finger is on the glass right now, mirrored in every frame by the app (whatever
     /// the beat is or where the finger landed — a slice is "in progress" whenever a finger is
@@ -301,6 +335,10 @@ public struct DerbyMachine: Equatable {
     /// The quality of the swing that made contact, 0…1, carried from `slice(_:)` into
     /// `contactHoldNow`.
     private var contactQuality: Double = 0
+    /// The tally as it stood the instant before the swing on screen, and the streak with it: the
+    /// two halves of the comparison a record is (#41). Nil before the first swing of a machine.
+    private var tallyBeforeSwing: Tally? = nil
+    private var streakBeforeSwing: Int = 0
 
     /// The rules in force in this park. Scenes read these, never the majors' ones.
     public var sliceRules: SliceRules { ladder.sliceRules(majorsSliceRules, for: park.league) }
@@ -339,9 +377,29 @@ public struct DerbyMachine: Equatable {
         return nil
     }
 
-    /// True through the result hold of the home run that clears Triple-A.
+    // MARK: - Clearing a park (#40)
+
+    /// Home runs hit in this park so far. A count, not a streak: a miss or a ball in play between
+    /// two of them costs nothing here, only the home-run streak.
+    public var homeRunsThisPark: Int { tally.count(.homeRunsThisPark) }
+
+    /// How many this park asks for. Never below one, whatever the knob says: a park that could
+    /// not be cleared at all is not a park.
+    public var homeRunsToClearPark: Int { max(1, progressRules.homeRunsToClear) }
+
+    /// True through the result hold of the home run that **made this park's count** — the one
+    /// that advances at the end of the hold, announces the call-up and is owed at the ceiling.
+    /// False on the ones before it, and false for a Warm Up, which clears nothing (§18).
+    public var clearsTheParkNow: Bool {
+        beat == .result && warmUp == nil && (flight?.homeRun ?? false)
+            && homeRunsThisPark >= homeRunsToClearPark
+    }
+
+    /// True through the result hold of the home run that clears Triple-A: the clearing one, now
+    /// that a park takes a count (#40). At the ceiling the count stays met, so — exactly as
+    /// before — every later Triple-A home run announces it again (§16's open question 3).
     public var isBeingCalledUp: Bool {
-        beat == .result && park.league == .tripleA && (flight?.homeRun ?? false)
+        clearsTheParkNow && park.league == .tripleA
     }
 
     /// The hitstop to hold for right now: `contactHoldWeak` at quality 0, `contactHoldBarrel`
@@ -481,6 +539,12 @@ public struct DerbyMachine: Equatable {
     public mutating func slice(_ crossing: SliceCrossing) {
         guard beat == .pitch else { return }
         calledStrikesInARow = 0
+        // Every number as it stood before this swing, kept so a record is a comparison of before
+        // and after rather than a count kept alongside the numbers themselves (#41). A replay
+        // rebuilds it for nothing: `atPitch` starts from the record's own before-tally and this
+        // line runs again, so a clip finds the same record the live swing did (DESIGN.md §19).
+        tallyBeforeSwing = tally
+        streakBeforeSwing = streakNow
         let l = Contact.resolve(crossing, pitch: pitch, rules: sliceRules)
         let f = Flight.simulate(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees,
                                 wallDistanceFeet: park.wallDistanceFeet, wallHeightFeet: park.wallHeightFeet)
@@ -590,6 +654,11 @@ public struct DerbyMachine: Equatable {
         if f.homeRun {
             tally.add(.homeRuns)
             tally.add(.homeRuns(pitch.type))
+            // What this streak had to beat when it began (#41). Written as the streak leaves 0,
+            // so a save from a build that never had the key is right from its first streak
+            // rather than from never. `streakNow` is whichever streak is live, and neither has
+            // moved yet.
+            if streakNow == 0 { tally.set(.bestHomeRunStreakAtStreakStart, tally[.bestHomeRunStreak]) }
             if var run = warmUp {
                 // The Warm Up's own streak. The career's best still carries it: the ten are
                 // Show-league pitches, so a streak made in them is a streak (§18, Claude's
@@ -599,6 +668,9 @@ public struct DerbyMachine: Equatable {
                 tally.raise(.bestHomeRunStreak, to: Double(run.homeRunStreak))
             } else {
                 tally.extend(.homeRunStreak, best: .bestHomeRunStreak)
+                // The park's own count (#40). Career only: the day's ten are thrown in the day's
+                // park, not the one being cleared, so nothing in a Warm Up clears it (§18).
+                tally.add(.homeRunsThisPark)
             }
             let past = f.distanceFeet - park.wallDistanceFeet
             if past >= r.noDoubterMarginFeet { tally.add(.noDoubters) }
@@ -613,8 +685,15 @@ public struct DerbyMachine: Equatable {
 
     /// The day's books, closed when the tenth pitch's hold ends. The in-a-row count needs
     /// yesterday's day, which is the one bookkeeping key the tally carries for this.
-    private mutating func countWarmUp(_ r: WarmUpResult) {
+    @discardableResult
+    private mutating func countWarmUp(_ r: WarmUpResult) -> WarmUpBests {
         tally.add(.warmUps)
+        // What the day beat, worked out *before* the raises below: afterwards the bests are this
+        // day's own and there is nothing left to compare it against (#41). It rides out on
+        // `.warmUpEnded`, because nothing of a day may be left standing on the machine (§18).
+        let beaten = WarmUpBests(
+            feet: tally.value(ifRecorded: .warmUpBestFeet).map { Double(r.totalFeet) > $0 } ?? false,
+            homeRuns: tally.value(ifRecorded: .warmUpBestHomeRuns).map { Double(r.homeRuns) > $0 } ?? false)
         tally.raise(.warmUpBestFeet, to: Double(r.totalFeet))
         tally.raise(.warmUpBestHomeRuns, to: Double(r.homeRuns))
         let today = Double(WarmUp.serial(of: r.day))
@@ -625,6 +704,7 @@ public struct DerbyMachine: Equatable {
         }
         tally.raise(.bestWarmUpDaysInARow, to: tally[.warmUpDaysInARow])
         tally.set(.warmUpLastDay, today)
+        return beaten
     }
 
     /// Fires once, right when the ball clears the wall: the streak (already extended by
@@ -632,7 +712,10 @@ public struct DerbyMachine: Equatable {
     /// call-up forces a finale, and a no-doubter can add one more. DESIGN.md §17 "How big
     /// follows the streak" and "Seed".
     private mutating func startFireworksIfEarned(_ f: FlightResult) {
-        let isCalledUp = park.league == .tripleA
+        // The finale belongs to the call-up, and since #40 the call-up is the home run that makes
+        // Triple-A's count: the two before it get the ordinary show their streak has earned.
+        // `countContact` ran at contact, so the count is already up to date here.
+        let isCalledUp = park.league == .tripleA && homeRunsThisPark >= homeRunsToClearPark
         let isNoDoubter = f.distanceFeet - park.wallDistanceFeet >= statRules.noDoubterMarginFeet
         // `streakNow`, not the career's: during a Warm Up the live streak is the Warm Up's, and
         // the show has to follow it without knowing there are two (DESIGN.md §18).
@@ -700,7 +783,7 @@ public struct DerbyMachine: Equatable {
         case .contact:
             if elapsed > contactHoldNow { enter(.flight); out.append(.flash); out.append(.cutToWide) }
         case .flight:
-            guard let f = flight else { enter(.result); break }
+            guard let f = flight else { enter(.result); beginResultHold(&out); break }
             let before = Int(playbackIndex)
             playbackIndex += dt * (1.0 / FlightParams.calibrated.timestep) * timings.flightSpeed
             let after = min(f.points.count - 1, Int(playbackIndex))
@@ -719,12 +802,15 @@ public struct DerbyMachine: Equatable {
             if playbackIndex >= Double(f.points.count - 1) {
                 playbackIndex = Double(max(0, f.points.count - 1))
                 enter(.result)
+                beginResultHold(&out)
             }
         case .result:
             if elapsed > timings.resultHold {
-                // A warm-up home run changes nothing about where the career stands: no park
-                // change, no `.calledUp`, and the ceiling is not consulted (DESIGN.md §18).
-                if warmUp == nil, let f = flight, f.homeRun {
+                // The home run that made this park's count, and only that one (#40). A warm-up
+                // home run changes nothing about where the career stands: no park change, no
+                // `.calledUp`, and the ceiling is not consulted (DESIGN.md §18) — `clearsTheParkNow`
+                // carries all three.
+                if clearsTheParkNow {
                     if isAtCeiling {
                         advanceOwed = true
                         out.append(.calledUp)
@@ -733,6 +819,7 @@ public struct DerbyMachine: Equatable {
                         advancePark(&out, announcing: true)
                     }
                 }
+                recordNow = nil        // the number it was set against is coming off the screen
                 flight = nil
                 launch = nil
                 fireworks = nil        // the next pitch gets a clean sky (DESIGN.md §17 "When")
@@ -744,12 +831,34 @@ public struct DerbyMachine: Equatable {
         return out
     }
 
+    /// The landing number is going up, and with it whatever record it just set (#41). Once per
+    /// result hold, and only for a swing — a taken pitch goes to `.miss` and never comes here.
+    ///
+    /// **The one departure from the issue**, which puts the fewest-pitches celebration "at the
+    /// park change": the park change is the *end* of this hold and the cut back to the plate, so
+    /// there is no frame left to draw it in. The number is settled here anyway — `pitchesThisPark`
+    /// stops moving the moment the home run is hit — so it is celebrated in the same hold that
+    /// says `PARK CLEARED`, which is where a player is already looking. Claude's, unreviewed.
+    private mutating func beginResultHold(_ out: inout [Transition]) {
+        recordNow = nil
+        guard let before = tallyBeforeSwing else { return }
+        // `clearsThePark` is whether the park really changes when this hold ends: at the ceiling
+        // it does not, so `fewestPitchesToClearPark` is not written and nothing has fallen yet.
+        let swing = RecordSwing(streakBefore: streakBeforeSwing, streakAfter: streakNow,
+                                clearsThePark: clearsTheParkNow && !isAtCeiling)
+        guard let kind = Records.kind(before: before, after: tally, swing: swing,
+                                      rules: recordRules) else { return }
+        recordNow = kind
+        out.append(.newRecord(kind))
+    }
+
     /// A cleared park: the books close on it and the next one is generated. `announcing` is
     /// false when the call-up was already announced by the home run that earned it (§16).
     private mutating func advancePark(_ out: inout [Transition], announcing: Bool) {
         tally.add(.parksCleared)
         tally.lower(.fewestPitchesToClearPark, to: tally[.pitchesThisPark])
         tally.set(.pitchesThisPark, 0)
+        tally.set(.homeRunsThisPark, 0)    // the next park asks for its own three (#40)
         parkScars = ParkScars()        // a new park, with its lights on and its glass in (#5)
         let wasMinors = park.league.isMinors
         park = Park.generate(number: park.number + 1, ladder: ladder)
@@ -785,7 +894,7 @@ public struct DerbyMachine: Equatable {
     /// ten is the stats they counted and nothing else.
     private mutating func endWarmUp(_ out: inout [Transition]) {
         guard let run = warmUp else { return }
-        countWarmUp(run.result)
+        let beaten = countWarmUp(run.result)
         warmUp = nil
         park = parkSetAside ?? park
         pitch = pitchSetAside ?? pitch
@@ -797,17 +906,20 @@ public struct DerbyMachine: Equatable {
         launch = nil
         fireworks = nil
         parkEvents = []
+        recordNow = nil
         clockAtContact = 0
         playbackIndex = 0
         wallCueIndex = nil
         landCueIndex = nil
         closeCutIndex = nil
         contactQuality = 0
+        tallyBeforeSwing = nil
+        streakBeforeSwing = 0
         lastCall = nil
         calledStrikesInARow = 0
         sliceInProgress = false
         enter(.windup)
-        out.append(.warmUpEnded(run.result))
+        out.append(.warmUpEnded(run.result, beaten))
     }
 
     private mutating func enter(_ b: Beat) {

@@ -169,6 +169,9 @@ final class StatsScene: CanvasScene {
             Section(title: "THE LONG GAME", rows: [
                 ("PITCHES", n(.pitches)),
                 ("PARKS CLEARED", n(.parksCleared)),
+                // How far through this park's count the player is (#40). `2/3`, not two lamps:
+                // the board is a column of numbers and this is one of them.
+                ("HR THIS PARK", "\(machine.homeRunsThisPark)/\(machine.homeRunsToClearPark)"),
                 ("PITCHES THIS PARK", n(.pitchesThisPark)),
                 ("FEWEST TO CLEAR", fewest),
                 ("PITCHES TO THE SHOW", t.value(ifRecorded: .pitchesToTheShow).map { grouped(Int($0)) } ?? "-"),

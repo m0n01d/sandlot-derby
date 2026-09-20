@@ -425,8 +425,10 @@ final class RareEventTests: XCTestCase {
     }
 
     func testABankStaysOutUntilTheParkChanges() {
-        // Park 63: a wall tower the robot's swing puts out.
+        // Park 63: a wall tower the robot's swing puts out. About the scar dying with the park,
+        // not about the count, so one home run clears this one (#40).
         var m = DerbyMachine(seed: 5, park: Park.generate(number: 63))
+        m.progressRules.homeRunsToClear = 1
         guard let bank = m.park.scenery.wallTowerIndex else { return XCTFail("park 63 has no wall tower") }
         XCTAssertFalse(m.bankIsOut(bank))
         while m.beat != .pitch { m.tick(1 / 60) }
@@ -442,7 +444,9 @@ final class RareEventTests: XCTestCase {
         // this machine has no ceiling and a home run moves it on. Check the scar itself.
         XCTAssertTrue(m.parkScars.darkBanks.contains(bank))
         let parkBefore = m.park.number
-        while m.park.number == parkBefore { m.tick(1 / 60) }
+        var waited = 0.0
+        while m.park.number == parkBefore && waited < 30 { m.tick(1 / 60); waited += 1 / 60 }
+        XCTAssertNotEqual(m.park.number, parkBefore, "the park never changed")
         XCTAssertTrue(m.parkScars.isEmpty, "the new park arrived with someone else's dark bank")
     }
 
