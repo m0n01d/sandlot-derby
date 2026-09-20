@@ -352,10 +352,18 @@ gameplay effect, living beside the scene that draws them. Defaults are the proto
 | `threeBlindMiceBPM` / `funeralMarchBPM` / `takeMeOutBPM` | `Synth` | 300 / 225 / 150 | tempo of the three organ tunes (§11) |
 | `statsOrganDelay` | `SoundBoard` | 1.0 s | delay before *Take Me Out* starts over the stats board |
 | the streak table, plus shell timing and shape | `FireworksRules` | table | how many shells a HR streak (or the call-up) earns, and how each shell launches, bursts and falls (§17) |
-| the cloud, breeze, stands and night-sky ranges | `SceneryRules` | table | clouds, breeze, stands height/depth by tier, night towers and moon odds (§17) |
+| the cloud, breeze, stands and night-sky ranges | `SceneryRules` | table | clouds, breeze, stands height/depth by tier, night towers and their depth/height/bank shape, moon odds, forty seeded stars and their blink duty cycle, and the bird band (§17) |
+| the night kit's motion and the bird flock | `SkyLifeRules` | table | star blink timing, the lights' chase rate, the crowd's bounce, flag flutter, and the bird flock's size, slot interval, speed and wingbeat (§17) |
 | the horizon, stands and cloud-drift ranges | `BackdropLayout` / `Clouds.Rules` (App) | table | horizon band, stands profile, crowd density, cloud drift rate and colours (§17) |
+| the moon's bite, each tower's lamp bank and dithered halo, and the at-bat towers' fixed slots | `BackdropLayout` (App) | table | night-kit geometry drawn from `SceneryRules`/`SkyLife` (§17) |
+| `foulPoleHeightSingleA` / `DoubleA` / `TripleA` / `TheShow` | `BackdropLayout` (App) | 16 / 20 / 24 / 28 ft | the at-bat camera's foul-pole heights per league (§17, #28) |
 | the card's panel, text and signature-line geometry | `ContractCardLayout` (App) | table | where the contract card draws each line (§16) |
 | `contractRowBand` / `contractMinimumSliceLength` | `StatsScene` (App) | 6 / 12 | hit test for the stats-board contract row (§16) |
+| `pitches` / `minParksCleared` / `epochDay` / `shareLink` | `WarmUpRules` | 10 / 1 / 20260401 (placeholder) / "sandlotderby.app" (placeholder) | the day's ten, the gate before a first Warm Up, and the day-count epoch and share link, both placeholders until ship (§18) |
+| the card's panel, cell grid, feet and `SHARE` geometry | `WarmUpCardLayout` (App) | table | where the result card draws each line, as `ContractCardLayout` does the contract's (§18) |
+| `canvasWidth`×`canvasHeight` / `scale` / `framesPerSecond` / `framesPerYield` | `ReplayClipRules` (App) | 320×224 / 4× (→ 1280×896) / 60 / 1 | the clip's fixed frame whatever the phone is, its whole-number upscale, and the encoder's frame rate and yield cadence (§19) |
+| `bitrate` / `maxSeconds` / `crop` | `ReplayClipRules` (App) | 12 Mbit/s / 20 s / `.landscape` | encoder quality, a stop rather than a length, and v1's only crop (§19) |
+| `WideScene.longPressSeconds` | `WideScene` (App) | 0.35 s | how long the landing-number press must hold to trigger a clip (§19) |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.
@@ -373,11 +381,16 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
   (hitstop by quality, `BARREL` call, third pitcher pose, held-finger swing-miss) were built in
   #23.
 - **M4 — parks and score.** Seeded parks, night swap, tally persistence, park advance on HR.
-- **M5 — ship.** Built: audio and haptics, the organ tunes, `parkCeiling`, the contract card, and
-  StoreKit 2 wiring with a local `.storekit` file. Not built or not exercised: the purchase,
-  pending, refund and restore paths have never been run for real — a `.storekit` configuration
-  only takes effect when the app is launched from Xcode, never from `simctl` — plus the app icon,
-  Game Center, TestFlight, the store listing, and the Warm Up (#3, §18).
+- **M5 — ship.** Built: audio and haptics, the organ tunes, `parkCeiling`, the contract card,
+  StoreKit 2 wiring with a local `.storekit` file, the Warm Up (#3, §18), the replay clip (#4,
+  §19), and §17 steps 1–5 (fireworks, sky, backdrops, the night kit, birds, flag flutter and crowd
+  bounce). Not built or not exercised: the purchase, pending, refund and restore paths have never
+  been run for real — a `.storekit` configuration only takes effect when the app is launched from
+  Xcode, never from `simctl` — the share sheets (`UIActivityViewController` cannot be reached from
+  `simctl` either, so the Warm Up's `SHARE` and the replay's long press have only been confirmed to
+  draw and hit-test, never touched by a finger), plus the app icon, Game Center, TestFlight and the
+  store listing. Park variety (#5) and §17 step 6 (the bird strike, the lights-out shot) are in
+  flight this wave, not yet built.
 
 ## 14. Open questions
 

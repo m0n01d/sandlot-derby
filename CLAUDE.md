@@ -24,16 +24,23 @@ routing, PR screenshot and grooming rules do.
   machine. Everything here is deterministic and unit-tested. Wave 1 (2026-09-19) added
   `Scenery.swift` (`Park.scenery` — a park's seeded backdrop pieces, clouds, stands tier, night
   towers/moon) and `Fireworks.swift` (`FireworksRules` — the closed-form home-run shell math).
+  Wave 2 (2026-09-19) added `WarmUp.swift` (`WarmUp.generate(day:)` — the day's ten pitches, a
+  pure function of the date, §18), `Replay.swift` (`Replay` — the record a clip is re-rendered
+  from, §19) and `SkyLife.swift` (`SkyLifeRules` — star blink, the lights' chase, crowd bounce,
+  flag flutter and the bird flock, §17).
 - `App/` — the iOS app. The Xcode project is generated and git-ignored:
   `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
-  scenes (`AtBatScene`, `WideScene`, `ContractScene`) driven by `DerbyMachine` through
-  `GameController`. Scenes are renderers and gesture sources only; they own no game state. Both
-  play/at-bat scenes draw a whole frame into a software `PixelCanvas` (the prototype's
+  scenes (`AtBatScene`, `WideScene`, `ContractScene`, `WarmUpCardScene`) driven by `DerbyMachine`
+  through `GameController`. Scenes are renderers and gesture sources only; they own no game state.
+  Both play/at-bat scenes draw a whole frame into a software `PixelCanvas` (the prototype's
   `px/rect/line/disc/t3/t5`) shown through one nearest-filtered `SKMutableTexture`. DEBUG only:
   space bar is the dev slice; see "DEBUG launch arguments" below for the full set. Wave 1 also
   added `Backdrop.swift` and `Clouds.swift` (the cached backdrop layers and cloud drift behind
   `Scenery`), `ContractScene.swift` (the paywall card, §16), and `Store.swift` with
-  `App/SandlotDerby.storekit` (StoreKit 2, no server).
+  `App/SandlotDerby.storekit` (StoreKit 2, no server). Wave 2 added `WarmUpCardScene.swift` (the
+  Warm Up's result card, modelled on `ContractScene`, §18), `ReplayRenderer.swift` (renders a
+  `Replay` to an off-screen `.mp4`, §19) and `SkyArt.swift` (turns `SkyLife`'s answers into
+  palette pixels — stars, towers, birds, §17).
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
@@ -55,6 +62,10 @@ overrides whatever StoreKit itself would say.
 | `-showstats` | once an `-autoslice` career reaches 12+ pitches at a windup, cuts to the stats board once, for a screenshot | no | no |
 | `-park <n>` | start in park `n` instead of wherever the save left off | yes | yes |
 | `-streak <n>` | start the career with a home-run streak of `n` already going | yes | yes |
+| `-warmup <day>` | force the Warm Up for a `YYYYMMDD` day, faking the one cleared park the gate asks for (§18) | yes | yes |
+| `-warmupcard` | jump straight to the Warm Up's result card with a made-up ten, the way `-streak` fakes a streak (§18) | yes | yes |
+| `-replay <path>` | with `-autoslice`, write the first home run's clip to `<path>` (absolute) or a filename in Documents, and log where it went (§19) | yes | yes |
+| `-skyclock <seconds>` | winds the sky's clock forward so a screenshot can reach a bird flock without waiting; moves scenery only and fakes no career state, so it is on **neither** list (§17) | no | no |
 | `-mute` | mutes all sound | no | no |
 | `-nosave` | a human run that never reads or writes the real save | yes (itself) | yes |
 
@@ -86,7 +97,7 @@ overrides whatever StoreKit itself would say.
   ```sh
   FRAMES=30 GAP=0.2 scripts/shots.sh /path/to/checkout-or-worktree "iPhone 17" /tmp/out -autoslice -showstats
   ```
-  Three lessons from wave 1:
+  Five lessons from waves 1–2:
   - `simctl`'s screenshot capture lags the game clock, so landing a frame inside a beat's ~1 s
     window takes dense bursts (short `GAP`, high `FRAMES`) and retries, not one lucky shot.
   - A `.storekit` configuration only applies when the app is launched from Xcode (or an
@@ -95,15 +106,25 @@ overrides whatever StoreKit itself would say.
   - An agent working in a worktree must pass that worktree's path to `shots.sh` literally (its
     first argument) — it cannot assume the checkout root, and it must not `cd` to the main
     checkout to build.
+  - A burst `GAP` that happens to land on an animation's own period aliases it — a 0.4 s gap made
+    a 5 Hz light chase read as frozen in every frame. Vary `GAP` across a run rather than trusting
+    one burst at a fixed interval.
+  - Two features built in parallel, each correct against a main that has never seen the other, can
+    be wrong together (wave 2: a replay clip made during a Warm Up would have been labelled with
+    the career's park, #33). The conductor builds one integration tree and screenshots the
+    *combination*, not just each feature alone, before merging a wave.
 
 ## Milestones
 
 See DESIGN.md §13. M0–M4 are done. Wave 1 of M5 merged 2026-09-19: #22 (Warm Up spec, §18), #23
 (feel leftovers — hitstop by quality, `BARREL` call, third pitcher pose, held-finger swing-miss),
 #24 (the rest of the organ), #25 (contract card + StoreKit 2), #27 (backdrops/sky/clouds), #26
-(fireworks). Audio, haptics, the organ tunes, `parkCeiling`, the contract card and StoreKit 2
-wiring (a local `.storekit` file) are all in; the purchase/pending/refund/restore paths have not
-been exercised for real, since a `.storekit` configuration only works launched from Xcode. Next:
-building the Warm Up itself (#3), §17 steps 4–6 of #14 (stars, moon and tower chase, birds, flag
-flutter, crowd bounce), park variety (#5), and the replay clip (#4). `docs/watch.md` is a proposal
-for an Apple Watch version and waits on hardware.
+(fireworks). Wave 2 merged the same day: #30 (the replay clip, §19), #31 (the Warm Up itself,
+§18), #32 (the night kit, birds, flag flutter, crowd bounce and the at-bat foul poles — §17 steps
+4–5, #28). Audio, haptics, the organ tunes, `parkCeiling`, the contract card, StoreKit 2 wiring (a
+local `.storekit` file), the Warm Up and the replay clip are all in; the purchase/pending/refund/
+restore paths have not been exercised for real, since a `.storekit` configuration only works
+launched from Xcode. Next: park variety (#5) is in flight this wave; §17 step 6 (the bird strike,
+the lights-out shot) waits on it. #11 (pricing, §16) waits on Dwight to decide and then, once
+decided, to exercise the purchase paths from Xcode. `docs/watch.md` is a proposal for an Apple
+Watch version and waits on hardware.
