@@ -109,6 +109,8 @@ final class WideScene: CanvasScene {
                     seconds: machine.tally[.secondsPlayed],
                     width: fullWidth, night: machine.park.isNight)
 
+        drawFireworks(canvas, machine, fullWidth: fullWidth)
+
         behind.blit(onto: canvas, dy: backdropDY)
 
         // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
@@ -259,6 +261,32 @@ final class WideScene: CanvasScene {
             if p.yFeet <= stands { return (i, p) }
         }
         return nil
+    }
+
+    /// Home-run fireworks (DESIGN.md §17 "Fireworks"): screen-space, so a burst sits in the same
+    /// place whether this frame is wide or close, drawn right after the sky so the field, wall,
+    /// ball and every readout land on top of it. `DerbyCore.Fireworks` does all the maths; this
+    /// only turns a particle's role into a palette pixel.
+    private func drawFireworks(_ canvas: PixelCanvas, _ machine: DerbyMachine, fullWidth: Double) {
+        guard let show = machine.fireworks else { return }
+        let scheme = Palette.scheme(isNight: show.isNight)
+        let particles = Fireworks.particles(show: show, at: machine.tally[.secondsPlayed], rules: machine.fireworksRules)
+        for particle in particles where particle.visible {
+            let colour: Palette.RGBA8
+            switch particle.colour {
+            case .score: colour = Palette.score
+            case .cap: colour = Palette.cap
+            case .chalk: colour = Palette.chalk
+            case .skin: colour = Palette.skin
+            case .sky3: colour = scheme.sky3
+            }
+            let x = fullWidth * particle.x
+            if particle.size >= 2 {
+                canvas.rect(x, particle.y, 2, 2, colour)
+            } else {
+                canvas.px(x, particle.y, colour)
+            }
+        }
     }
 
     /// The batter is the yardstick for the wall, so he is drawn to the field's scale: most real
