@@ -12,6 +12,7 @@ final class GameController {
     let statsScene: StatsScene
     let contractScene: ContractScene
     let warmUpCardScene: WarmUpCardScene
+    let replayScene: ReplayScene
     /// The one purchase (DESIGN.md §16). Read by the card and the stats board for the price.
     let store = Store()
     private weak var view: SKView?
@@ -84,11 +85,13 @@ final class GameController {
         statsScene = StatsScene()
         contractScene = ContractScene()
         warmUpCardScene = WarmUpCardScene()
+        replayScene = ReplayScene()
         atBatScene.controller = self
         wideScene.controller = self
         statsScene.controller = self
         contractScene.controller = self
         warmUpCardScene.controller = self
+        replayScene.controller = self
         applyCeiling()
         persist()                                   // the grandfathering answer, written down
         store.onEntitlementChange = { [weak self] in self?.entitlementChanged() }
@@ -308,7 +311,8 @@ final class GameController {
         let width = max(320, (224 * aspect).rounded())
         let size = CGSize(width: width, height: 224)
         let designPerPoint = 224 / Double(viewSize.height)
-        for scene in [atBatScene, wideScene, statsScene, contractScene, warmUpCardScene] as [CanvasScene] {
+        for scene in [atBatScene, wideScene, statsScene, contractScene, warmUpCardScene,
+                      replayScene] as [CanvasScene] {
             scene.size = size
             scene.scaleMode = .aspectFit
             scene.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
@@ -354,7 +358,6 @@ final class GameController {
                 view?.presentScene(atBatScene)
             case .pitchThrown:
                 streakAtThePitch = machine.streakNow
-                lastSwing = nil                 // the record only lives until the next pitch (#4)
                 haptics.prepare()
                 sound.stopOrgan()            // and then silence: nothing sounds during the pitch
             case .called(let call):
@@ -398,42 +401,83 @@ final class GameController {
         }
         if let finishedCard { finishWarmUp(finishedCard) }
         if offerTheContract { offerContract() }
-        if pendingClipURL != nil { presentPendingClipIfCalm() }
+        #if DEBUG
+        // `-replayscreen`: once a robot swing has earned the camera and the hold is over, open
+        // the replay screen, so the whole of #42 can be screenshotted with nothing touching the
+        // glass. The same shape as `-showstats` above, and after it for the same reason.
+        if Self.openReplayForScreenshots, offeredReplay != nil, machine.beat == .windup {
+            Self.openReplayForScreenshots = false
+            showReplay()
+        }
+        #endif
     }
 
-    // MARK: - The replay clip (#4, DESIGN.md §19)
+    // MARK: - The instant replay (#4, #42, DESIGN.md §19)
 
-    /// The last swing, as a record that can draw itself again. Kept only until the next pitch is
-    /// thrown. Taken for every swing, not just the ones that leave the park: it is a few dozen
-    /// bytes, and the alternative is deciding before the flight has been simulated.
-    private(set) var lastSwing: Replay?
+    /// How far before the slash a replay starts, what earns one, and how long the loop rests on
+    /// the landing number. Every one a knob (`ReplayRules`, in Core).
+    var replayRules = ReplayRules.standard
 
-    /// True while a clip is being drawn. `CanvasScene` puts the one word on the screen for it.
-    private(set) var isRenderingReplayClip = false
+    /// The last swing worth seeing again, or nil. Set at every contact — the record if the ball
+    /// left the park or came off the wall, nil if it did nothing worth showing anyone — so the
+    /// camera in the corner arrives the moment there is something behind it and is gone the
+    /// moment the next ball is hit (#42). A record is a few hundred bytes and never persisted.
+    private(set) var offeredReplay: Replay?
 
-    /// A finished clip with nowhere to go yet, because the player was already swinging again.
-    private var pendingClipURL: URL?
+    /// True while a clip is being written. The replay screen puts `SAVING` up for it, and the
+    /// camera in the corner stands down.
+    private(set) var isExportingReplay = false
 
-    /// What the long press on the landing number is allowed to do right now (`WideScene`).
-    var canShareLastHomeRun: Bool {
-        !isRenderingReplayClip && pendingClipURL == nil && machine.beat == .result
-            && machine.flight?.homeRun == true && lastSwing != nil
+    /// Whether the camera belongs in the corner this frame: through the offered swing's result
+    /// hold, the next windup, the next pitch and a miss's hold. Never over a ball in the air —
+    /// there is a new swing to watch — and never while the replay itself is up.
+    var showsReplayIcon: Bool {
+        guard offeredReplay != nil, !isExportingReplay, view?.scene !== replayScene else { return false }
+        switch machine.beat {
+        case .result, .windup, .pitch, .miss: return true
+        case .contact, .flight: return false
+        }
     }
 
-    /// The long press matured. Drawing a clip takes longer than the hold it was asked in, so it
-    /// runs behind the game and the sheet arrives whenever it arrives — the next pitch is never
-    /// held up for it.
-    func shareLastHomeRunClip() {
-        guard let replay = lastSwing, !isRenderingReplayClip else { return }
-        isRenderingReplayClip = true
+    /// The camera was tapped. Hard cut to the replay, the machine standing still behind it, the
+    /// way the stats board and the two cards stop it. Nothing is rendered or encoded to watch
+    /// one: `ReplayPlayback` ticks a private rebuilt machine and draws it through the same two
+    /// scenes, which costs what a frame of the game costs.
+    func showReplay() {
+        guard let view, let replay = offeredReplay, view.scene !== replayScene else { return }
+        replayScene.begin(replay, rules: replayRules)
+        view.presentScene(replayScene)
+        #if DEBUG
+        writeDebugReplayIfAsked(replay)
+        #endif
+    }
+
+    /// Any tap on the replay that is not the corner word. A hard cut back to the camera the game
+    /// was paused on — the landing number if one is still up, the plate otherwise — and the
+    /// machine picks its own clock up where it left it, exactly as it does leaving the board.
+    func leaveReplay() {
+        guard let view, view.scene === replayScene, !isExportingReplay else { return }
+        let paused: CanvasScene = (machine.beat == .flight || machine.beat == .result)
+            ? wideScene : atBatScene
+        view.presentScene(paused)
+    }
+
+    /// `SHARE`. The only place in the game a clip is ever written, and only when it is asked for:
+    /// the game is paused behind the replay screen, so nothing is competing for the frame.
+    func exportAndShareReplay() {
+        guard let replay = replayScene.replay, !isExportingReplay else { return }
+        isExportingReplay = true
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("sandlot-derby-park-\(replay.park.number).mp4")
         Task { @MainActor [weak self] in
-            defer { self?.isRenderingReplayClip = false }
+            defer { self?.isExportingReplay = false }
+            guard let self else { return }
+            // Long enough for `SAVING` to be drawn and presented before the main thread gets
+            // busy. Without it the word would go up only after the export it is announcing.
+            try? await Task.sleep(for: .milliseconds(50))
             do {
-                try await ReplayRenderer.write(replay, to: url)
-                self?.pendingClipURL = url
-                self?.presentPendingClipIfCalm()
+                let clip = try await ReplayRenderer.write(replay, to: url, replayRules: replayRules)
+                ReplayShare.present(clip.url, from: view, anchor: replayScene.wordAnchorInView)
             } catch {
                 // A clip that could not be made says nothing: there are no toasts in this game.
                 print("replay clip failed: \(error)")
@@ -441,25 +485,17 @@ final class GameController {
         }
     }
 
-    /// The sheet never lands over a swing. If the player is back in the box by the time the clip
-    /// is drawn, it waits for the next quiet beat — a miss or a landing number — which is never
-    /// more than a pitch away.
-    private func presentPendingClipIfCalm() {
-        guard let url = pendingClipURL else { return }
-        switch machine.beat {
-        case .miss, .result:
-            pendingClipURL = nil
-            ReplayShare.present(url, from: view)
-        case .windup, .pitch, .contact, .flight:
-            break
-        }
-    }
-
     #if DEBUG
-    /// `-replay <path>`: with `-autoslice`, write the first home run's clip out and log where it
-    /// went, so a clip can be made in a simulator with nothing touching the glass. A path
-    /// beginning with `/` is used as given; anything else is a filename in the app's Documents
-    /// directory, which is where `simctl get_app_container … data` points. Implies `-nosave`.
+    /// `-replay <path>`: with `-autoslice`, open the replay screen on the first swing that earns
+    /// the camera and write its clip out, logging where it went and what it cost, so a clip can
+    /// be made in a simulator with nothing touching the glass. A path beginning with `/` is used
+    /// as given; anything else is a filename in the app's Documents directory, which is where
+    /// `simctl get_app_container … data` points. Implies `-nosave`.
+    ///
+    /// It goes through the replay screen and the very same `ReplayRenderer.write` the `SHARE`
+    /// word does, with the game paused behind it — so what it measures is what a player would
+    /// actually wait for. Before #42 it wrote the clip during live play, which is the one thing
+    /// this issue exists to stop happening.
     private static let debugReplayPath: String? = {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-replay"), i + 1 < args.count else { return nil }
@@ -467,19 +503,27 @@ final class GameController {
     }()
     private var debugReplayDone = false
 
-    private func writeDebugReplayIfAsked() {
-        guard !debugReplayDone, let path = Self.debugReplayPath, let replay = lastSwing,
-              machine.flight?.homeRun == true else { return }
+    /// `-replayscreen`: with `-autoslice`, open the replay screen once, at the windup after the
+    /// first swing that earns the camera, and leave it there (the robot's slice only fires from
+    /// the at-bat scene's own frame, so nothing swings behind it). For screenshots of #42.
+    /// `-replay` implies it, because that is where a clip is written from now.
+    private static var openReplayForScreenshots =
+        ProcessInfo.processInfo.arguments.contains("-replayscreen") || debugReplayPath != nil
+
+    private func writeDebugReplayIfAsked(_ replay: Replay) {
+        guard !debugReplayDone, let path = Self.debugReplayPath else { return }
         debugReplayDone = true
         let url = path.hasPrefix("/")
             ? URL(fileURLWithPath: path)
             : URL.documentsDirectory.appendingPathComponent(path)
-        isRenderingReplayClip = true
+        isExportingReplay = true
         Task { @MainActor [weak self] in
-            defer { self?.isRenderingReplayClip = false }
+            defer { self?.isExportingReplay = false }
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(50))
             do {
-                let written = try await ReplayRenderer.write(replay, to: url)
-                print("REPLAY CLIP WRITTEN \(written.path)")
+                let clip = try await ReplayRenderer.write(replay, to: url, replayRules: replayRules)
+                print("REPLAY CLIP WRITTEN \(clip.url.path)")
             } catch {
                 print("REPLAY CLIP FAILED \(error)")
             }
@@ -529,16 +573,21 @@ final class GameController {
         let marks = atBatScene.lastContactMarks
         let record = wasPitch
             ? Replay(capturing: machine, crossing: crossing,
-                     slash: marks?.slash ?? Point(x: 1, y: 0), trail: marks?.trail ?? [])
+                     slash: marks?.slash ?? Point(x: 1, y: 0), trail: marks?.trail ?? [],
+                     trailTimes: marks?.times)
             : nil
         machine.slice(crossing)
         if wasPitch {
-            lastSwing = record
+            // Worth seeing again, or not — asked of the live machine's own flight, so nothing is
+            // rebuilt to answer it (#42). Either way the previous offer is over: the next ball
+            // has been hit.
+            offeredReplay = replayRules.offers(homeRun: machine.flight?.homeRun ?? false,
+                                               offTheWall: machine.flight?.wallHit ?? false)
+                ? record : nil
             sound.crack(strength: contactStrength)
             haptics.contact(strength: contactStrength)
-            #if DEBUG
-            writeDebugReplayIfAsked()
-            #endif
+            // No clip is written here any more: `-replay` goes in through the replay screen,
+            // the way `SHARE` does, because nothing renders during play (#42).
         }
         persist()
     }
