@@ -61,23 +61,26 @@ games) were bolt-ons inside full sims. The bare loop is open.
 |---|---|---|---|---|
 | 1 | **windup** | at-bat | 0.50 s | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
-| 3 | **contact** | at-bat | 0.35 s | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. One white frame at start. |
+| 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
-progress at that moment it resolves as a miss with markers; otherwise it is a called strike or
-ball. Taken pitches count as pitches. Only contact counts as a hit.
+progress at that moment (`DerbyMachine.sliceInProgress`, mirrored every frame from whether a
+finger is on the glass — `AtBatScene.fingerDown` — however that finger got there) it resolves
+exactly as `sliceMissed()` does — a swing and a miss, with markers, streak rules as for any miss,
+never a call; otherwise it is a called strike or ball. Taken pitches count as pitches. Only contact
+counts as a hit.
 
 State machine (`DerbyMachine`): six beats, one scene-changing edge (contact → flight; the wide and
 close framings are one scene and `flightCamera` picks between them), no knowledge of nodes.
 
 ```
-windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.35s─▶ flight ─playback ends─▶ result
-                 │                                    (CUT)                            │
-                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────┘
+windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.22-0.50s─▶ flight ─playback ends─▶ result
+                 │                                       (CUT)                             │
+                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────────┘
 ```
 
 ## 4. Pitching
@@ -269,25 +272,47 @@ The batter is a stamp, not scaled art, and is off screen here.
 First pass built 2026-09-19 at Dwight's request ("simple beeps and boops will work for now… a
 crack of the bat, an ump grunting, and crowds cheering"). **No audio files.** Every sound is
 arithmetic in `Synth` (noise, oscillators, biquads: the spirit of an FM chip and a noise channel),
-rendered to buffers at launch and fired by `SoundBoard`. Placeholders by design; replace them one
-at a time.
+fired by `SoundBoard`. Placeholders by design; replace them one at a time. Most buffers render at
+launch; the three longest ones (the tunes below) render off the main thread the first time they
+are needed instead, so opening the app never pays for a tune nobody has reached yet.
 
 | Moment | Cue from Core | Sound | Haptic |
 |---|---|---|---|
 | Bat on ball | `slice` | crack, 9 steps by exit velo: a weak one is a low *tock*, a barrel is bright with the stands' slap coming back | `.rigid`, harder the better it is hit |
 | Swing and miss | `sliceMissed` | a whiff of air | — |
 | Taken strike / ball | `.called` | the ump: a two-beat bark for a strike, one low short grunt for a ball | — |
+| Two called strikes in a row | `.calledStrikesInARow` | the organ plays *Three Blind Mice*'s opening call (there is no third strike in this game) | — |
 | Clears the wall | `.clearedWall` | crowd cheer, 5 sizes by how far past the wall it lands; whistles in the big ones | `.success` |
 | Off the wall | `.hitWall` | wall thump, the crowd's *ohh*, then the sad trombone: *womp, wommmp* | `.heavy` |
 | Two straight home runs | — | the organ runs up the scale over the landing number and the crowd answers *CHARGE!*: one more starts the fireworks (§17). The pitch cuts the organ off mid-note if it is still playing, and then nobody answers | — |
 | Lands in the park | `.landed` | ground thud (a home run lands out of earshot) | — |
-| A streak of 3+ ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
+| A streak of 3–4 ends | — | three square notes down, held until the landing number so it cannot spoil the flight | — |
+| A streak of 5+ ends | — | the organ plays the opening of Chopin's *Marche funèbre* instead, same lead-in. Doesn't replace the streak of 3–4 above | — |
+| Stats board open | `showStats`/`hideStats` | the organ plays *Take Me Out to the Ball Game* (first two lines), starting a beat after the board opens, looping once if still up, stopping dead the moment it closes | — |
 | Called up | `.calledUp` | a major arpeggio, up | — |
 
 **The organ** (#17) is a synthesized drawbar organ with its own player node. It lives in the gaps
 and **stops dead when the pitch is thrown**, as a real organist does when the pitcher comes set.
 The rally prompt is a run up the major scale, deliberately **not** the famous six-note "Charge!"
 fanfare, which was written in 1946 and is still under copyright; license it or leave it.
+
+**The rest of the organ** (#17, 2026-09-19, Claude's, unreviewed — nobody has heard any of this
+against the real songs yet): three more tunes through the same voice, all public domain on
+purpose — *Three Blind Mice* (trad., 1609), the opening of Chopin's *Marche funèbre* (1837, from
+his Piano Sonata No. 2), and the first two lines of *Take Me Out to the Ball Game*
+(Norworth/Von Tilzer, 1908), none of them transcribed from a score, so treat the exact notes as a
+best effort pending a listen. The Chopin is tempo'd differently from the other two on purpose: its
+real tempo is a slow Lento, so rather than compress the whole phrase to fit (which would lose the
+dotted "dum, dum-da-dum" that makes it recognisable), only its first bar is paced to clear the
+tightest gap before the next windup (~1.6 s); the turn that follows is left at its natural speed
+and is **not** guaranteed to finish — `.pitchThrown` is free to cut it off dead mid-phrase, exactly
+as it already does to the charge prompt. That's the organ's normal behaviour here, not a bug. Also
+undecided by the issue, so Claude's call: **Single-A has no organist.** `Rung.organ` is `false`
+there and `true` in Double-A and Triple-A; The Show has no rung and always has one.
+`DerbyMachine.hasOrgan` reads it, and every organ cue in the table above — the existing charge
+prompt included — is gated on it. Where Single-A would have played Chopin (a streak of 5+ dying),
+it just gets the ordinary three notes down instead, same as a streak of 3–4; nothing is silent
+there that used to make a sound.
 
 The cues are `Transition`s that fire as playback reaches the moment, so the crowd reacts when the
 ball clears the wall, not when the bat meets it. **Nothing sounds during the pitch: silence is the
@@ -398,13 +423,29 @@ the player is not entitled, the cut back goes to the **contract card** instead o
   player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
   automatically exactly once per career. After that it lives on the stats board as one row
   (`THE SHOW  $1.99  SLICE TO SIGN`). No timers, sale banners, badges or reminders.
-- The price is the store's localized `displayPrice`. The 3×5 face gains `$ € £ ¥`; any other
-  currency is shown as its ISO code (`BRL 14.90`), which the face already has.
+- The price is the store's localized `displayPrice`, drawn on the card in the **5×7** face, which
+  gains `$ € £ ¥` plus `.` and `,`. Not the 3×5 face, as this section first said: a 3×5 cell has
+  no room for the stroke that has to overshoot the `S` above and below, and without it a `$`
+  reads as a blocky `5` — "$1.99" came out as "51.99" (corrected 2026-09-19). Any currency the
+  5×7 face cannot spell is shown as its ISO code (`BRL 14.90`) in the 3×5 face. The stats-board
+  row always uses the ISO form (`USD 1.99`): its rows are 7 px apart and its grammar is 3×5
+  throughout, so a 7 px-tall glyph would touch its neighbours.
 
 **Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
 not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
 every other way. Core knows nothing about money; the app sets the ceiling from the entitlement.
-Tested like everything else.
+Tested like everything else. **Built 2026-09-19**, with two things the paragraph above left open:
+
+- **Paying the advance.** The home run at the ceiling leaves an advance *owed*. When the app sets
+  `parkCeiling` back to nil (signed, restored, a pending purchase landing), the machine pays it at
+  the next windup: `.parkChanged`, the park's books close, `pitchesToTheShow` is recorded, a fresh
+  windup under the new park's rules, and **no second `.calledUp`**. A pitch already in the air
+  resolves in Triple-A first. With nothing owed, lifting the ceiling changes nothing.
+- **The debt is not saved.** Decline, quit, come back and sign from the stats board, and it takes
+  one more Triple-A home run to go up. That is a call-up with the fanfare, not a penalty, and it
+  keeps a bookkeeping key out of the tally.
+- The park's books (`parksCleared`, `pitchesThisPark`, `fewestPitchesToClearPark`) stay open at
+  the ceiling. `isAtCeiling` is `park.number >= parkCeiling`, so a refund's ceiling just works.
 
 **App.** StoreKit 2 only, no server: `Product.products`, `purchase()`,
 `Transaction.currentEntitlements` at launch, `Transaction.updates` for purchases made elsewhere and
@@ -429,8 +470,30 @@ the App Store Small Business Program (15 %).
 direct-sold or swapped with other indies, drawn in the palette. Never an interstitial, a banner
 or a rewarded video.
 
-**Build order (M5):** `parkCeiling` + tests → contract card scene → StoreKit 2 with the local
-configuration file → sandbox on TestFlight → grandfathering → listing copy.
+**Built 2026-09-19** (Claude, unreviewed), app side: `Store` (StoreKit 2, no server),
+`ContractScene`, the ceiling wired to the entitlement, the stats-board row, and
+`App/SandlotDerby.storekit`. What the paragraphs above left for the build to decide:
+
+- **The ceiling is `max(lastMinorsPark, currentPark)`**, derived from `League.theShow`, so the
+  refund rule and the ordinary rule are one line: a refunded player stops where they stand and a
+  new player stops at Triple-A. It is applied at launch and on every entitlement change.
+- **A tap on the dotted line neither signs nor declines.** Signing needs a stroke of at least
+  `minimumSliceLength` that crosses the line. A tap that lands on the band was aimed at it, so
+  treating it as a decline would punish a missed stroke; a tap anywhere else declines, as specced.
+- **The board row goes first, not last.** The board runs out of columns on a 320-wide canvas and
+  drops whatever is last, and a row nobody can reach is not an offer.
+- **The price is `-` until the store answers**, rather than a number the game made up.
+- **The currency glyphs are in the 5×7 face, not the 3×5 one**, and the 3×5 face has none, so
+  the bad `$` cannot be drawn again. Two 3×5 attempts were tried and both failed to read: a
+  zigzag-plus-stroke came out as `£`, and the face's own `S` with the middle column filled came
+  out as `5`. Seven rows are what the symbol needs.
+- **Not built, because it cannot be reached from `simctl`:** the purchase, pending, refund and
+  restore paths were never exercised. A `.storekit` file only takes effect when the app is
+  launched from Xcode, so every screenshot was taken against no store at all.
+
+**Build order (M5):** ~~`parkCeiling` + tests~~ (done) → ~~contract card scene~~ (done) →
+~~StoreKit 2 with the local configuration file~~ (done, untested against a real store) → sandbox
+on TestFlight → ~~grandfathering~~ (done) → listing copy.
 
 **Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
 the trial can be short. Median pitches-to-call-up says how short, and the free daily card (#3) is
@@ -439,6 +502,15 @@ what keeps a non-payer around, so ship it first.
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
 2. Fallback if the paywall tests badly: paid upfront at $1.99, smaller audience, lean on press.
+3. **Is `.calledUp` on every ceiling home run a nag?** As specced and built, a player who declined
+   gets `CALLED UP` and the arpeggio on *every* Triple-A home run, forever. Read one way that is a
+   celebration; read another it is exactly the reminder "never nagged" rules out. The quiet
+   alternative: the machine announces the first one per session and the app treats the rest as
+   ordinary home runs. Decide when the contract card is built and it can be heard.
+   **Still open, now with a number** (2026-09-19): a `-declined -autoslice` run reached 11 home
+   runs and 0 parks cleared in about a minute, so a robot saw `CALLED UP` and heard the arpeggio
+   eleven times in Triple-A. It is built as specced and not decided. A human swinging at a
+   fraction of that rate may find it a celebration; the robot makes it look like a nag.
 
 ## 17. Life: fireworks, sky and backdrops
 
@@ -519,6 +591,11 @@ exactly. Scenes only draw.
   at-bat view and the side view look in different directions, so each has its own clouds; wide and
   close share one sky. The breeze is cosmetic today and is the tell for **wind** when §14 ships it:
   the same number will push the ball, and the clouds and flags will already be showing it.
+  **Built 2026-09-19** (Claude's, unreviewed). A stamp is a heap, not a row: a wide flat base
+  with two or three narrower, taller steps on it, every block running down to a shared baseline
+  whose bottom row is the `sky3` underside. Laid side by side as the spec's wording allows, the
+  three or four rectangles read as a shelf and not as a cloud. The breeze is rounded, not
+  truncated, or it would never reach ±3 and a dead calm would be twice as likely as any other.
 - **Birds.** Every 20–40 s (seeded) a flock of one to five crosses high, y < 60, well above the
   scoreboard and nowhere near the zone: 3 px `ink` marks, two flap frames at 4 Hz, with the breeze.
   *Later, with #5:* in the side view a bird can be on the flight path; a ball passing within 2 px
@@ -566,13 +643,40 @@ exactly. Scenes only draw.
   From park 5 the backdrop is drawn from a kit, a pure function of N: skyline, mountains, treeline,
   water tower, smokestacks, bridge, palms, ferris wheel. One far piece and one near piece per park.
 
+**Built 2026-09-19** (steps 1 and 2; all of it Claude's and unreviewed). Four things the spec did
+not settle, settled by looking at the frames:
+
+- **The stands are `ink` with `wall` deck lips, not the other way round.** In `wall` the stands and
+  the outfield wall were one green shape and the wall stopped reading as a wall.
+- **The wall's own face is drawn in the same layer as the stands**, after the ball. Without it a
+  home run vanished into the crowd and then fell back out of it: past the wall and below its top
+  line the ball was painting over the wall it had just cleared. The wall looks exactly as it did.
+- **Night turns the side view's backdrop round.** It sits in the `sky2` band, and at night that
+  band *is* `ink`, so an `ink` silhouette there is invisible. After dark the far and near pieces
+  are lighter than the sky behind them (`#446688`, holes in `ink`), the way a city's glow really
+  does pick them out. The at-bat horizon keeps §17's `ink`: its band is `#446688`, where `ink` reads.
+- **The Show has no towers**, though the table above lists them: the prose is the tie-breaker
+  ("the first lights a player sees are a seeded park's: something to arrive at"), and parks 1–4 are
+  day games. Towers are seeded 2–4 for night parks only.
+
+The stands climb in six steps. `SceneryRules` carries each tier's height and depth in feet, so the
+place a ball disappears is one number and not a drawing accident: the pop is drawn at the first
+point of the flight that is inside the profile the stands were drawn from.
+
 ### Building it
 
 - **`Park.scenery`** in Core: backdrop pieces, cloud seeds, breeze, moon, flags. Seeded, Equatable,
-  tested for determinism and for the ladder's fixed entries. No drawing knowledge.
+  tested for determinism and for the ladder's fixed entries. No drawing knowledge. **Built**: a
+  computed property on its own RNG stream, so no park's wall, height or night flag moved —
+  `ParkTests` fingerprints all 200 of them to keep it that way.
 - **A backdrop cache** in the app: everything that does not move is drawn once per (park, canvas
   width, camera) into a `PixelCanvas` and copied each frame. Only clouds, birds, flags, the crowd
-  and fireworks are drawn per frame, a few hundred pixel writes.
+  and fireworks are drawn per frame, a few hundred pixel writes. **Built** as two layers — what
+  sits behind the field and what sits in front of the ball — each a sprite on the palette's
+  sixteenth entry, transparent, copied by colour key rather than blended. Each is drawn with the
+  ground at a canonical 176 and copied down by however far the close camera has lifted it, so the
+  lift costs no rebuild; the key is park, canvas width, camera, scale and origin, which in the
+  side view means about one rebuild per home run.
 - **`Fireworks`**: a pure `particles(seed:time:) → [(x, y, size, colour)]` in the app, unit-testable
   without a scene.
 - **Draw order, side view:** sky → stars / moon → light halos → clouds → fireworks → birds → towers
@@ -580,7 +684,11 @@ exactly. Scenes only draw.
 - **Order of work:** (1) backdrop cache, stands in the side view, horizon in the at-bat view;
   (2) clouds and breeze; (3) fireworks and pops; (4) night kit: stars, moon, stadium lights and
   their chase; (5) birds, flags, crowd bounce; (6) the bird strike, the lights-out shot and their
-  stats, with #5.
+  stats, with #5. **(1) and (2) are built** (2026-09-19). The flags and the crowd are drawn but
+  still: their flutter and their bounce are step 5, which is where the clock that drives them
+  belongs.
+- **`-park <n>`**, DEBUG only, starts in park n and implies `-nosave`: the ladder's four rungs and
+  a night park are otherwise hours of play away from a screenshot.
 
 **Open:**
 1. ~~Fireworks on every home run or only notable ones?~~ Answered 2026-09-19: they build with the
@@ -592,3 +700,97 @@ exactly. Scenes only draw.
    good"). The landing number is a projected distance.
 4. Crowd murmur as ambience between pitches would add life and break "silence is the tension".
    Claude says no; worth hearing once before deciding.
+
+## 18. The Warm Up: the first ten pitches of the day
+
+Issue #3; what §16 and §13 call "the daily card". Decided by Dwight 2026-09-19: the name ("first 10
+pitches is a Warm Up"), the day ("whatever wordle does": the **local calendar day**), and what it
+counts toward ("professional batters have to warm up too": everything but the cost). The rest of
+this section is Claude's and unreviewed. **Spec only, nothing built.**
+
+**What it is.** The first ten pitches of each day are the same for everyone: one park and one pitch
+sequence, seeded by the date. There is no menu and no mode to pick: it is how the day starts. Ten
+pitches, a result card, a hard cut to your own park's windup. It is free forever (§16) and it is
+played in a Show-league park under The Show's rules, so it is a daily taste of what is sold.
+
+**When it starts.** At launch, and whenever the app comes back to the foreground, the app hands
+Core today's day number (`YYYYMMDD`, local calendar, local time zone). Core never reads a clock. If
+that day is not the saved `warmUp.day`, the Warm Up begins **at the next windup**, never in the
+middle of a pitch. Two exceptions:
+
+- **Not before the player can swing.** A save that has not cleared Single-A
+  (`parksCleared < WarmUpRules.minParksCleared`, 1) gets no Warm Up: ten Show-league pitches with
+  no swing guide are a bad first minute. It starts the first day after they have hit one out.
+- `-autoslice` and `-nosave` on their own never start one, so screenshot runs stay what they were.
+  DEBUG `-warmup <day>` forces one for that day number and implies `-nosave`.
+
+**The day's card, in Core.** `WarmUp.generate(day:rules:) -> WarmUp`: a pure function of the day
+number, like a park is of its number. It holds the park (a wall from the ordinary seeded ranges,
+night allowed, league The Show, scenery from §17 seeded by the day) and **all ten pitches,
+generated up front** from a `SplitMix64` seeded by the day, so the sequence cannot depend on what
+the player does. The career's own generator is never drawn from: the career pitch sequence is
+identical whether or not the Warm Up was played. Tested: same day, same card; different days
+differ; ten pitches whatever the swings; the career machine is bit-for-bit what it was apart from
+the stats below.
+
+**In the machine.** `DerbyMachine.beginWarmUp(_:)` queues it for the next windup, the same way an
+owed advance is paid (§16). While it runs, `machine.warmUp` is non-nil, the career park and pitch
+are set aside, and the beats are exactly the usual five and a miss. A home run does not change the
+park, never emits `.parkChanged` or `.calledUp`, and ignores `parkCeiling`. New transitions:
+`.warmUpBegan`, and `.warmUpEnded(WarmUpResult)` when the tenth pitch has resolved and its hold
+has played out, after which the machine is back in the career windup. A pitch is spent at
+`.pitchThrown`: quit with one in the air and it comes back as taken, so a pitch cannot be peeked
+at by quitting.
+
+**What it counts toward.** Every stat in the tally, **except the cost**: `pitches`,
+`pitchesThisPark`, and with them `pitchesToTheShow` and `fewestPitchesToClearPark`. They are thrown
+in the day's park, not the one being cleared, and a warm-up that made `PARK n · PITCHES` worse
+would punish showing up. The career `homeRunStreak` is neither fed nor ended by a Warm Up swing;
+the Warm Up has **its own streak**, and `machine.streakNow` is whichever is live, so the fireworks
+(§17) and the streak cues (§11) follow it without knowing. New stats: `warmUps` (days played),
+`warmUpBestFeet`, `warmUpBestHomeRuns`, `warmUpDaysInARow` and its best. The days-in-a-row count is
+on the stats board and nowhere else: it is counted, never dangled.
+
+**On screen.** The headline reads `WARM UP · 3/10` where `PARK n · PITCHES` would be, and the
+scoreboard says `WARM UP`. Nothing else changes: same cameras, same cuts, same sounds.
+
+**The result card.** A scoreboard-styled card like the contract card (§16), shown by hard cut on
+`.warmUpEnded`, the machine not ticking: `WARM UP 212` (the day's number, counted from
+`WarmUpRules.epochDay`, set when the game ships), the ten pitches as ten cells in the palette, the
+total feet big in the 5×7 face, home runs, and the day's longest. **Any slice or tap leaves**, by
+hard cut to the career windup. `SHARE` sits in a corner the way `RESTORE` does on the contract
+card. Afterwards the card is one row on the stats board (`WARM UP 212  1847 FT  SHARE`) until
+tomorrow's replaces it.
+
+**The share string.** Text, because it has to paste anywhere:
+
+```
+WARM UP 212 · 1,847 FT
+💥⬜🟩💥⬛🟨💥🟩⬜💥
+<link>
+```
+
+One glyph per pitch: 💥 home run, 🟨 off the wall, 🟩 in play, ⬜ swing and miss, ⬛ taken. Emoji
+squares are outside the sixteen colours and that is fine: the string lives in other people's apps,
+not in the game. The replay clip (#4), when it exists, can ride along.
+
+**The save.** `SaveState` gains an optional `warmUp: { day, results, done }`, so older blobs still
+decode. `results` is one entry per spent pitch (outcome and feet), which is what lets a Warm Up
+interrupted at pitch six resume at pitch seven, and what the card and the share string are drawn
+from. Nothing is stored about other days.
+
+**Knobs:** `WarmUpRules`: `pitches` 10, `minParksCleared` 1, `epochDay` (at ship).
+
+**Build order:** `WarmUp.generate` and its tests → the machine's warm-up state, stat routing and
+`streakNow`, with tests → the save → headline and scoreboard → the result card → the share sheet
+→ the stats-board row. After wave 1 of the in-flight work lands, because it edits `DerbyMachine`,
+`GameController` and `SaveStore`.
+
+**Open:**
+1. The glyphs. Squares and one 💥, or all baseballs and bats?
+2. A Game Center board for the day's feet at launch, or later? §16 lists "the daily … leaderboard"
+   as free; M5 owns Game Center.
+3. Should the first Warm Up wait for the call-up instead of the first cleared park? Later is
+   kinder to a beginner; sooner gives a non-payer the daily habit §16 is counting on.
+4. The Watch (`docs/watch.md`) leaves this phone-only in v1. Ten pitches is a very wrist-sized
+   game; revisit if the watch gets past its W2.

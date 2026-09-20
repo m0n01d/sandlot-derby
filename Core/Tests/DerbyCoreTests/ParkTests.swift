@@ -26,6 +26,21 @@ final class ParkTests: XCTestCase {
         }
     }
 
+    /// A fingerprint of every park 1…200 exactly as they were generated before `Park.scenery`
+    /// existed (captured 2026-09-19). Scenery draws from its own RNG stream precisely so that
+    /// adding it cannot quietly move a wall or turn a day game into a night one; this is the
+    /// test that says so.
+    func testParkFieldsAreUnchangedByScenery() {
+        var h: UInt64 = 0xCBF2_9CE4_8422_2325
+        for n in 1...200 {
+            let p = Park.generate(number: n)
+            for v in [Double(p.number), p.wallDistanceFeet, p.wallHeightFeet, p.isNight ? 1.0 : 0.0] {
+                h = (h ^ v.bitPattern) &* 0x0000_0100_0000_01B3
+            }
+        }
+        XCTAssertEqual(h, 5_400_621_804_638_548_389)
+    }
+
     func testSomeParksAreNightGames() {
         let nights = (2...400).filter { Park.generate(number: $0).isNight }.count
         XCTAssertGreaterThan(nights, 40)

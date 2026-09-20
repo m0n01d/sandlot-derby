@@ -40,6 +40,10 @@ public struct Rung: Equatable {
     public var timingRing: Bool
     /// One word on the result of a ball that stayed in the park: `SWING UP`, `LEVEL OUT`, `FASTER`.
     public var coaching: Bool
+    /// Whether this rung has a ballpark organ (#17). A sandlot has no organist; every rung above
+    /// it does. `DerbyMachine.hasOrgan` reads this; The Show has no rung and always has one.
+    /// Claude's call, unreviewed (DESIGN.md §11).
+    public var organ: Bool
 }
 
 /// The minors, and the knobs for the help they give.
@@ -49,20 +53,20 @@ public struct Ladder: Equatable {
         wallDistanceFeet: 280, wallHeightFeet: 6,
         pitchTypes: [PitchType(name: "FASTBALL", speedRange: 68...76, breakY: 0, breakX: 0, weight: 1, exitVelocityBonusMPH: 3)],
         strikeProbability: 1, hitMarginPixels: 14, timingWindow: 0.40,
-        swingGuide: true, timingRing: true, coaching: true)
+        swingGuide: true, timingRing: true, coaching: true, organ: false)
     /// About 88 mph. The changeup arrives, and so do pitches outside the zone.
     public var doubleA = Rung(
         wallDistanceFeet: 320, wallHeightFeet: 8,
         pitchTypes: [PitchType(name: "FASTBALL", speedRange: 80...88, breakY: 0, breakX: 0, weight: 0.65, exitVelocityBonusMPH: 3),
                      PitchType(name: "CHANGEUP", speedRange: 68...76, breakY: 6, breakX: 0, weight: 0.35, exitVelocityBonusMPH: -3)],
         strikeProbability: 0.85, hitMarginPixels: 12, timingWindow: 0.34,
-        swingGuide: false, timingRing: true, coaching: true)
+        swingGuide: false, timingRing: true, coaching: true, organ: true)
     /// About 93 mph. The full pitch table, the curve included, and no help but the coaching word.
     public var tripleA = Rung(
         wallDistanceFeet: 350, wallHeightFeet: 10,
         pitchTypes: PitchType.all,
         strikeProbability: 0.75, hitMarginPixels: 10, timingWindow: 0.30,
-        swingGuide: false, timingRing: false, coaching: true)
+        swingGuide: false, timingRing: false, coaching: true, organ: true)
 
     /// The Show is the park every build before the minors called park 1. About 97 mph.
     public var theShowWallDistanceFeet: Double = 380

@@ -24,6 +24,14 @@ final class WideScene: CanvasScene {
     /// Close: the ground drops out of frame rather than let the ball leave the top.
     private let closeHeadroom = 24.0
 
+    private let layout = BackdropLayout.standard
+    /// Everything behind the wall that does not move, drawn once per park, canvas and framing
+    /// (DESIGN.md §17). The framing is a pure function of the park and the flight, so this
+    /// rebuilds about once a home run, not once a frame.
+    private let backdrops = BackdropCache()
+    /// `Park.scenery` is computed; this keeps the one the frame needs instead of rebuilding it.
+    private var cachedScenery: Scenery?
+
     /// World feet → canvas pixels for one frame.
     private struct Framing {
         let scale: Double       // px per foot
@@ -75,6 +83,20 @@ final class WideScene: CanvasScene {
         let (view, camera) = framing(machine, width: fullWidth)
         let ground = view.ground
 
+        let scenery = self.scenery(for: machine.park)
+        let (behind, front) = backdrops.layers(
+            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width,
+                             camera: camera == .close ? .close : .wide,
+                             scale: view.scale, originX: view.originX),
+            height: canvas.height) { b, f in
+            BackdropArt.sideBackdrop(behind: b.canvas, front: f.canvas,
+                                     park: machine.park, scenery: scenery,
+                                     scale: view.scale, originX: view.originX,
+                                     width: fullWidth, layout: self.layout)
+        }
+        // The layers are drawn with the ground at its canonical place; the close camera lifts it.
+        let backdropDY = Int((ground - BackdropLayout.canonicalGround).rounded())
+
         // The sky is infinitely far away: it never moves, whatever the camera does.
         canvas.rect(0, 0, fullWidth, H, scheme.sky1)
         canvas.rect(0, 70, fullWidth, 60, scheme.sky2)
@@ -82,7 +104,14 @@ final class WideScene: CanvasScene {
         canvas.dither(0, 66, fullWidth, 8, scheme.sky1, scheme.sky2)
         canvas.dither(0, 126, fullWidth, 8, scheme.sky2, scheme.sky3)
 
+        Clouds.draw(into: canvas, clouds: scenery.sideClouds,
+                    breeze: scenery.breezePixelsPerSecond,
+                    seconds: machine.tally[.secondsPlayed],
+                    width: fullWidth, night: machine.park.isNight)
+
         drawFireworks(canvas, machine, fullWidth: fullWidth)
+
+        behind.blit(onto: canvas, dy: backdropDY)
 
         // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
         canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
@@ -95,9 +124,6 @@ final class WideScene: CanvasScene {
         canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, Palette.wall)
         canvas.rect(wallX, ground - wallH, fullWidth - wallX, 1, Palette.chalk)
         canvas.rect(wallX, ground - wallH - 1, 2, wallH + 1, Palette.chalk)
-        // On the wall when it is tall enough to carry a 5 px face, above it when it is not.
-        let wallLabelY = wallH >= 11 ? ground - wallH + 3 : ground - wallH - 8
-        canvas.t3(wallX + 6, wallLabelY, "\(Int(machine.park.wallDistanceFeet))", Palette.score)
 
         var f = 100.0
         let tick = max(1, (view.scale / 0.75).rounded())
@@ -128,6 +154,9 @@ final class WideScene: CanvasScene {
                 canvas.rect(X - 3, ground + 1, 6, 2, Palette.shade)
                 canvas.baseball(X, Y, radius: 3, highlight: scheme.sky3)
             }
+
+            drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
+                                 machine: machine, view: view, scenery: scenery)
 
             if let launch = machine.launch {
                 canvas.t3(8, 8, "\(Int(launch.exitVelocityMPH.rounded())) MPH", Palette.score, scale: 2)
@@ -163,10 +192,75 @@ final class WideScene: CanvasScene {
                     canvas.t3(fullWidth / 2 - 9 * 4 * 3 / 2, 134, "CALLED UP", Palette.score, scale: 3)
                 }
             }
+        } else {
+            drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
+                                 machine: machine, view: view, scenery: scenery)
         }
 
         let parkName = machine.park.displayName
         canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
+    }
+
+    /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds
+    /// its cloud stamps fresh every time it is asked.
+    private func scenery(for park: Park) -> Scenery {
+        if let s = cachedScenery, s.parkNumber == park.number { return s }
+        let s = park.scenery
+        cachedScenery = s
+        return s
+    }
+
+    /// The stands and their crowd, the pop where a home run went into them, and the wall's own
+    /// number. §17's draw order puts the stands after the trail and the ball — which is what
+    /// makes a home run drop into the crowd and be gone — and the text after everything.
+    private func drawInFrontOfTheBall(_ canvas: PixelCanvas, front: BackdropLayer, dy: Int,
+                                      machine: DerbyMachine, view: Framing, scenery: Scenery) {
+        front.blit(onto: canvas, dy: dy)
+
+        if let entry = vanishPoint(machine, scenery: scenery),
+           machine.playbackIndex >= Double(entry.index) {
+            // Seconds since it went in, off the machine's own clocks. Playback stops dead at
+            // the last point of the flight, so once the landing number is up the result hold's
+            // own clock carries the pop the rest of the way out — otherwise a ball that landed
+            // just after it vanished left its pop on screen for the whole hold.
+            let played = (machine.playbackIndex - Double(entry.index))
+                * FlightParams.calibrated.timestep / machine.timings.flightSpeed
+            let since = machine.beat == .result ? played + machine.elapsed : played
+            if since < layout.popSeconds {
+                // Two frames, no alpha: a big pop, then a small one, then nothing.
+                let r = since < layout.popSeconds / 2 ? layout.popRadius : layout.popRadius - 1
+                let x = view.x(entry.point.xFeet).rounded()
+                let y = view.y(entry.point.yFeet).rounded()
+                canvas.rect(x - r, y, r * 2 + 1, 1, Palette.chalk)
+                canvas.rect(x, y - r, 1, r * 2 + 1, Palette.chalk)
+                canvas.px(x - r + 1, y - r + 1, Palette.chalk)
+                canvas.px(x + r - 1, y - r + 1, Palette.chalk)
+                canvas.px(x - r + 1, y + r - 1, Palette.chalk)
+                canvas.px(x + r - 1, y + r - 1, Palette.chalk)
+            }
+        }
+
+        let wallX = view.x(machine.park.wallDistanceFeet)
+        let wallH = machine.park.wallHeightFeet * view.scale
+        // On the wall when it is tall enough to carry a 5 px face, above it when it is not.
+        let wallLabelY = wallH >= 11 ? view.ground - wallH + 3 : view.ground - wallH - 8
+        canvas.t3(wallX + 6, wallLabelY, "\(Int(machine.park.wallDistanceFeet))", Palette.score)
+    }
+
+    /// The first point of the flight that is inside the stands: where the ball is swallowed.
+    /// Nil in Single-A, which has no stands, and for anything that does not clear the wall.
+    private func vanishPoint(_ machine: DerbyMachine, scenery: Scenery) -> (index: Int, point: FlightPoint)? {
+        guard scenery.stands.swallowsTheBall,
+              let flight = machine.flight, flight.homeRun else { return nil }
+        let wall = machine.park.wallDistanceFeet
+        for i in 0..<flight.points.count {
+            let p = flight.points[i]
+            guard p.xFeet >= wall else { continue }
+            let stands = BackdropArt.standsHeightFeet(at: p.xFeet, park: machine.park,
+                                                      scenery: scenery, layout: layout)
+            if p.yFeet <= stands { return (i, p) }
+        }
+        return nil
     }
 
     /// Home-run fireworks (DESIGN.md §17 "Fireworks"): screen-space, so a burst sits in the same
