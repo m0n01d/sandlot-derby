@@ -12,8 +12,12 @@ public enum Call: Equatable {
 /// Beat durations in seconds. DESIGN.md §3.
 public struct Timings: Equatable {
     public var windup: Double = 0.5
-    /// Freeze on the slash before the cut.
-    public var contactHold: Double = 0.35
+    /// Freeze on the slash before the cut, weakest contact (`SliceCrossing.quality` 0). Starting
+    /// value, Claude's, 2026-09-19 (issue #20).
+    public var contactHoldWeak: Double = 0.22
+    /// Freeze on the slash before the cut, best contact (`SliceCrossing.quality` 1). Starting
+    /// value, Claude's, 2026-09-19 (issue #20).
+    public var contactHoldBarrel: Double = 0.50
     /// Freeze on the miss markers.
     public var missHold: Double = 1.2
     /// Hold on the landing number.
@@ -214,9 +218,16 @@ public struct DerbyMachine: Equatable {
     public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
     public var ladder: Ladder
+    /// Set by the scene while a finger is down during `.pitch` (touch-down to touch-up/cancel).
+    /// If the pitch times out while this is true, `tick` resolves it as a miss, not a take
+    /// (DESIGN.md §3). Reset to false at the start of every new pitch.
+    public var sliceInProgress = false
     private var rng: SplitMix64
     private var wallCueIndex: Int? = nil
     private var landCueIndex: Int? = nil
+    /// The quality of the swing that made contact, 0…1, carried from `slice(_:)` into
+    /// `contactHoldNow`.
+    private var contactQuality: Double = 0
 
     /// The rules in force in this park. Scenes read these, never the majors' ones.
     public var sliceRules: SliceRules { ladder.sliceRules(majorsSliceRules, for: park.league) }
@@ -254,6 +265,20 @@ public struct DerbyMachine: Equatable {
     /// True through the result hold of the home run that clears Triple-A.
     public var isBeingCalledUp: Bool {
         beat == .result && park.league == .tripleA && (flight?.homeRun ?? false)
+    }
+
+    /// The hitstop to hold for right now: `contactHoldWeak` at quality 0, `contactHoldBarrel`
+    /// at quality 1, linear between. Meaningful only once `slice(_:)` has set `contactQuality`;
+    /// before the first contact it reads as the weak hold.
+    public var contactHoldNow: Double {
+        timings.contactHoldWeak + (timings.contactHoldBarrel - timings.contactHoldWeak) * contactQuality
+    }
+
+    /// True while the contact freeze is showing a barrelled ball (`StatRules.isBarrel`), so the
+    /// scene can draw the call. False outside `.contact` and whenever there is no launch.
+    public var isBarrelNow: Bool {
+        guard beat == .contact, let l = launch else { return false }
+        return statRules.isBarrel(exitVelocityMPH: l.exitVelocityMPH, launchAngleDegrees: l.launchAngleDegrees)
     }
 
     /// Pitch progress, 0 at release and 1 at the plate. Only meaningful during `.pitch`.
@@ -301,6 +326,7 @@ public struct DerbyMachine: Equatable {
         landCueIndex = f.hangTime.flatMap { hang in f.points.firstIndex(where: { $0.time >= hang }) }
         playbackIndex = 0
         lastCall = nil
+        contactQuality = min(1, max(0, crossing.quality))
         enter(.contact)
     }
 
@@ -383,23 +409,30 @@ public struct DerbyMachine: Equatable {
             if elapsed > timings.windup { enter(.pitch); out.append(.pitchThrown) }
         case .pitch:
             if elapsed > pitch.duration * timings.pitchOverrun + timings.takeGrace {
-                countPitch()
-                if pitch.isStrike {
-                    tally.add(.calledStrikes)
-                    endStreaks()
+                if sliceInProgress {
+                    // A slice was in progress when the pitch timed out: it resolves as a swing
+                    // and a miss, with markers, exactly like `sliceMissed()` — never a call
+                    // (DESIGN.md §3).
+                    sliceMissed()
                 } else {
-                    tally.add(.ballsTaken)
-                    if !statRules.takenBallKeepsStreak { endStreaks() }
+                    countPitch()
+                    if pitch.isStrike {
+                        tally.add(.calledStrikes)
+                        endStreaks()
+                    } else {
+                        tally.add(.ballsTaken)
+                        if !statRules.takenBallKeepsStreak { endStreaks() }
+                    }
+                    let call: Call = pitch.isStrike ? .strike : .ball
+                    lastCall = call
+                    out.append(.called(call))
+                    enter(.miss)
                 }
-                let call: Call = pitch.isStrike ? .strike : .ball
-                lastCall = call
-                out.append(.called(call))
-                enter(.miss)
             }
         case .miss:
             if elapsed > timings.missHold { newPitch() }
         case .contact:
-            if elapsed > timings.contactHold { enter(.flight); out.append(.flash); out.append(.cutToWide) }
+            if elapsed > contactHoldNow { enter(.flight); out.append(.flash); out.append(.cutToWide) }
         case .flight:
             guard let f = flight else { enter(.result); break }
             let before = Int(playbackIndex)
@@ -441,6 +474,7 @@ public struct DerbyMachine: Equatable {
 
     private mutating func newPitch() {
         pitch = Pitching.generate(using: &rng, rules: pitchingRules)
+        sliceInProgress = false
         enter(.windup)
     }
 }

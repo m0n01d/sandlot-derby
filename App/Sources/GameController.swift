@@ -155,6 +155,12 @@ final class GameController {
 
     // MARK: - Slice input entry points, used by AtBatScene.
 
+    /// Forwarded from `AtBatScene`'s touch handlers: whether a finger is down during `.pitch`,
+    /// so a pitch that times out while held resolves as a swing and a miss (DESIGN.md §3).
+    func setSliceInProgress(_ inProgress: Bool) {
+        machine.sliceInProgress = inProgress
+    }
+
     /// `DerbyMachine.slice` itself ignores calls made outside `.pitch`.
     func recordSlice(_ crossing: SliceCrossing) {
         let wasPitch = machine.beat == .pitch

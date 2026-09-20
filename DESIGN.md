@@ -61,23 +61,25 @@ games) were bolt-ons inside full sims. The bare loop is open.
 |---|---|---|---|---|
 | 1 | **windup** | at-bat | 0.50 s | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
-| 3 | **contact** | at-bat | 0.35 s | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. One white frame at start. |
+| 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
-progress at that moment it resolves as a miss with markers; otherwise it is a called strike or
-ball. Taken pitches count as pitches. Only contact counts as a hit.
+progress at that moment (`DerbyMachine.sliceInProgress`, set by the scene from touch-down to
+touch-up/cancel during `.pitch`) it resolves exactly as `sliceMissed()` does — a swing and a miss,
+with markers, streak rules as for any miss, never a call; otherwise it is a called strike or ball.
+Taken pitches count as pitches. Only contact counts as a hit.
 
 State machine (`DerbyMachine`): six beats, one scene-changing edge (contact → flight; the wide and
 close framings are one scene and `flightCamera` picks between them), no knowledge of nodes.
 
 ```
-windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.35s─▶ flight ─playback ends─▶ result
-                 │                                    (CUT)                            │
-                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────┘
+windup ─0.5s─▶ pitch ─slice crosses ball─▶ contact ─0.22-0.50s─▶ flight ─playback ends─▶ result
+                 │                                       (CUT)                             │
+                 └─taken / slice misses─▶ miss ─1.2s─▶ windup ◀──1.3s, cut back────────────┘
 ```
 
 ## 4. Pitching
