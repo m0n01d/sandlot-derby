@@ -31,7 +31,7 @@ exactly as on the phone (§7 below).
 | Stats board, dozens of lines | Same stats, eight to a page, Crown flips pages by hard cut |
 | 9 crack levels, 5 cheers pre-rendered at launch | 3 and 2, rendered after the first frame; organ, trombone and firework pops rendered on first use |
 | Daily card (#3), replay sharing (#4), leaderboards | Phone only in v1 |
-| Price in the `t3` face (`$ € £ ¥`) | The same four glyphs added to `t5` |
+| Contract card price glyphs (`$ € £ ¥`) | Already drawn in the `t5` face since #25 — the watch needs nothing new |
 | Coaching lines | Re-cut to ≤ 20 characters or two lines |
 | CoreHaptics-grade impacts | Four canned taps (§6) |
 | Game Center (M5) | Not on the watch |

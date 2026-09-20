@@ -21,17 +21,42 @@ routing, PR screenshot and grooming rules do.
 
 - `Core/` — Swift package `DerbyCore`. **Pure Swift, no UIKit, no SpriteKit, no Foundation beyond
   `Foundation` math.** Flight physics, pitching, slice contact, seeded parks, the six-beat state
-  machine. Everything here is deterministic and unit-tested.
+  machine. Everything here is deterministic and unit-tested. Wave 1 (2026-09-19) added
+  `Scenery.swift` (`Park.scenery` — a park's seeded backdrop pieces, clouds, stands tier, night
+  towers/moon) and `Fireworks.swift` (`FireworksRules` — the closed-form home-run shell math).
 - `App/` — the iOS app. The Xcode project is generated and git-ignored:
   `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
-  two scenes (`AtBatScene`, `WideScene`) driven by `DerbyMachine` through `GameController`. Scenes
-  are renderers and gesture sources only; they own no game state. Both draw a whole frame into a
-  software `PixelCanvas` (the prototype's `px/rect/line/disc/t3/t5`) shown through one
-  nearest-filtered `SKMutableTexture`. DEBUG only: space bar is the dev slice, and the
-  `-autoslice` launch argument swings at every pitch.
+  scenes (`AtBatScene`, `WideScene`, `ContractScene`) driven by `DerbyMachine` through
+  `GameController`. Scenes are renderers and gesture sources only; they own no game state. Both
+  play/at-bat scenes draw a whole frame into a software `PixelCanvas` (the prototype's
+  `px/rect/line/disc/t3/t5`) shown through one nearest-filtered `SKMutableTexture`. DEBUG only:
+  space bar is the dev slice; see "DEBUG launch arguments" below for the full set. Wave 1 also
+  added `Backdrop.swift` and `Clouds.swift` (the cached backdrop layers and cloud drift behind
+  `Scenery`), `ContractScene.swift` (the paywall card, §16), and `Store.swift` with
+  `App/SandlotDerby.storekit` (StoreKit 2, no server).
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
+
+## DEBUG launch arguments
+
+All are `#if DEBUG` only — none exist in a release build. "Implies `-nosave`" means `SaveStore`
+never reads or writes the real career; "entitled" refers to `Store.forcedEntitlement`, which
+overrides whatever StoreKit itself would say.
+
+| Argument | Meaning | Implies `-nosave` | Entitled |
+|---|---|---|---|
+| `-autoslice` | swings at every pitch (a robot career) | yes | yes |
+| `-autobarrel` | with `-autoslice`, swings at full power (1.0× not 0.7×) so every contact clears the barrel threshold; no effect on its own | no | no |
+| `-autosign` | on the contract card, signs the dotted line ~1 s after it appears, through the real hit test | no | no |
+| `-contract` | start in Triple-A, not entitled, card not yet offered | yes | no (forced) |
+| `-declined` | like `-contract`, but the card has already been offered and turned down | yes | no (forced) |
+| `-entitled` | force entitled, whatever else is passed | no | yes (forced) |
+| `-showstats` | once an `-autoslice` career reaches 12+ pitches at a windup, cuts to the stats board once, for a screenshot | no | no |
+| `-park <n>` | start in park `n` instead of wherever the save left off | yes | yes |
+| `-streak <n>` | start the career with a home-run streak of `n` already going | yes | yes |
+| `-mute` | mutes all sound | no | no |
+| `-nosave` | a human run that never reads or writes the real save | yes (itself) | yes |
 
 ## Rules
 
@@ -56,13 +81,29 @@ routing, PR screenshot and grooming rules do.
 
 - `cd Core && swift test` — must be green before any push that touches core.
 - The app has no automated UI tests yet; screenshots of both cameras go on every PR that touches a
-  scene (per the shared PR rule).
+  scene (per the shared PR rule). Build and capture them with `scripts/shots.sh` (see its header
+  comment for the `FRAMES` / `GAP` / `KEEP_BOOTED` env vars):
+  ```sh
+  FRAMES=30 GAP=0.2 scripts/shots.sh /path/to/checkout-or-worktree "iPhone 17" /tmp/out -autoslice -showstats
+  ```
+  Three lessons from wave 1:
+  - `simctl`'s screenshot capture lags the game clock, so landing a frame inside a beat's ~1 s
+    window takes dense bursts (short `GAP`, high `FRAMES`) and retries, not one lucky shot.
+  - A `.storekit` configuration only applies when the app is launched from Xcode (or an
+    `SKTestSession`, which this project doesn't have) — never from `simctl`. A `shots.sh` run
+    against `ContractScene` will always show `NO CONNECTION`; that is not a bug in the card.
+  - An agent working in a worktree must pass that worktree's path to `shots.sh` literally (its
+    first argument) — it cannot assume the checkout root, and it must not `cd` to the main
+    checkout to build.
 
 ## Milestones
 
-See DESIGN.md §13. M0–M4 are done. M3 (feel) closed 2026-09-19 after Dwight played it on a phone
-with sound and haptics in: the slice knobs stayed at 520 px/s and 9 px, and the unbuilt leftovers
-(hitstop, `BARREL` call, third pitcher pose, held-finger swing-miss) are issue #20. What is left
-is M5, ship. Its pricing track (§16) has `parkCeiling` in core; next there is the contract card
-scene, and §16 wants the daily card (#3) shipped before the paywall. `docs/watch.md` is a
-proposal for an Apple Watch version and waits on hardware.
+See DESIGN.md §13. M0–M4 are done. Wave 1 of M5 merged 2026-09-19: #22 (Warm Up spec, §18), #23
+(feel leftovers — hitstop by quality, `BARREL` call, third pitcher pose, held-finger swing-miss),
+#24 (the rest of the organ), #25 (contract card + StoreKit 2), #27 (backdrops/sky/clouds), #26
+(fireworks). Audio, haptics, the organ tunes, `parkCeiling`, the contract card and StoreKit 2
+wiring (a local `.storekit` file) are all in; the purchase/pending/refund/restore paths have not
+been exercised for real, since a `.storekit` configuration only works launched from Xcode. Next:
+building the Warm Up itself (#3), §17 steps 4–6 of #14 (stars, moon and tower chase, birds, flag
+flutter, crowd bounce), park variety (#5), and the replay clip (#4). `docs/watch.md` is a proposal
+for an Apple Watch version and waits on hardware.
