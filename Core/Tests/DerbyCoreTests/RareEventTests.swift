@@ -275,6 +275,40 @@ final class RareEventTests: XCTestCase {
         XCTAssertGreaterThan(comparedWide, 0)
     }
 
+    /// The other half of the same guarantee, against what #33 landed while this was being built:
+    /// a clip made **during a Warm Up** restores the Warm Up too, and it must still find the same
+    /// rare things. The day's park is an ordinary seeded park with its own landmarks (§18), so
+    /// there is something to find.
+    func testAClipMadeDuringAWarmUpFindsTheSameThings() {
+        var live = DerbyMachine(seed: 21, tally: tallyWithAParkCleared())
+        live.skyClockOffset = 11
+        live.beginWarmUp(WarmUp.generate(day: 20_260_920))
+        while live.warmUp == nil { live.tick(1 / 60) }
+        while live.beat != .pitch { live.tick(1 / 60) }
+
+        let before = live
+        let crossing = bomb(live)
+        live.slice(crossing)
+
+        let record = Replay(capturing: before, crossing: crossing,
+                            slash: Point(x: 0, y: 0), trail: [])
+        var clip = Replay.machine(from: record)
+        clip.skyClockOffset = before.skyClockOffset
+        // `Replay.machine` already ran the swing; re-run detection against the restored clock.
+        XCTAssertEqual(clip.park.number, live.park.number)
+        // Only by the debug sky offset, and by the last bit of a double: the clip's tally is the
+        // one the record copied, while the live one got there by adding up sixtieths.
+        XCTAssertEqual(clip.clockAtContact, live.clockAtContact - before.skyClockOffset,
+                       accuracy: 1e-9)
+        let same = RareEvents.detect(
+            park: clip.park, scenery: clip.park.scenery, flight: clip.flight!,
+            birdSeed: SkyView.side.birdSeed(parkNumber: clip.park.number),
+            blimpSeed: SkyView.side.blimpSeed(parkNumber: clip.park.number),
+            clockAtContact: live.clockAtContact, contactHold: live.contactHoldNow,
+            flightSpeed: live.timings.flightSpeed)
+        XCTAssertEqual(same, live.parkEvents, "a Warm Up clip found other events")
+    }
+
     func testDetectionIsRepeatable() {
         let park = Park.generate(number: 21)
         let s = park.scenery
