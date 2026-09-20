@@ -1026,3 +1026,20 @@ is a filename in Documents. It is in `SaveStore`'s no-save list and `Store`'s ro
    bounds and exclusivity checks alone cost the 60 Hz budget — so Release should be far cheaper.
    **Not measured in Release, and not measured on a phone.** If it is still this visible there,
    the answer is probably to drop the clip to 30 fps rather than to draw it any coarser.
+
+**Fixed 2026-09-19** (Claude, unreviewed, #33). A clip made during a Warm Up used to rebuild as a
+career swing: `Replay` had no idea a Warm Up was running, so the rebuilt machine's `warmUp` was
+always nil and the clip drew `PARK 20260920` in the corner and on the scoreboard instead of
+`WARM UP`, the career headline instead of `WARM UP · n/10`, and the career streak's fireworks
+instead of the Warm Up's own. `Replay` now carries an optional `WarmUpRecord`: the **whole** Warm
+Up card by value, not just the day — `WarmUp.generate(day:)` depends on `WarmUpRules`,
+`PitchingRules` and `Ladder` defaults that can move later, exactly the reason `ParkRecord` above
+already keeps the park's own numbers rather than regenerating them from `park.number` — plus the
+results spent so far (whose count is also the pitch index) and the streak, all as they stood the
+instant before `slice(_:)` ran. `DerbyMachine.atPitch` grew a matching optional `warmUp` parameter,
+the same door `Replay.machine(from:)` already used, only wider, and `machine(from:)` passes the
+restored run through it. Records written before this field existed have no `warmUp` key at all and
+decode to nil, like every other optional here. A clip is a recording, not a pitch: `ReplayRenderer`
+draws into a private local copy of the machine that is discarded the instant `.cutToAtBat` fires,
+so nothing it does — including, on a clip of the tenth pitch, calling `endWarmUp` and emitting
+`.warmUpEnded` on that one throwaway copy — ever reaches `SaveStore` or the result card.

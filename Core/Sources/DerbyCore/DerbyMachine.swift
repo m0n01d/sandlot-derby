@@ -734,11 +734,19 @@ public struct DerbyMachine: Equatable {
     // MARK: - Replay (#4)
 
     /// A machine standing at the moment before a recorded slice: this park, these career numbers,
-    /// this pitch already on its way. `Replay.machine(from:)` is the only caller — `beat` and
-    /// `pitch` are `private(set)`, so a recorded swing cannot be replayed without a door, and this
-    /// is a smaller one than making them settable. Nothing here is random: the generator is seeded
-    /// 0 because a replay never reaches the next pitch.
-    public static func atPitch(park: Park, tally: Tally, pitch: Pitch,
+    /// this pitch already on its way. `Replay.machine(from:)` is the only caller — `beat`, `pitch`
+    /// and `warmUp` are `private(set)`, so a recorded swing cannot be replayed without a door, and
+    /// this is a smaller one than making them settable. Nothing here is random: the generator is
+    /// seeded 0 because a replay never reaches the next pitch.
+    ///
+    /// `warmUp`, when given, is restored exactly as it stood the instant before the slice — the
+    /// same `.taken` placeholder for this pitch that `.pitchThrown` would have appended — so
+    /// `slice(_:)` overwrites it once, `streakNow` and the fireworks seed read the Warm Up rather
+    /// than falling back to the career, and the on-screen labels agree with the corner (#33,
+    /// DESIGN.md §18/§19). `parkSetAside`/`pitchSetAside` are deliberately left nil: a replay never
+    /// ticks far enough to hand the field back, and if it ever did, leaving them nil rather than
+    /// guessing at the career's park is the honest failure.
+    public static func atPitch(park: Park, tally: Tally, pitch: Pitch, warmUp: WarmUpRun? = nil,
                                timings: Timings = .standard, sliceRules: SliceRules = .standard,
                                pitchingRules: PitchingRules = .standard, statRules: StatRules = .standard,
                                fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) -> DerbyMachine {
@@ -748,6 +756,7 @@ public struct DerbyMachine: Equatable {
         m.pitch = pitch
         m.beat = .pitch
         m.elapsed = 0
+        m.warmUp = warmUp
         return m
     }
 }
