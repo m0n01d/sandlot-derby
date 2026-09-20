@@ -140,8 +140,20 @@ final class PixelCanvas {
         "J": Array("001001001101111"), "Q": Array("111101101111001"), "X": Array("101101010101101"),
         "Z": Array("111001010100111"), ".": Array("000000000000010"), ":": Array("000010000010000"),
         "-": Array("000000111000000"), "%": Array("101001010100101"), "/": Array("001001010100100"),
-        ",": Array("000000000010100")
+        ",": Array("000000000010100"),
+        // The contract card's price (DESIGN.md §16). Four symbols cover most of the store; any
+        // other currency is drawn as its ISO code instead, which the letters above already are.
+        // Each is the letter it comes from with the stroke that makes it money: `$` is this
+        // face's own `S` with the middle column filled in, and reads as one at a glance.
+        "$": Array("111110111011111"), "€": Array("011110100110011"),
+        "£": Array("011010111010111"), "¥": Array("101010111010111")
     ]
+
+    /// True when every character of `text` has a 3×5 glyph. `Store` asks before drawing a price
+    /// the way the store wrote it; a currency this face cannot spell falls back to its ISO code.
+    static func hasGlyphs(for text: String) -> Bool {
+        text.uppercased().allSatisfy { f3[$0] != nil }
+    }
 
     /// 5x7 bitmap face, copied verbatim from the prototype's `F5`
     /// (prototypes/03-camera-cut-and-slice.html ~line 226).

@@ -10,25 +10,126 @@ final class GameController {
     let atBatScene: AtBatScene
     let wideScene: WideScene
     let statsScene: StatsScene
+    let contractScene: ContractScene
+    /// The one purchase (DESIGN.md §16). Read by the card and the stats board for the price.
+    let store = Store()
     private weak var view: SKView?
+
+    /// The card is offered automatically exactly once per career; after that it is a row on the
+    /// stats board and nothing else. Persisted, so declining survives a relaunch.
+    private(set) var contractOffered: Bool
+    /// This save was already in The Show on the first launch of the paywalled build, so it is
+    /// entitled for good. Only a beta tester can be in that state (§16).
+    private let grandfathered: Bool
 
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
         let save = SaveStore.load()
+        #if DEBUG
+        // `-contract`: start where the card is earned, so it can be reached in one home run.
+        let startPark = Self.startInTripleA ? Park.generate(number: League.theShow.rawValue - 1) : nil
+        #else
+        let startPark: Park? = nil
+        #endif
         machine = DerbyMachine(seed: seed,
-                               park: save.map { Park.generate(number: $0.parkNumber) } ?? .first,
+                               park: startPark ?? save.map { Park.generate(number: $0.parkNumber) } ?? .first,
                                tally: save?.tally ?? Tally())
+        #if DEBUG
+        contractOffered = Self.startDeclined || (save?.contractOffered ?? false)
+        #else
+        contractOffered = save?.contractOffered ?? false
+        #endif
+        // Grandfathering (§16): asked once of each save, on the first launch that can ask it.
+        // A blob written before the paywall has no answer in it, so the park number is the answer.
+        grandfathered = save?.grandfathered ?? ((save?.parkNumber ?? 0) >= League.theShow.rawValue)
         atBatScene = AtBatScene()
         wideScene = WideScene()
         statsScene = StatsScene()
+        contractScene = ContractScene()
         atBatScene.controller = self
         wideScene.controller = self
         statsScene.controller = self
+        contractScene.controller = self
+        applyCeiling()
+        persist()                                   // the grandfathering answer, written down
+        store.onEntitlementChange = { [weak self] in self?.entitlementChanged() }
+        Task { await store.start() }
     }
 
     /// Written at every beat change, so at worst a second or so of `secondsPlayed` is lost.
     private func persist() {
-        SaveStore.save(SaveState(parkNumber: machine.park.number, tally: machine.tally))
+        SaveStore.save(SaveState(parkNumber: machine.park.number, tally: machine.tally,
+                                 contractOffered: contractOffered, grandfathered: grandfathered))
     }
+
+    // MARK: - The Show, and what stands between (DESIGN.md §16)
+
+    /// Bought, restored, shared by a family member, or grandfathered in. Core knows none of this;
+    /// it only ever sees a ceiling.
+    var isEntitled: Bool { store.isEntitled || grandfathered }
+
+    /// The last park of the minors, from the ladder rather than from the number 3.
+    private static let minorsCeiling = League.theShow.rawValue - 1
+
+    /// Entitled: no ceiling. Not entitled: the last minors park — or, after a refund, the park
+    /// the player is standing in, because nothing is ever taken away. They just stop advancing.
+    private func applyCeiling() {
+        machine.parkCeiling = isEntitled ? nil : max(Self.minorsCeiling, machine.park.number)
+    }
+
+    /// Signed, restored, a pending purchase landing, a purchase made on another device, a refund.
+    /// Lifting the ceiling is all it takes: the machine pays the advance it owes at the next
+    /// windup, with no second `.calledUp`.
+    private func entitlementChanged() {
+        applyCeiling()
+        persist()
+        if isEntitled, view?.scene === contractScene { leaveContract(flash: true) }
+    }
+
+    /// Hard cut to the card. The machine stands still behind it (`ContractScene.ticksMachine`).
+    func showContract() {
+        guard let view, view.scene !== contractScene else { return }
+        contractScene.reset()
+        view.presentScene(contractScene)
+    }
+
+    /// The home run that cleared Triple-A, for a player who has not bought it. Offered once per
+    /// career and never again; afterwards the stats board carries the row.
+    private func offerContract() {
+        guard !contractOffered, !isEntitled else { return }
+        contractOffered = true
+        persist()
+        showContract()
+    }
+
+    func signContract() {
+        Task { await store.sign() }
+    }
+
+    func restoreContract() {
+        Task { await store.restore() }
+    }
+
+    /// A tap off the line. Never punished and never nagged: back to Triple-A, which goes on
+    /// counting every stat and the streak.
+    func declineContract() {
+        leaveContract(flash: false)
+    }
+
+    /// `flash` is the one white frame that a signature earns (§16); a decline is a plain cut.
+    private func leaveContract(flash: Bool) {
+        guard let view, view.scene === contractScene else { return }
+        atBatScene.flashNextFrame = flash
+        view.presentScene(atBatScene)
+    }
+
+    #if DEBUG
+    private static let arguments = ProcessInfo.processInfo.arguments
+    /// `-contract` and `-declined` both start where the card is earned.
+    private static let startInTripleA = arguments.contains("-contract") || startDeclined
+    /// `-declined`: the card has already been offered and turned down, which is the state the
+    /// stats board's row exists for. Not entitled, Triple-A, and the card never offers itself.
+    private static let startDeclined = arguments.contains("-declined")
+    #endif
 
     // MARK: - The stats board
 
@@ -60,7 +161,7 @@ final class GameController {
         let width = max(320, (224 * aspect).rounded())
         let size = CGSize(width: width, height: 224)
         let designPerPoint = 224 / Double(viewSize.height)
-        for scene in [atBatScene, wideScene, statsScene] as [CanvasScene] {
+        for scene in [atBatScene, wideScene, statsScene, contractScene] as [CanvasScene] {
             scene.size = size
             scene.scaleMode = .aspectFit
             scene.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
@@ -84,6 +185,9 @@ final class GameController {
         }
         #endif
         let flash = transitions.contains(.flash)
+        // `.calledUp` arrives in the same list as the `.cutToAtBat` that would draw over the
+        // card, so the offer waits until every transition has been handled.
+        var offerTheContract = false
         for transition in transitions {
             switch transition {
             case .cutToWide:
@@ -113,6 +217,9 @@ final class GameController {
                 if machine.flight?.homeRun != true { sound.landed() }     // a home run lands out of earshot
             case .calledUp:
                 sound.calledUp()
+                // At the ceiling the park did not change: this is the call-up that has to be
+                // signed. Anywhere else it is the ordinary one and there is nothing to sell.
+                if machine.isAtCeiling { offerTheContract = true }
             case .parkChanged, .flash:
                 break
             }
@@ -126,6 +233,7 @@ final class GameController {
                 sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
             }
         }
+        if offerTheContract { offerContract() }
     }
 
     // MARK: - Sound and haptics (DESIGN.md §11)
