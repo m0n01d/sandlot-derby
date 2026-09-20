@@ -49,7 +49,8 @@ enum SaveStore {
     /// start one and every screenshot run stays what it was.
     static let isEnabled = !ProcessInfo.processInfo.arguments.contains {
         $0 == "-autoslice" || $0 == "-nosave" || $0 == "-contract" || $0 == "-declined"
-            || $0 == "-park" || $0 == "-streak" || $0 == "-replay" || $0 == "-warmup" || $0 == "-warmupcard"
+            || $0 == "-park" || $0 == "-streak" || $0 == "-replay" || $0 == "-replayscreen"
+            || $0 == "-warmup" || $0 == "-warmupcard"
     }
 
     static func load() -> SaveState? {

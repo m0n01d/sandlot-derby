@@ -201,6 +201,12 @@ final class WideScene: CanvasScene {
         // park, not a park anyone is trying to clear, and its number is a date (DESIGN.md §18).
         let parkName = machine.warmUp == nil ? machine.park.displayName : "WARM UP"
         canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
+
+        // The instant replay's camera, top right — the same corner and the same picture the
+        // at-bat view carries, so it does not move across the cut (#42).
+        if controller?.showsReplayIcon == true {
+            ReplayIcon.draw(into: canvas, safeRight: safeRight, layout: replayIcon)
+        }
     }
 
     /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds
@@ -373,42 +379,46 @@ final class WideScene: CanvasScene {
         }
     }
 
-    // MARK: - The replay clip's trigger (#4)
+    // MARK: - The replay's trigger (#42)
 
-    /// How long a finger stays down on the landing number to ask for a clip. Long enough that no
-    /// stray touch fires it, short enough to fit twice inside `Timings.resultHold` (1.30 s).
-    /// Claude's, unreviewed (DESIGN.md §19).
-    private let longPressSeconds = 0.35
-    private var pressStartedAt: TimeInterval?
-    private var pressHasFired = false
+    /// Where the camera in the corner goes and how big its target is. A knob per #42; the same
+    /// one the at-bat view uses, so the camera does not move across the cut.
+    private let replayIcon = ReplayIconLayout.standard
 
-    /// The whole trigger: no button and no target, because for 1.30 s the landing number is the
-    /// only thing on the screen. The press has to mature *during* the hold, so this watches the
-    /// clock rather than waiting for the finger to lift — a finger still down when the hold ends
-    /// would otherwise never be answered.
-    override func update(_ currentTime: TimeInterval) {
-        super.update(currentTime)
-        guard controller?.canShareLastHomeRun == true else {
-            pressStartedAt = nil                // the hold is over: a half-made press is dropped
-            return
-        }
-        guard let started = pressStartedAt, !pressHasFired,
-              currentTime - started >= longPressSeconds else { return }
-        pressHasFired = true
-        controller?.shareLastHomeRunClip()
+    private var dragStart: CGPoint?
+    private var dragLast: CGPoint?
+
+    private func designPoint(for touch: UITouch) -> CGPoint {
+        let p = touch.location(in: self)
+        return CGPoint(x: p.x, y: size.height - p.y)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard controller?.canShareLastHomeRun == true else { return }
-        pressStartedAt = CACurrentMediaTime()
-        pressHasFired = false
+        guard let touch = touches.first else { return }
+        dragStart = designPoint(for: touch)
+        dragLast = dragStart
     }
 
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        dragLast = designPoint(for: touch)
+    }
+
+    /// A tap on the camera and nothing else. There is nothing to swing at from this camera, so a
+    /// touch that misses it does nothing at all — the same as it did before #42, when the only
+    /// thing this scene listened for was a long press.
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        pressStartedAt = nil
+        defer { dragStart = nil; dragLast = nil }
+        guard controller?.showsReplayIcon == true, let start = dragStart else { return }
+        let end = dragLast ?? start
+        guard hypot(end.x - start.x, end.y - start.y) < replayIcon.tapSlack else { return }
+        guard ReplayIcon.contains(Point(x: start.x, y: start.y), canvasWidth: Double(size.width),
+                                  safeRight: safeRight, layout: replayIcon) else { return }
+        controller?.showReplay()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        pressStartedAt = nil
+        dragStart = nil
+        dragLast = nil
     }
 }
