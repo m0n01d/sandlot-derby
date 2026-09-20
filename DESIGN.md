@@ -428,6 +428,7 @@ gameplay effect, living beside the scene that draws them. Defaults are the proto
 | speed ranges | `PitchType` | table | difficulty lever |
 | `flightSpeed` | `Timings` | 2× | 1× is too slow, verified in the prototype |
 | `contactHoldWeak` / `contactHoldBarrel` | `Timings` | 0.22 s / 0.50 s | the slash freeze, interpolated linearly on the swing's contact quality (issue #20) |
+| `maxMusicHold` | `Timings` | 2.5 s | the longest the pitcher stands set waiting for an organ cue to end before he throws anyway and the pitch cuts it off (§11, issue #46) |
 | `liftCoefficient` | `FlightParams` | 0.15 | under-rewards high spinny hits on purpose |
 | wall ranges | `Park.Rules` | 330–410 / 6–26 | park variety |
 | every column of the minors table (§10) | `Ladder` → `Rung` | table | how gentle each rung is, and what help it shows |
