@@ -381,11 +381,16 @@ def icon_long_gone():
 
 
 def icon_the_target():
-    """08 OVER THE WALL, MARKED — the objective painted on it, 400 feet away.
+    """08 OVER THE WALL, MARKED — the objective painted on it, 420 feet away.
 
     The number on an outfield wall is the oldest way baseball states a distance,
     and it turns the icon from a picture of an event into a picture of a goal.
     Painted white, like a field marking; the rail stays scoreboard yellow.
+
+    420 because it is a real centre-field marker — Comerica and Tiger Stadium
+    both wore it — and because some people will read it the other way. It is
+    deniable in both directions, which is the only kind of joke an app icon can
+    afford: nobody who misses it sees anything but a ballpark.
     """
     p = Pix(GRID, GRID)
     sky(p, bottom=32)
@@ -393,8 +398,8 @@ def icon_the_target():
     p.rect(0, 32, GRID, 3, "score")                           # the home-run line
     p.rect(0, 35, GRID, 1, "shade")
     grass(p, 56)
-    w = text5_width("400", 2)
-    text5(p, (GRID - w) // 2, 41, "400", "chalk", 2)          # the distance marker
+    w = text5_width("420", 2)
+    text5(p, (GRID - w) // 2, 41, "420", "chalk", 2)          # the distance marker
     trail(p, 3, 45, 29, 26, 4, 7)                             # up across the line and out
     baseball(p, 44, 15, 9)
     return p

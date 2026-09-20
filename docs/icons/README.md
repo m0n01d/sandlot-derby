@@ -8,7 +8,7 @@ python3 scripts/icons.py
 ```
 
 Pick one with `scripts/pick-icon.sh 01` (or `02`…`08`); it copies that candidate into
-`App/Assets.xcassets/AppIcon.appiconset/`. **01 CONTACT ships today.**
+`App/Assets.xcassets/AppIcon.appiconset/`. **08 THE TARGET ships today.**
 
 ![contact sheet](contact-sheet.png)
 
@@ -43,7 +43,7 @@ Straight out of `prototypes/02-mood-board.html`, which already did the research:
 
 ## The five
 
-**01 CONTACT** — *ships today.* The hero beat, cropped close: the batter's silhouette at the
+**01 CONTACT** — The hero beat, cropped close: the batter's silhouette at the
 contact frame, the ball frozen where the bat met it, the slash through it in `score` yellow. This
 is the one with a character in it, which is what earns the tap from a seven-year-old; it is also
 the only one that shows the input and the result in the same picture. Busiest of the five at 60 px,
@@ -86,11 +86,16 @@ board from park variety (#5) stands behind it on the stands — something for th
 The only one of the four where the arc, not the wall, is the subject. The board reads a little like
 a television on legs at 60 px; that is the honest cost of keeping it in.
 
-**08 THE TARGET** — the objective painted on the thing itself. `400` in the game's 5×7 face, white
-on wall green like every outfield marker since the 1930s, with the ball crossing the yellow line
-above it. This is the only icon of the eight that states a *goal* rather than showing an event,
-and the number survives 60 px intact, which nothing else in the set manages. Strongest of the
-four if the icon has to explain the game to someone who has never opened it.
+**08 THE TARGET** — *ships today.* The objective painted on the thing itself. `420` in the game's
+5×7 face, white on wall green like every outfield marker since the 1930s, with the ball crossing
+the yellow line above it. This is the only icon of the eight that states a *goal* rather than
+showing an event, and the number survives 60 px intact, which nothing else in the set manages.
+
+`420` is a real centre-field marker — Comerica Park and Tiger Stadium both wore it — and it is
+also a number some people will read the other way. That is the whole joke and the whole defence:
+it is deniable in both directions, so nobody who misses it sees anything but a ballpark, and the
+icon stays as kid-facing as `400` was. Swap it back in `icon_the_target()` if that ever stops
+being true.
 
 ## Notes
 
