@@ -40,6 +40,11 @@ final class AtBatScene: CanvasScene {
 
     private var trail: [SamplePoint]?
     private var dragStart: Point?
+    /// Whether a finger is on the glass right now, whatever beat this is or where it landed.
+    /// Read by `GameController.tick(_:)`, once a frame, to mirror `DerbyMachine.sliceInProgress`
+    /// (DESIGN.md §3, issue #20) — "a slice is in progress" means a finger is down, not that one
+    /// happened to touch down while `.pitch` was already showing.
+    var fingerDown: Bool { dragStart != nil }
     private var closest: ClosestMiss?
     private var contactVisual: ContactVisual?
     private var missVisual: MissVisual?
@@ -448,9 +453,6 @@ final class AtBatScene: CanvasScene {
         dragStart = p
         trail = [SamplePoint(point: p, time: CACurrentMediaTime())]
         closest = nil
-        // Touch-down during `.pitch`: if the pitch times out with this still true, `DerbyMachine`
-        // resolves it as a swing and a miss, not a take (DESIGN.md §3, issue #20).
-        if controller?.machine.beat == .pitch { controller?.setSliceInProgress(true) }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -523,8 +525,6 @@ final class AtBatScene: CanvasScene {
     }
 
     private func endDrag() {
-        // Touch-up or cancel always ends any slice in progress, whatever the beat is now.
-        controller?.setSliceInProgress(false)
         if isScoreboardTap() {
             trail = nil; dragStart = nil; closest = nil
             controller?.showStats()     // not a swing: nothing is counted

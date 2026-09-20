@@ -73,6 +73,9 @@ final class GameController {
     func tick(_ dt: TimeInterval) {
         let clamped = min(dt, 1.0 / 20.0)
         let beatBefore = machine.beat
+        // Mirror the touch state every frame, not just on touch-down: a slice is "in progress"
+        // whenever a finger is on the glass, however it got there (DESIGN.md §3, issue #20).
+        machine.sliceInProgress = atBatScene.fingerDown
         let transitions = machine.tick(clamped)
         if machine.beat != beatBefore { persist() }
         #if DEBUG
@@ -154,12 +157,6 @@ final class GameController {
     }
 
     // MARK: - Slice input entry points, used by AtBatScene.
-
-    /// Forwarded from `AtBatScene`'s touch handlers: whether a finger is down during `.pitch`,
-    /// so a pitch that times out while held resolves as a swing and a miss (DESIGN.md §3).
-    func setSliceInProgress(_ inProgress: Bool) {
-        machine.sliceInProgress = inProgress
-    }
 
     /// `DerbyMachine.slice` itself ignores calls made outside `.pitch`.
     func recordSlice(_ crossing: SliceCrossing) {

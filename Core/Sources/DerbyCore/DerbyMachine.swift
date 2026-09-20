@@ -218,9 +218,11 @@ public struct DerbyMachine: Equatable {
     public var majorsPitchingRules: PitchingRules
     public var statRules: StatRules
     public var ladder: Ladder
-    /// Set by the scene while a finger is down during `.pitch` (touch-down to touch-up/cancel).
-    /// If the pitch times out while this is true, `tick` resolves it as a miss, not a take
-    /// (DESIGN.md §3). Reset to false at the start of every new pitch.
+    /// Whether a finger is on the glass right now, mirrored in every frame by the app (whatever
+    /// the beat is or where the finger landed — a slice is "in progress" whenever a finger is
+    /// down, DESIGN.md §3). If the pitch times out while this is true, `tick` resolves it as a
+    /// miss, not a take. Also reset to false at the start of every new pitch, so a caller driving
+    /// `DerbyMachine` directly (as the Core tests do) doesn't have to clear it back down itself.
     public var sliceInProgress = false
     private var rng: SplitMix64
     private var wallCueIndex: Int? = nil

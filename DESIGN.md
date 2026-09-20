@@ -68,10 +68,11 @@ games) were bolt-ons inside full sims. The bare loop is open.
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
-progress at that moment (`DerbyMachine.sliceInProgress`, set by the scene from touch-down to
-touch-up/cancel during `.pitch`) it resolves exactly as `sliceMissed()` does — a swing and a miss,
-with markers, streak rules as for any miss, never a call; otherwise it is a called strike or ball.
-Taken pitches count as pitches. Only contact counts as a hit.
+progress at that moment (`DerbyMachine.sliceInProgress`, mirrored every frame from whether a
+finger is on the glass — `AtBatScene.fingerDown` — however that finger got there) it resolves
+exactly as `sliceMissed()` does — a swing and a miss, with markers, streak rules as for any miss,
+never a call; otherwise it is a called strike or ball. Taken pitches count as pitches. Only contact
+counts as a hit.
 
 State machine (`DerbyMachine`): six beats, one scene-changing edge (contact → flight; the wide and
 close framings are one scene and `flightCamera` picks between them), no knowledge of nodes.
