@@ -14,12 +14,18 @@ packages:
 
 # The one purchase (DESIGN.md §16). The local StoreKit configuration only takes effect when the
 # app is launched FROM XCODE: run by `simctl`, `Product.products` comes back empty and the card
-# says NO CONNECTION. An explicit scheme, because the autocreated one cannot carry this.
+# says NOT AVAILABLE (#47 — it used to say NO CONNECTION, which was the wrong word for it). An
+# explicit scheme, because the autocreated one cannot carry this.
 #
 # The path is relative to the REPO ROOT, not to this file: XcodeGen writes the scheme's
 # reference with a fixed `../../` in front, which climbs out of `App/SandlotDerby.xcodeproj`
 # and out of `App/`. `SandlotDerby.storekit` here would silently point at a file that is not
-# there, and the only symptom would be a card that says NO CONNECTION inside Xcode too.
+# there, and the only symptom would be a card that says NOT AVAILABLE inside Xcode too.
+#
+# `SandlotDerby (Sandbox)` (#47) is the same scheme without `storeKitConfiguration`: a Run from
+# Xcode on this one reaches Apple's actual sandbox instead of the local file, which is the only
+# way to exercise a real product once `show.contract` exists there (DESIGN.md §16's "Testing the
+# purchase"). `scripts/shots.sh` always builds the default scheme by name, so it is untouched.
 schemes:
   SandlotDerby:
     build:
@@ -28,6 +34,20 @@ schemes:
     run:
       config: Debug
       storeKitConfiguration: App/SandlotDerby.storekit
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  SandlotDerby (Sandbox):
+    build:
+      targets:
+        SandlotDerby: all
+    run:
+      config: Debug
     test:
       config: Debug
     profile:

@@ -20,6 +20,12 @@ final class Store {
 
     /// What the contract card has to say for itself right now. Never a countdown, a badge or a
     /// banner: one plain word, or nothing.
+    ///
+    /// #47: `.failed` used to cover every way signing or restoring could fail, so the card said
+    /// `NO CONNECTION` for a missing App Store Connect record just as it did for an actual
+    /// network drop — Dwight, from an iPad, on the restore path: "The Show restore makes me
+    /// login and i get No Connection. is that normal?" It was normal, but the card was lying
+    /// about why. Split into the real causes below; nothing here is a sale word.
     enum Phase: Equatable {
         /// The card as it is offered, and the card after a purchase has been asked for and
         /// answered well: nothing extra is said.
@@ -30,13 +36,26 @@ final class Store {
         /// transaction lands whenever it lands.
         case pending
         case cancelled
-        /// No store, no network, or a transaction that did not verify.
-        case failed
+        /// A network failure and nothing else: `StoreKitError.networkError`, a bare `URLError`.
+        case noConnection
+        /// The store answered, but there is nothing to sell here: no product after a load that
+        /// did not throw (no app record, no `show.contract` in App Store Connect, the Paid Apps
+        /// agreement unsigned), `StoreKitError.notAvailableInStorefront`, `.notEntitled`,
+        /// `.unsupported`, any `Product.PurchaseError`, an unverified transaction, or a system
+        /// error StoreKit itself could not explain.
+        case notAvailable
+        /// `AppStore.sync()` came back clean and `currentEntitlements` is still empty: there was
+        /// genuinely nothing to restore, not a failure.
+        case nothingToRestore
     }
 
     private(set) var isEntitled: Bool
     private(set) var phase: Phase = .idle
     private(set) var product: Product?
+    /// Why `product` is nil, recorded when `loadProduct()` runs so `sign()` can say the right
+    /// thing about it later rather than treating every empty `product` as the same kind of
+    /// nothing (#47). Nil once a product has loaded.
+    private var productLoadFailure: Phase?
 
     /// Called on the main actor whenever `isEntitled` changes, in either direction: signed,
     /// restored, a pending purchase landing, a purchase made on another device, a refund.
@@ -51,6 +70,7 @@ final class Store {
 
     init() {
         #if DEBUG
+        if let forced = Self.debugCardPhase { phase = forced }
         if let forced = Self.forcedEntitlement {
             isEntitled = forced
             return
@@ -70,8 +90,14 @@ final class Store {
     }
 
     /// A card put up again — from the stats board, a career later — says nothing until this run
-    /// of it has something to say.
+    /// of it has something to say. `-cardphase` (DEBUG) is the one thing that overrides this: a
+    /// forced phase is what the card was put up to show, and `reset()` calls this on every
+    /// presentation, so without the guard a screenshot run's own phase would never survive the
+    /// card's first frame (#47).
     func clearPhase() {
+        #if DEBUG
+        if Self.debugCardPhase != nil { return }
+        #endif
         if phase != .purchasing { phase = .idle }
     }
 
@@ -102,8 +128,37 @@ final class Store {
         return "\(product.priceFormatStyle.currencyCode) \(String(format: "%.2f", amount))"
     }
 
+    /// Loads the product and, if there isn't one, records *why* — a thrown error is a real
+    /// failure (network, or something StoreKit itself refused), while an empty list from a call
+    /// that did not throw means the store answered and there is simply nothing to sell (no app
+    /// record, no `show.contract`, the Paid Apps agreement unsigned) (#47).
     private func loadProduct() async {
-        product = try? await Product.products(for: [Self.productID]).first
+        do {
+            product = try await Product.products(for: [Self.productID]).first
+            productLoadFailure = product == nil ? .notAvailable : nil
+        } catch {
+            product = nil
+            productLoadFailure = Self.phase(for: error)
+        }
+    }
+
+    /// Sorts a thrown `StoreKitError`/`Product.PurchaseError`/anything else into one plain word
+    /// (#47). Only a real network failure gets `NO CONNECTION`; everything StoreKit itself
+    /// refused, or could not explain, is `NOT AVAILABLE` — there is no third bucket honest enough
+    /// to put an unknown error in.
+    private static func phase(for error: Error) -> Phase {
+        if let skError = error as? StoreKitError {
+            switch skError {
+            case .networkError: return .noConnection
+            case .userCancelled: return .cancelled
+            case .notAvailableInStorefront, .notEntitled, .unsupported, .systemError, .unknown:
+                return .notAvailable
+            @unknown default: return .notAvailable
+            }
+        }
+        if error is URLError { return .noConnection }
+        if error is Product.PurchaseError { return .notAvailable }
+        return .notAvailable
     }
 
     // MARK: - Signing, and getting it back
@@ -112,12 +167,16 @@ final class Store {
     /// the card knows. Success says nothing — `onEntitlementChange` cuts the card away.
     func sign() async {
         guard phase != .purchasing else { return }
-        guard let product else { phase = .failed; return }
+        // No product: whatever `loadProduct()` found out about why, since a bare nil could be a
+        // dropped network call or a store that answered "no such thing" (#47).
+        guard let product else { phase = productLoadFailure ?? .notAvailable; return }
         phase = .purchasing
         do {
             switch try await product.purchase() {
             case .success(let result):
-                guard let transaction = Self.verified(result) else { phase = .failed; return }
+                // An unverified transaction is not a purchase, and it is not a network problem
+                // either — the store answered, StoreKit just would not vouch for it.
+                guard let transaction = Self.verified(result) else { phase = .notAvailable; return }
                 await transaction.finish()
                 phase = .idle
                 await refreshEntitlements()
@@ -126,10 +185,10 @@ final class Store {
             case .userCancelled:
                 phase = .cancelled
             @unknown default:
-                phase = .failed
+                phase = .notAvailable
             }
         } catch {
-            phase = .failed
+            phase = Self.phase(for: error)
         }
     }
 
@@ -140,12 +199,14 @@ final class Store {
         phase = .purchasing
         do {
             try await AppStore.sync()
-            phase = .idle
             await refreshEntitlements()
+            // `sync()` itself did not throw: the store answered. Whether there was anything to
+            // restore is a separate question, and "nothing" is not a failure (#47).
+            phase = isEntitled ? .idle : .nothingToRestore
         } catch StoreKitError.userCancelled {
             phase = .cancelled
         } catch {
-            phase = .failed
+            phase = Self.phase(for: error)
         }
     }
 
@@ -209,9 +270,30 @@ final class Store {
         return nil
     }()
 
+    /// `-cardphase <name>`, with `-contract`: force the card to one particular phase for a
+    /// screenshot, since none of `NO CONNECTION` / `NOT AVAILABLE` / `NOTHING TO RESTORE` /
+    /// `CANCELLED` / `PENDING` can be reached for real under `simctl` (#47) — there is no store
+    /// at all, so `sign()`/`restore()` never run and never produce most of these on their own.
+    /// Not on `forcedEntitlement`'s robot list: the whole point is to reach the card, which only
+    /// a non-entitled run offers, so it must go on being stopped at the paywall like `-contract`
+    /// already is.
+    static let debugCardPhase: Phase? = {
+        let args = arguments
+        guard let i = args.firstIndex(of: "-cardphase"), i + 1 < args.count else { return nil }
+        switch args[i + 1] {
+        case "noconnection": return .noConnection
+        case "notavailable": return .notAvailable
+        case "nothingtorestore": return .nothingToRestore
+        case "cancelled": return .cancelled
+        case "pending": return .pending
+        default: return nil
+        }
+    }()
+
     /// Launched by `simctl` there is no `.storekit` configuration and so no store at all:
     /// `Product.products` comes back empty and the card would have no price to draw. A
-    /// `-contract` screenshot run gets this instead. Signing still fails, with `NO CONNECTION`.
+    /// `-contract` screenshot run gets this instead, and since #47 that reads as `NOT AVAILABLE`
+    /// — the store answered with nothing to sell, which under `simctl` is the honest word for it.
     private static var placeholderPrice: String? {
         hasContractArgument ? "$1.99" : nil
     }

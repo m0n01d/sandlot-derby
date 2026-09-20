@@ -152,13 +152,17 @@ final class ContractScene: CanvasScene {
     #endif
 
     /// One plain word, or none. No sale banner, no countdown, no badge — §16 rules all three out.
+    /// Three real causes where there used to be one `.failed` (#47): a network drop, a store that
+    /// answered with nothing to sell, and a restore that found nothing to restore.
     private static func word(for phase: Store.Phase) -> String? {
         switch phase {
         case .idle: return nil
         case .purchasing: return nil        // the system sheet is over the card already
         case .pending: return "PENDING"
         case .cancelled: return "CANCELLED"
-        case .failed: return "NO CONNECTION"
+        case .noConnection: return "NO CONNECTION"
+        case .notAvailable: return "NOT AVAILABLE"
+        case .nothingToRestore: return "NOTHING TO RESTORE"
         }
     }
 

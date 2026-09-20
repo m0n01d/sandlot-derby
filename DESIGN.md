@@ -550,10 +550,18 @@ instead of park 4:
   SUBSCRIPTION`, and a dotted line ending in `X`. **Slicing the dotted line signs it**, because a
   slice is the only input the game has. That opens the system purchase sheet.
 - Success: one white frame, hard cut to the windup in park 4. Pending (Ask to Buy): `PENDING`, back
-  to Triple-A, and the cut to park 4 happens when the transaction lands. Cancel or failure: the
-  card stays, with one plain word (`CANCELLED`, `NO CONNECTION`).
-- `RESTORE` in the corner calls `AppStore.sync()`. Entitlements are also read silently at every
-  launch, so a reinstall or a new phone just works; the word is there because App Review requires it.
+  to Triple-A, and the cut to park 4 happens when the transaction lands. Cancel or a real failure:
+  the card stays, with one plain word: `CANCELLED`, `NO CONNECTION` (a network failure and nothing
+  else), or `NOT AVAILABLE` (the store answered but there is nothing to sell here — no app record,
+  no `show.contract`, an unsigned Paid Apps agreement, or anything else StoreKit itself refused or
+  could not explain). Corrected 2026-09-20 (#47): the card used to say `NO CONNECTION` for all of
+  these, which is why Dwight, on an iPad, asked "The Show restore makes me login and i get No
+  Connection. is that normal?" — `Store.Phase` now keeps the real cause.
+- `RESTORE` in the corner calls `AppStore.sync()`, which comes back either with something restored
+  (silent — the card is simply gone) or with `NOTHING TO RESTORE` (2026-09-20, #47): a clean
+  answer, not a failure, for when there is genuinely nothing on the account. Entitlements are also
+  read silently at every launch, so a reinstall or a new phone just works; the word on the card is
+  there because App Review requires it.
 - A tap anywhere off the line declines. **Declining is never punished and never nagged:** the
   player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
   automatically exactly once per career. After that it lives on the stats board as one row
@@ -627,6 +635,16 @@ or a rewarded video.
 - **Not built, because it cannot be reached from `simctl`:** the purchase, pending, refund and
   restore paths were never exercised. A `.storekit` file only takes effect when the app is
   launched from Xcode, so every screenshot was taken against no store at all.
+
+**Testing the purchase** (2026-09-20, #47). The local `.storekit` file only applies to a Run from
+Xcode's own default `SandlotDerby` scheme; a second scheme, `SandlotDerby (Sandbox)`, builds the
+same target without it, so a Run from Xcode on that one reaches Apple's actual sandbox instead.
+Reaching the sandbox for real needs, beyond just the scheme: the Paid Apps agreement Active, the
+app record created, `show.contract` created as a Non-Consumable and at "Ready to Submit", and a
+Sandbox Apple Account signed in under Settings → Developer. TestFlight purchases are free and also
+use the sandbox. `RESTORE` always asks for the Apple ID password, because that is what
+`AppStore.sync()` itself does — not a bug in the card. None of this has been exercised for real
+yet; see "Not built" above.
 
 **Build order (M5):** ~~`parkCeiling` + tests~~ (done) → ~~contract card scene~~ (done) →
 ~~StoreKit 2 with the local configuration file~~ (done, untested against a real store) → sandbox
