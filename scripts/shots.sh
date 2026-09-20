@@ -8,6 +8,11 @@
 #   FRAMES       how many screenshots to capture (default 16)
 #   GAP          seconds to sleep between screenshots (default 0.35)
 #   KEEP_BOOTED  1 = leave the simulator booted after the run instead of shutting it down (default 0)
+#
+# For a rare event's ~0.5 s two-frame burst, these stills lag the game clock too much to land
+# inside the window (wave 3, CLAUDE.md Verification) — record video instead and pull frames:
+#   xcrun simctl io <udid> recordVideo --codec h264 out.mp4   # stop it with Ctrl-C (SIGINT)
+#   ffmpeg -i out.mp4 -vf fps=30 v%03d.png
 set -uo pipefail
 WT="$1"; SIM="$2"; OUT="$3"; shift 3
 DD="/private/tmp/derby-dd/$SIM"
