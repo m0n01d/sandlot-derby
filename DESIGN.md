@@ -64,7 +64,7 @@ games) were bolt-ons inside full sims. The bare loop is open.
 | 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
-| 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. Then hard cut back to 1. |
+| 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. On a home run, which one of the park's count it was: `HR 2 OF 3`, or `PARK CLEARED` on the one that makes it (§10, #40). `NEW RECORD` and the record's name when a career best just fell, with the landing number flashing `score`/`chalk` (§10, #41). The park changes at the **end** of this hold, and only after the clearing home run. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
@@ -220,7 +220,24 @@ The batter is a stamp, not scaled art, and is off screen here.
 - Park N is a pure function of N (SplitMix64 seeded by N). Parks 1–4 are fixed day games (the
   minors and The Show, below). Park N ≥ 5: wall 330–410 ft, height 6–26 ft, night with p = 0.25.
   Wind is reserved for later.
-- A home run advances to the next park at the end of the result hold. Anything else stays.
+- **Three home runs clear a park** (`ProgressRules.homeRunsToClear`, 3; decided by Dwight
+  2026-09-20, issue #40: "lets start with 3"). A count **in this park**, not a count in a row —
+  in a row is what the home-run streak is for, and three in a row in The Show would be brutal.
+  The count is a `Stat` (`homeRunsThisPark`), so it is saved, it survives a relaunch, it resets
+  when the park changes, and a replay record carries it for free. A miss, a called strike or a
+  ball in play costs the streak and never the count. The park advances at the end of the result
+  hold of the home run that **makes** the count; everything that moves with a cleared park moves
+  with that one home run — `.parkChanged`, `.calledUp`, `isBeingCalledUp`, `pitchesToTheShow`,
+  `fewestPitchesToClearPark`, the ceiling's owed advance (§16), and the Triple-A fireworks
+  finale (§17). One knob for every park, the minors included; per-league values are a later
+  tweak. **The Warm Up feeds none of it** (§18): the day's ten are thrown in the day's park, not
+  the one being cleared. *The rest of this bullet is Claude's and unreviewed; only the number 3
+  is Dwight's.*
+- **On screen:** the headline stays `PARK n · PITCHES`. Progress is a row of lamps on the
+  outfield scoreboard in the at-bat view, one per home run the count asks for, lit in `score`
+  and dark in `ink`, laid out so a count of 1…5 still fits the board. The wide view's result
+  hold says which one it was (`HR 2 OF 3`, `PARK CLEARED`), and the stats board carries
+  `HR THIS PARK  2/3`. Nothing near the strike zone.
 - **The minors** (decided 2026-09-19, issue #7). Park 1 at 380 ft needed ~97 mph, so a first-timer
   could not hit the home run that is the hook. Parks 1–3 are now a ladder (`Ladder`, `Rung`,
   `League`), park 4 is The Show (the old park 1), park 5 on is seeded as above. Each rung takes one
@@ -237,8 +254,10 @@ The batter is a stamp, not scaled art, and is off screen here.
   pitch. **Timing ring:** a chalk dotted ring on the target and a `score` ring that closes onto it as
   the ball arrives. Both give the target away before the throw, on purpose. **Coaching:** one word
   under the landing number for a ball that stayed in: `SWING UP` (< 12°), `LEVEL OUT` (> 42°),
-  `FASTER` (< 88 mph), aim before power. Clearing Triple-A blinks `CALLED UP` once per career and
-  records `pitchesToTheShow`. The minors count toward every stat and the streak. A one-way door:
+  `FASTER` (< 88 mph), aim before power. Clearing Triple-A — the third home run in it, since #40 —
+  blinks `CALLED UP` once per career and records `pitchesToTheShow`. The "clears at" column is the
+  exit velocity one home run there needs; the park still asks for three of them. The minors count
+  toward every stat and the streak. A one-way door:
   nobody is sent down. These are a trial: judge the guide and ring on a phone and cut what
   hand-holds (Fruit Ninja teaches with no overlays at all; its menu *is* the slice).
 - **Headline:** `PARK n  p PITCHES`, top-left of the at-bat view. Pitches are the cost and never
@@ -254,6 +273,34 @@ The batter is a stamp, not scaled art, and is off screen here.
   average launch angle, grounders / liners / fly balls / pop-ups, off the wall; total feet,
   longest, highest apex, longest hang; home runs, no-doubters, wall scrapers, moonshots, lasers;
   HR and hit streaks with bests; seen / hit / HR per pitch type. Sorting rules are `StatRules`.
+- **A celebration when a record falls** (issue #41; Dwight, 2026-09-20: "we need a celebration
+  whenever setting a new record". Everything below it is Claude's and unreviewed). The tally has
+  always kept the bests; nothing marked the moment one changed hands.
+  - **Core decides.** `Records.kind(before:after:swing:)` is a pure comparison of the tally
+    before a swing against the tally after it, so the live game, a replay clip and a test all
+    reach the same answer. One transition, `.newRecord(RecordKind)`, and `machine.recordNow` for
+    the scenes — non-nil for exactly as long as the landing number is up.
+  - **Not a party every swing.** Nothing until `RecordRules.minSwingsBeforeRecords` (25) swings
+    are behind the career, and only where there **was** a previous best: the first of anything is
+    not a record, it is the first. At most one a swing, by priority — longest, HR streak, exit
+    velocity, apex, hang, fewest pitches. A streak record fires once, on the home run that
+    *passes* the old best and not on the ones after it, which needs one bookkeeping key
+    (`bestHomeRunStreakAtStreakStart`, written as the streak leaves 0) because from the before
+    and after tallies alone those swings are indistinguishable.
+  - **When.** At the start of the result hold, when the number that set it goes up. The
+    fewest-pitches record goes there too, in the clearing home run's hold beside `PARK CLEARED`
+    — **not** at the park change as the issue proposed, because the park change is the *end* of
+    that hold and the cut back to the plate, with no frame left to draw anything in. The number
+    is settled either way: `pitchesThisPark` stops moving the moment the home run is hit.
+  - **What it looks like.** `NEW RECORD` and the record's name under the landing number, blinking
+    on the same two-frame clock as `HR` and `CALLED UP` (§9's motion budget), with the landing
+    number flashing `score`/`chalk` against them so it is never gone. In the **3×5** face at 2×,
+    not the 5×7 one the issue asked for: that face has no `N`, `W`, `C`, `O`, `D` or `S`, which
+    is the same reason `CALLED UP` is already drawn in 3×5 at 3×. Fireworks stay the streak's.
+  - **The Warm Up card** says `NEW BEST` beside the feet or the home runs when the day beat them.
+    What it beat rides out on `.warmUpEnded`, worked out as the day's books close: by the time
+    the card is drawn the bests have been raised to that very day, so nothing is left to compare
+    against — and nothing of a Warm Up may be left standing on the machine (§18).
 - **Stats board:** tap the outfield scoreboard in the at-bat view; tap anywhere to leave. It is the
   scoreboard up close, not a menu: nothing on it can be chosen or changed. The machine does not
   tick while it is up, and the tap is not a swing.
@@ -274,7 +321,8 @@ crack of the bat, an ump grunting, and crowds cheering"). **No audio files.** Ev
 arithmetic in `Synth` (noise, oscillators, biquads: the spirit of an FM chip and a noise channel),
 fired by `SoundBoard`. Placeholders by design; replace them one at a time. Most buffers render at
 launch; the three longest ones (the tunes below) render off the main thread the first time they
-are needed instead, so opening the app never pays for a tune nobody has reached yet.
+are needed instead, so opening the app never pays for a tune nobody has reached yet — the record
+flourish (#41) is the fourth of them, and its beeps render at launch with the other boops.
 
 | Moment | Cue from Core | Sound | Haptic |
 |---|---|---|---|
@@ -290,6 +338,7 @@ are needed instead, so opening the app never pays for a tune nobody has reached 
 | A streak of 5+ ends | — | the organ plays the opening of Chopin's *Marche funèbre* instead, same lead-in. Doesn't replace the streak of 3–4 above | — |
 | Stats board open | `showStats`/`hideStats` | the organ plays *Take Me Out to the Ball Game* (first two lines), starting a beat after the board opens, looping once if still up, stopping dead the moment it closes | — |
 | Called up | `.calledUp` | a major arpeggio, up | — |
+| A record falls | `.newRecord` | the organ plays a short **original** flourish — a rising major arpeggio that overshoots its top note by a semitone and settles back onto it (C5 E5 G5 C6 B5 C6, 0.93 s), in the style of the rally prompt and nobody's tune. Where the park has no organist (`hasOrgan`, Single-A), the same six notes as square-wave beeps | `.success` |
 
 **The organ** (#17) is a synthesized drawbar organ with its own player node. It lives in the gaps
 and **stops dead when the pitch is thrown**, as a real organist does when the pitcher comes set.
@@ -441,8 +490,10 @@ Sharing on, **$1.99**. Discounts are store-side price changes (a launch week, Op
 Home Run Derby): the card simply shows whatever the store charges today. The game itself never
 announces a sale, counts one down or strikes a price through.
 
-**The moment.** The home run that clears Triple-A plays out as now: result hold, `CALLED UP`. If
-the player is not entitled, the cut back goes to the **contract card** instead of park 4:
+**The moment.** The home run that clears Triple-A — the **third** one hit there, since #40 (§10) —
+plays out as now: result hold, `CALLED UP`. The two before it are ordinary home runs, with no
+card and no fanfare. If the player is not entitled, the cut back goes to the **contract card**
+instead of park 4:
 
 - A scoreboard-styled card in the bitmap face: `THE SHOW`, the price, `ONE TIME`, `NO ADS  NO
   SUBSCRIPTION`, and a dotted line ending in `X`. **Slicing the dotted line signs it**, because a
@@ -464,9 +515,10 @@ the player is not entitled, the cut back goes to the **contract card** instead o
   row always uses the ISO form (`USD 1.99`): its rows are 7 px apart and its grammar is 3×5
   throughout, so a 7 px-tall glyph would touch its neighbours.
 
-**Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
-not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
-every other way. Core knows nothing about money; the app sets the ceiling from the entitlement.
+**Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). The home run that makes the ceiling
+park's count does not advance; it emits `.calledUp` so the scene can show the card, and counts as
+a home run in every other way. The count then simply stays met, because the park never changes to
+reset it — so every later home run there announces again, which is open question 3 below. Core knows nothing about money; the app sets the ceiling from the entitlement.
 Tested like everything else. **Built 2026-09-19**, with two things the paragraph above left open:
 
 - **Paying the advance.** The home run at the ceiling leaves an advance *owed*. When the app sets
@@ -477,8 +529,9 @@ Tested like everything else. **Built 2026-09-19**, with two things the paragraph
 - **The debt is not saved.** Decline, quit, come back and sign from the stats board, and it takes
   one more Triple-A home run to go up. That is a call-up with the fanfare, not a penalty, and it
   keeps a bookkeeping key out of the tally.
-- The park's books (`parksCleared`, `pitchesThisPark`, `fewestPitchesToClearPark`) stay open at
-  the ceiling. `isAtCeiling` is `park.number >= parkCeiling`, so a refund's ceiling just works.
+- The park's books (`parksCleared`, `pitchesThisPark`, `fewestPitchesToClearPark`,
+  `homeRunsThisPark`) stay open at the ceiling. `isAtCeiling` is `park.number >= parkCeiling`, so
+  a refund's ceiling just works.
 
 **App.** StoreKit 2 only, no server: `Product.products`, `purchase()`,
 `Transaction.currentEntitlements` at launch, `Transaction.updates` for purchases made elsewhere and
@@ -528,9 +581,10 @@ or a rewarded video.
 ~~StoreKit 2 with the local configuration file~~ (done, untested against a real store) → sandbox
 on TestFlight → ~~grandfathering~~ (done) → listing copy.
 
-**Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
-the trial can be short. Median pitches-to-call-up says how short, and the free Warm Up (#3, §18)
-is what keeps a non-payer around, so ship it first.
+**Worth watching in the beta, not a blocker:** a good player clears the minors in **nine** swings
+now that a park takes three home runs (§10, #40) — it was three, which was the short end of short.
+Median pitches-to-call-up says how short it really is, and the free Warm Up (#3, §18) is what
+keeps a non-payer around, so ship it first.
 
 **Open:**
 1. One paid "supporter pack" of palettes later, or cosmetics stay earned-only forever?
@@ -544,6 +598,8 @@ is what keeps a non-payer around, so ship it first.
    runs and 0 parks cleared in about a minute, so a robot saw `CALLED UP` and heard the arpeggio
    eleven times in Triple-A. It is built as specced and not decided. A human swinging at a
    fraction of that rate may find it a celebration; the robot makes it look like a nag.
+   #40 takes the first two off that count — the card is not offered until the third home run —
+   but from the third on it is unchanged, so the question stands.
 
 ## 17. Life: fireworks, sky and backdrops
 

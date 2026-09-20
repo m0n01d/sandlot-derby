@@ -15,6 +15,16 @@ final class WideScene: CanvasScene {
     private let sideRules = SideViewRules.standard
 
     private let layout = BackdropLayout.standard
+
+    /// Where the result hold's two new lines sit, in design units. The hold's existing lines are
+    /// the landing number (52), `HR` (88), `OFF THE WALL` (90), a coaching word (102),
+    /// `STREAK n` (116) and `CALLED UP` (134); these two take the gap under the number and the
+    /// clear band under `CALLED UP`, above the wide camera's ground line at 176.
+    /// (App) — pure layout, no gameplay effect.
+    private let parkProgressY = 76.0
+    private let recordY = 152.0
+    private let recordNameY = 164.0
+    private let holdTextScale = 2
     /// Everything behind the wall that does not move, drawn once per park, canvas and framing
     /// (DESIGN.md §17). The framing is a pure function of the park and the flight, so this
     /// rebuilds about once a home run, not once a frame.
@@ -170,8 +180,16 @@ final class WideScene: CanvasScene {
             if machine.beat == .result {
                 let d = Int(flightResult.distanceFeet.rounded())
                 let distanceText = "\(d) FT"
-                canvas.t5(fullWidth / 2 - Double(distanceText.count) * 6 * 3 / 2 + 3, 52, distanceText, Palette.score, scale: 3)
-                if flightResult.homeRun, Int(machine.elapsed * 6) % 2 == 0 {
+                // The same two-frame blink `HR` and `CALLED UP` already step at (§9's motion
+                // budget, §17: two frames, no alpha). A record flashes the landing number
+                // between `score` and `chalk` on the off beat, so the number is never gone —
+                // only its colour changes, and the words come and go against it (#41).
+                let blink = Int(machine.elapsed * 6) % 2 == 0
+                let record = machine.recordNow
+                let numberColour = record == nil ? Palette.score : (blink ? Palette.chalk : Palette.score)
+                canvas.t5(fullWidth / 2 - Double(distanceText.count) * 6 * 3 / 2 + 3, 52, distanceText, numberColour, scale: 3)
+                drawParkProgress(canvas, machine, flight: flightResult, fullWidth: fullWidth)
+                if flightResult.homeRun, blink {
                     canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", Palette.cap, scale: 3)
                 }
                 // `streakNow`: the Warm Up's streak while one is live, the career's otherwise.
@@ -187,9 +205,16 @@ final class WideScene: CanvasScene {
                     canvas.t3(fullWidth / 2 - Double(word.count) * 4, 102, word, Palette.chalk, scale: 2)
                 }
                 // Once per career, on the home run that clears Triple-A.
-                if machine.isBeingCalledUp, Int(machine.elapsed * 6) % 2 == 1 {
+                if machine.isBeingCalledUp, !blink {
                     // The 5×7 face only has digits and F T H R, so this is the 3×5 at 3×.
                     canvas.t3(fullWidth / 2 - 9 * 4 * 3 / 2, 134, "CALLED UP", Palette.score, scale: 3)
+                }
+                // A career number just fell (#41). Below everything else the hold draws, so it
+                // can never collide with `HR`, `STREAK n`, `OFF THE WALL`, a coaching word,
+                // `HR 2 OF 3` or `CALLED UP` — and above the ground line at 176.
+                if let record, blink {
+                    centred(canvas, "NEW RECORD", y: recordY, fullWidth: fullWidth, Palette.score)
+                    centred(canvas, record.name, y: recordNameY, fullWidth: fullWidth, Palette.chalk)
                 }
             }
         } else {
@@ -207,6 +232,29 @@ final class WideScene: CanvasScene {
         if controller?.showsReplayIcon == true {
             ReplayIcon.draw(into: canvas, safeRight: safeRight, layout: replayIcon)
         }
+    }
+
+    /// Which home run of this park's count that was (#40): `HR 2 OF 3` on the way, and
+    /// `PARK CLEARED` on the one that makes it. Home runs only — the count does not move for
+    /// anything else — and never during a Warm Up, whose ten clear nothing (DESIGN.md §18).
+    ///
+    /// The 5×7 face has no `O`, `P`, `C` or `D`, so this is the 3×5 at 2×, exactly as
+    /// `CALLED UP` below is the 3×5 at 3× for the same reason.
+    private func drawParkProgress(_ canvas: PixelCanvas, _ machine: DerbyMachine,
+                                  flight: FlightResult, fullWidth: Double) {
+        guard flight.homeRun, machine.warmUp == nil else { return }
+        let text = machine.clearsTheParkNow
+            ? "PARK CLEARED"
+            : "HR \(machine.homeRunsThisPark) OF \(machine.homeRunsToClearPark)"
+        centred(canvas, text, y: parkProgressY, fullWidth: fullWidth, Palette.score)
+    }
+
+    /// One line of the 3×5 face at `holdTextScale`, centred on the canvas. The last glyph has no
+    /// gap after it, so the measured width is one scale short of `count × 4 × scale`.
+    private func centred(_ canvas: PixelCanvas, _ text: String, y: Double, fullWidth: Double,
+                         _ colour: Palette.RGBA8) {
+        let width = Double(text.count * 4 * holdTextScale - holdTextScale)
+        canvas.t3((fullWidth / 2 - width / 2).rounded(), y, text, colour, scale: holdTextScale)
     }
 
     /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds

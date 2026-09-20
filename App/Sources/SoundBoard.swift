@@ -32,9 +32,13 @@ final class SoundBoard {
     private let whiffBuffer, strikeBuffer, ballBuffer, groanBuffer: AVAudioPCMBuffer
     private let wallBuffer, groundBuffer, streakOverBuffer, calledUpBuffer: AVAudioPCMBuffer
     private let wompBuffer, chargeRunBuffer, shoutBuffer: AVAudioPCMBuffer
-    // The rest of the organ (#17). The three longest buffers in the game: rendered off the main
+    /// The beeps a park with no organist gets when a record falls (#41). Short, so it renders at
+    /// launch with the rest of the boops; its organ twin does not.
+    private let recordBeepsBuffer: AVAudioPCMBuffer
+    // The rest of the organ (#17, #41). The longest buffers in the game: rendered off the main
     // thread the first time each is needed, never eagerly at launch like everything above.
     private var threeBlindMiceBuffer, funeralMarchBuffer, takeMeOutBuffer: AVAudioPCMBuffer?
+    private var newRecordBuffer: AVAudioPCMBuffer?
 
     init() {
         let format = self.format
@@ -57,6 +61,7 @@ final class SoundBoard {
         wompBuffer = buffer(Synth.wompWomp())
         chargeRunBuffer = buffer(Synth.chargeRun())
         shoutBuffer = buffer(Synth.crowdShout())
+        recordBeepsBuffer = buffer(Synth.newRecordBeeps())
 
         guard !isMuted else { return }
         for node in voices + [crowd, organ] {
@@ -192,6 +197,31 @@ final class SoundBoard {
         }
     }
 
+    /// A career number just fell (#41), at the moment the landing number goes up. The organ
+    /// where the park has one, square-wave beeps where it does not — the same six notes either
+    /// way. No delay: the result hold is 1.30 s and the flourish is 0.93, so it has to start now.
+    ///
+    /// The organ voice goes through the organ node, so `.pitchThrown`'s `stopOrgan()` cuts it off
+    /// mid-note like every other organ cue. The beeps go through an ordinary voice and are not
+    /// cut, exactly as `calledUp()`'s arpeggio is not; they are over before the pitch anyway.
+    func newRecord(hasOrgan: Bool) {
+        guard !isMuted else { return }
+        guard hasOrgan else { return play(recordBeepsBuffer) }
+        promptID += 1
+        let id = promptID
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let buffer: AVAudioPCMBuffer
+            if let cached = self.newRecordBuffer { buffer = cached }
+            else {
+                buffer = await Task.detached(priority: .utility) { Self.makeBuffer(Synth.newRecordFlourish()) }.value
+                self.newRecordBuffer = buffer
+            }
+            guard self.promptID == id else { return }         // the pitch beat us to it
+            self.play(buffer, on: self.organ)
+        }
+    }
+
     /// How long after the stats board opens its organ starts (#17).
     static let statsOrganDelay = 1.0
 
@@ -265,4 +295,7 @@ final class Haptics {
     func contact(strength: Double) { bat.impactOccurred(intensity: 0.45 + 0.55 * max(0, min(1, strength))) }
     func offTheWall() { wall.impactOccurred(intensity: 0.8) }
     func homeRun() { notice.notificationOccurred(.success) }
+    /// A record fell (#41). The same `.success` the home run gets: this is the other thing in the
+    /// game worth telling a hand about.
+    func newRecord() { notice.notificationOccurred(.success) }
 }

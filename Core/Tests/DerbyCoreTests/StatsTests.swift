@@ -30,9 +30,15 @@ final class StatsTests: XCTestCase {
     }
 
     /// A machine that has just homered and is now facing a pitch that is (or is not) a strike.
+    ///
+    /// About the streak and the call, not about clearing: one home run a park (#40), because the
+    /// homer here is only a way to reach Double-A, which is the first rung that ever throws a
+    /// ball (Single-A's `strikeProbability` is 1). At three a `nextPitchIsStrike: false` machine
+    /// would not exist in the whole seed range.
     private func afterOneHomer(nextPitchIsStrike: Bool) -> DerbyMachine {
         for seed in UInt64(1)...500 {
             var m = DerbyMachine(seed: seed)
+            m.progressRules.homeRunsToClear = 1
             toNextPitch(&m)
             m.slice(bomb(m))
             run(&m, seconds: 0.5)            // into the flight, so the next wait is for a new pitch
@@ -43,8 +49,11 @@ final class StatsTests: XCTestCase {
         return DerbyMachine(seed: 0)
     }
 
+    /// About the streak, not about clearing: one home run a park (#40) keeps the three swings
+    /// three separate parks, which is what the `parksCleared` line at the end is checking.
     func testHomeRunStreakCountsAndCarriesItsBest() {
         var m = DerbyMachine(seed: 3)
+        m.progressRules.homeRunsToClear = 1
         for expected in 1...3 {
             toNextPitch(&m)
             m.slice(bomb(m))
@@ -101,18 +110,22 @@ final class StatsTests: XCTestCase {
         XCTAssertNil(m.tally.value(ifRecorded: .fewestPitchesToClearPark))
         toNextPitch(&m)
         m.sliceMissed()
-        toNextPitch(&m)
-        m.slice(bomb(m))
-        XCTAssertEqual(m.tally.count(.pitchesThisPark), 2)
-        run(&m, seconds: 0.5)
+        for _ in 0..<m.homeRunsToClearPark {            // three of them clear a park now (#40)
+            toNextPitch(&m)
+            m.slice(bomb(m))
+            run(&m, seconds: 0.5)
+        }
+        XCTAssertEqual(m.tally.count(.pitchesThisPark), 4)     // the miss and the three of them
         toNextPitch(&m)
         XCTAssertEqual(m.park.number, 2)
-        XCTAssertEqual(m.tally.count(.fewestPitchesToClearPark), 2)
+        XCTAssertEqual(m.tally.count(.fewestPitchesToClearPark), 4)
         XCTAssertEqual(m.tally.count(.pitchesThisPark), 0)
-        m.slice(bomb(m))                     // one pitch beats two
-        run(&m, seconds: 0.5)
-        toNextPitch(&m)
-        XCTAssertEqual(m.tally.count(.fewestPitchesToClearPark), 1)
+        for _ in 0..<m.homeRunsToClearPark {            // three pitches beats four
+            m.slice(bomb(m))
+            run(&m, seconds: 0.5)
+            toNextPitch(&m)
+        }
+        XCTAssertEqual(m.tally.count(.fewestPitchesToClearPark), 3)
     }
 
     func testPerPitchTypeLinesAddUp() {

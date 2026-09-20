@@ -353,6 +353,19 @@ enum Synth {
     /// from the table itself, not a literal, so it can never drift from it again.
     static let takeMeOutSeconds = takeMeOutTune.reduce(0) { $0 + beats($1.beats, bpm: takeMeOutBPM) }
 
+    /// A record just fell (#41): a rising major arpeggio that overshoots its top note by a
+    /// semitone and settles back onto it, held. **Original** — a triad and a turn are not a
+    /// melody anybody owns, and nothing in this game's organ may need a licence (§11). In the
+    /// style of `chargeRun`, and about as long: it has to fit inside the 1.30 s result hold,
+    /// and `.pitchThrown` cuts it off dead if the next pitch gets there first, as it does every
+    /// organ cue. Claude's, unreviewed — nobody has heard it yet.
+    static let newRecordTune: [(midi: Int?, seconds: Double)] = [
+        (72, 0.10), (76, 0.09), (79, 0.09), (84, 0.13), (83, 0.08), (84, 0.44),
+    ]
+    static func newRecordFlourish() -> [Float] { organ(newRecordTune, gain: 0.55) }
+    /// Computed from the table, never a literal.
+    static let newRecordSeconds = newRecordTune.reduce(0) { $0 + $1.seconds }
+
     // MARK: - Beeps and boops
 
     /// Square-wave notes played one after another.
@@ -375,6 +388,13 @@ enum Synth {
 
     /// Called up to The Show: a major arpeggio, up.
     static func calledUp() -> [Float] { boops([(523, 0.09), (659, 0.09), (784, 0.09), (1_047, 0.28)], gain: 0.26) }
+
+    /// A record fell in a park with no organist (#41): `newRecordTune`'s own figure in square
+    /// waves — the same six notes, so the cue is one idea in two voices rather than two cues.
+    static func newRecordBeeps() -> [Float] {
+        boops([(523, 0.09), (659, 0.08), (784, 0.08), (1_047, 0.12), (988, 0.07), (1_047, 0.30)],
+              gain: 0.26)
+    }
 
     // MARK: - Fireworks (issue #14, "life": fireworks, sky and backdrops)
 

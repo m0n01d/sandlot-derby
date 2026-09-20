@@ -63,9 +63,9 @@ final class FireworksTests: XCTestCase {
         return out
     }
 
-    /// A park deep in the majors: every home run advances the park number, but the league stays
-    /// `.theShow`, so a run of home runs never collides with the call-up (Triple-A only clears
-    /// once, and these tests want the streak table in isolation from it).
+    /// A park deep in the majors: a run of home runs walks the park number on (three at a time
+    /// since #40), but the league stays `.theShow`, so it never collides with the call-up
+    /// (Triple-A only clears once, and these tests want the streak table in isolation from it).
     private func majorsMachine(seed: UInt64) -> DerbyMachine { DerbyMachine(seed: seed, park: Park.generate(number: 20)) }
 
     func testFireworksNilDuringWindupPitchAndMiss() {
@@ -136,8 +136,11 @@ final class FireworksTests: XCTestCase {
         XCTAssertEqual(m.fireworks?.shellCount, 2)   // 1 for the streak of 3, +1 no-doubter
     }
 
+    /// About the finale, not about the count: one home run a park (#40) keeps the streak fresh at
+    /// 1, which is the whole point — the call-up overrides the streak table whatever it says.
     func testCallUpIsAFinaleEvenOnAFreshStreak() {
         var m = DerbyMachine(seed: 3, park: Park.generate(number: 3))   // Triple-A
+        m.progressRules.homeRunsToClear = 1
         m.statRules.noDoubterMarginFeet = 10_000   // isolate the call-up rule from the no-doubter bonus
         toNextPitch(&m)
         m.slice(bomb(m))

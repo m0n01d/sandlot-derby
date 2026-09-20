@@ -32,6 +32,9 @@ final class GameController {
         guard let saved = lastWarmUp, saved.done else { return nil }
         return WarmUpResult(day: saved.day, pitches: saved.pitches)
     }
+    /// What that day beat, for the card's `NEW BEST` (#41). Only ever set by the `.warmUpEnded`
+    /// this session saw: a card reopened from the save beat nothing today, and says nothing.
+    private(set) var finishedWarmUpBests: WarmUpBests?
     private var foregroundObserver: (any NSObjectProtocol)?
 
     init(seed: UInt64 = UInt64.random(in: UInt64.min...UInt64.max)) {
@@ -61,6 +64,7 @@ final class GameController {
         // `-warmup <day>` fakes the one thing the Warm Up's gate asks for: a career that has
         // cleared Single-A. Without it the forced day would be refused, as it should be.
         if Self.debugWarmUpDay != nil { startingTally = Self.tally(["parksCleared": 1]) }
+        if Self.seedRecords { startingTally = Self.recordsTally }
         #endif
         machine = DerbyMachine(seed: seed,
                                park: startPark ?? save.map { Park.generate(number: $0.parkNumber) } ?? .first,
@@ -78,7 +82,13 @@ final class GameController {
         grandfathered = save?.grandfathered ?? ((save?.parkNumber ?? 0) >= League.theShow.rawValue)
         lastWarmUp = save?.warmUp
         #if DEBUG
-        if Self.showWarmUpCardForScreenshots { lastWarmUp = Self.sampleWarmUp }
+        if Self.showWarmUpCardForScreenshots {
+            lastWarmUp = Self.sampleWarmUp
+            // The card is faked, so what it beat has to be faked with it: `finishedWarmUpBests`
+            // is only ever set by a real `.warmUpEnded`, and without this the `NEW BEST` lines
+            // (#41) could not be screenshotted without playing a whole day first.
+            finishedWarmUpBests = WarmUpBests(feet: true, homeRuns: true)
+        }
         #endif
         atBatScene = AtBatScene()
         wideScene = WideScene()
@@ -230,9 +240,13 @@ final class GameController {
     }
 
     /// The tenth has played out: the day is written down as finished and the card comes up by
-    /// hard cut, the machine standing still behind it.
-    private func finishWarmUp(_ result: WarmUpResult) {
+    /// hard cut, the machine standing still behind it. `bests` is what the day beat, which only
+    /// `.warmUpEnded` can say — by the time the card is drawn the tally's bests are this day's
+    /// own (#41). Not saved: it belongs to the card that is about to come up, and a day looked at
+    /// again tomorrow beat nothing today.
+    private func finishWarmUp(_ result: WarmUpResult, _ bests: WarmUpBests) {
         lastWarmUp = SavedWarmUp(day: result.day, pitches: result.pitches, done: true)
+        finishedWarmUpBests = bests
         persist()
         #if DEBUG
         // `-showstats` alongside a Warm Up goes to the board rather than the card: a robot has
@@ -347,7 +361,7 @@ final class GameController {
         var offerTheContract = false
         // `.warmUpEnded` arrives alongside the `.cutToAtBat` that would draw over the card, so
         // the card waits until every transition has been handled — the same dance as the contract.
-        var finishedCard: WarmUpResult? = nil
+        var finishedCard: (result: WarmUpResult, bests: WarmUpBests)? = nil
         for transition in transitions {
             switch transition {
             case .cutToWide:
@@ -384,8 +398,14 @@ final class GameController {
                 if machine.isAtCeiling { offerTheContract = true }
             case .calledStrikesInARow:
                 if machine.hasOrgan { sound.threeBlindMice() }   // there is no third strike here (#17)
-            case .warmUpEnded(let result):
-                finishedCard = result
+            case .newRecord:
+                // The landing number is up and one of the career's bests has just changed hands
+                // (#41). The organ where the park has one, beeps where it does not; the pitch
+                // cuts it off like every other organ cue.
+                sound.newRecord(hasOrgan: machine.hasOrgan)
+                haptics.newRecord()
+            case .warmUpEnded(let result, let bests):
+                finishedCard = (result, bests)
             case .warmUpBegan, .parkChanged, .flash:
                 break
             }
@@ -399,7 +419,7 @@ final class GameController {
                 sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
             }
         }
-        if let finishedCard { finishWarmUp(finishedCard) }
+        if let finishedCard { finishWarmUp(finishedCard.result, finishedCard.bests) }
         if offerTheContract { offerContract() }
         #if DEBUG
         // `-replayscreen`: once a robot swing has earned the camera and the hold is over, open
@@ -631,6 +651,27 @@ final class GameController {
         let body = values.keys.sorted().map { "\"\($0)\":\(values[$0]!)" }.joined(separator: ",")
         let json = "{\"values\":{\(body)}}".data(using: .utf8)!
         return (try? JSONDecoder().decode(Tally.self, from: json)) ?? Tally()
+    }
+
+    /// `-records`: a career with just enough behind it that the very next home run takes a
+    /// record, so #41's celebration can be reached on camera instead of played to for an hour.
+    ///
+    /// It seeds three things and nothing else: the swings the gate asks for
+    /// (`RecordRules.minSwingsBeforeRecords`), a longest that any home run beats, and a
+    /// fewest-to-clear that clearing one park beats. A `-autoslice -records` run therefore shows
+    /// `NEW RECORD LONGEST` on its first home run and, a park later, `NEW RECORD FEWEST PITCHES`
+    /// on the one that clears it — two different records, two different holds. Add `-park <n>`
+    /// for a park with an organ; Single-A has no organist, so there it is the beeps (§11).
+    ///
+    /// Implies `-nosave` (`SaveStore`) and counts as entitled (`Store.forcedEntitlement`): it is
+    /// a faked career and must neither overwrite a real one nor be stopped at park 3.
+    static let seedRecords = ProcessInfo.processInfo.arguments.contains("-records")
+
+    private static var recordsTally: Tally {
+        tally(["swings": RecordRules.standard.minSwingsBeforeRecords + 5,
+               "parksCleared": 4,
+               "longestFeet": 150,
+               "fewestPitchesToClearPark": 20])
     }
 
     /// `-warmup <day>`: force the Warm Up for that `YYYYMMDD`, whatever today is, so the daily

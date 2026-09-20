@@ -33,6 +33,12 @@ struct WarmUpCardLayout {
     var longestY = 140.0
     var longestScale = 1
 
+    /// `NEW BEST`, beside the line it belongs to, when the day beat what stood before it (#41).
+    /// To the right of the feet and the home runs rather than under them: the card is already
+    /// five lines deep and a sixth would push `LONGEST` off the panel.
+    var newBestGap = 8.0
+    var newBestScale = 1
+
     /// `SHARE`, out of the way in the bottom corner, at label size — where `RESTORE` sits on the
     /// contract card, because it is the same kind of word in the same kind of corner.
     var shareY = 210.0
@@ -92,11 +98,23 @@ final class WarmUpCardScene: CanvasScene {
 
         cells(canvas, result: result, centre: centre)
 
+        // What the day beat, if anything (#41). `DerbyMachine` works it out as the day's books
+        // close, because by now the bests have already been raised to this very day.
+        let beaten = controller.finishedWarmUpBests
+
         let feet = "\(WarmUp.grouped(result.totalFeet)) FT"
         centred5(canvas, feet, y: l.feetY, scale: l.feetScale, Palette.chalk, centre)
+        if beaten?.feet == true {
+            newBest(canvas, rightOf: Double(feet.count * 6 * l.feetScale - l.feetScale),
+                    y: l.feetY + Double(l.feetScale), centre: centre)
+        }
 
         let homeRuns = "\(result.homeRuns) \(result.homeRuns == 1 ? "HOME RUN" : "HOME RUNS")"
         centred(canvas, homeRuns, y: l.homeRunsY, scale: l.homeRunsScale, Palette.chalk, centre)
+        if beaten?.homeRuns == true {
+            newBest(canvas, rightOf: Double(homeRuns.count * 4 * l.homeRunsScale - l.homeRunsScale),
+                    y: l.homeRunsY + Double(l.homeRunsScale), centre: centre)
+        }
         centred(canvas, "LONGEST \(WarmUp.grouped(result.longestFeet)) FT", y: l.longestY,
                 scale: l.longestScale, Palette.chalk, centre)
 
@@ -125,6 +143,13 @@ final class WarmUpCardScene: CanvasScene {
         canvas.rect(x, y + h - 1, w, 1, colour)
         canvas.rect(x, y, 1, h, colour)
         canvas.rect(x + w - 1, y, 1, h, colour)
+    }
+
+    /// `NEW BEST` just past the right-hand end of a centred line of `lineWidth`, in `score` —
+    /// the board's yellow, which is what the one number that matters is already drawn in.
+    private func newBest(_ canvas: PixelCanvas, rightOf lineWidth: Double, y: Double, centre: Double) {
+        let x = (centre + lineWidth / 2 + layout.newBestGap).rounded()
+        canvas.t3(x, y, "NEW BEST", Palette.score, scale: layout.newBestScale)
     }
 
     private func centred(_ canvas: PixelCanvas, _ text: String, y: Double, scale: Int,

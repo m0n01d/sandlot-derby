@@ -205,7 +205,7 @@ final class Store {
         if arguments.contains("-entitled") { return true }
         if arguments.contains(where: { $0 == "-autoslice" || $0 == "-nosave" || $0 == "-park"
             || $0 == "-streak" || $0 == "-replay" || $0 == "-replayscreen"
-            || $0 == "-warmup" || $0 == "-warmupcard" }) { return true }
+            || $0 == "-warmup" || $0 == "-warmupcard" || $0 == "-records" }) { return true }
         return nil
     }()
 
