@@ -24,8 +24,10 @@ final class SoundBoard {
     private var nextVoice = 0
     private var observers: [NSObjectProtocol] = []
 
-    /// `-mute`: no sound at all (simulator runs, screenshots).
-    private let isMuted = ProcessInfo.processInfo.arguments.contains("-mute")
+    /// `-mute`: no sound at all (simulator runs, screenshots). Not private: `GameController`
+    /// reads it to decide whether an organ cue is actually going to sound before it asks the
+    /// machine to hold the pitcher for one (#46) — Core has no way to see the silent switch.
+    let isMuted = ProcessInfo.processInfo.arguments.contains("-mute")
 
     private let cracks: [AVAudioPCMBuffer]
     private let cheers: [AVAudioPCMBuffer]
@@ -248,6 +250,23 @@ final class SoundBoard {
             self.play(buffer, on: self.organ)
         }
     }
+
+    // MARK: - Organ cue lengths (#46)
+
+    /// How long each organ cue takes to finish sounding, read from `Synth`'s own tables so a
+    /// length here can never drift from what actually plays. `GameController` hands these to
+    /// `DerbyMachine.holdForMusic` so the pitcher waits for the organist (DESIGN.md §11) —
+    /// nothing else here ever holds him: the ump, the crowd, the thuds and the fireworks play
+    /// through an ordinary voice, never the organ node.
+    static let threeBlindMiceSeconds = Synth.threeBlindMiceSeconds
+    static let newRecordFlourishSeconds = Synth.newRecordSeconds
+    /// The rally prompt's run plus the crowd's answer: the whole call-and-response, not just the
+    /// organ's own run. Cutting the pitcher loose the instant the run ends, before the crowd has
+    /// had its say, felt wrong — Claude's call, unreviewed.
+    static let chargePromptSeconds = Synth.chargeRunSeconds + Synth.crowdShoutSeconds
+    /// `after` is the same lead-in `funeralMarch(after:)` is given; the hold has to cover both
+    /// the wait and the tune itself, since the pitcher has no way to tell them apart.
+    static func funeralMarchSeconds(after seconds: Double) -> Double { seconds + Synth.funeralMarchSeconds }
 
     func landed() { play(groundBuffer) }
     func streakOver(after seconds: Double) { play(streakOverBuffer, after: seconds) }

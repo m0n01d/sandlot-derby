@@ -272,10 +272,15 @@ enum Synth {
     /// How long `chargeRun` lasts: when the crowd answers.
     static let chargeRunSeconds = 1.26
 
+    /// How long `crowdShout` takes to fade out: `chargePrompt` holds the pitcher through the
+    /// whole call-and-response, not just the organ's own run (#46), so this is read from the
+    /// same place the sound itself is built from rather than copied into a second literal.
+    static let crowdShoutSeconds = 0.62
+
     /// The answer: a few dozen people shouting one open syllable at once, with the hiss of its
     /// first consonant on the front. *CHARGE!*
     static func crowdShout() -> [Float] {
-        let dur = 0.62, n = count(dur)
+        let dur = crowdShoutSeconds, n = count(dur)
         var out = [Double](repeating: 0, count: n)
         var pick = Noise(seed: 0xC4A6_0001)
         for v in 0..<14 {
@@ -321,6 +326,9 @@ enum Synth {
         (64, 1), (62, 1), (60, 2), (64, 1), (62, 1), (60, 2),
     ]
     static func threeBlindMice() -> [Float] { organ(timed(threeBlindMiceTune, bpm: threeBlindMiceBPM), gain: 0.5) }
+    /// Computed from the table, never a literal — `GameController` hands it to
+    /// `DerbyMachine.holdForMusic` so the pitcher waits for it (#46).
+    static let threeBlindMiceSeconds = threeBlindMiceTune.reduce(0) { $0 + beats($1.beats, bpm: threeBlindMiceBPM) }
 
     /// Chopin's *Marche funèbre*, the opening bars' motif in B-flat minor: a dotted "dum,
     /// dum-da-dum" on the tonic (the first bar, 6 beats), then a turn down through the
@@ -337,6 +345,9 @@ enum Synth {
         (61, 1.5), (60, 0.5), (60, 1.5), (58, 0.5), (58, 1.5), (57, 0.5), (58, 2),
     ]
     static func funeralMarch() -> [Float] { organ(timed(funeralMarchTune, bpm: funeralMarchBPM), gain: 0.5) }
+    /// Computed from the table, never a literal — the one cue longer than `Timings.maxMusicHold`
+    /// (#46), which is exactly what proves the cap works.
+    static let funeralMarchSeconds = funeralMarchTune.reduce(0) { $0 + beats($1.beats, bpm: funeralMarchBPM) }
 
     /// *Take Me Out to the Ball Game*, the chorus's first two lines, in 3/4 — "Take(low) me(up an
     /// octave) out to the ball game, take me out with the crowd." The octave leap on "Take me" is

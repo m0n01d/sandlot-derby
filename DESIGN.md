@@ -59,13 +59,22 @@ games) were bolt-ons inside full sims. The bare loop is open.
 
 | # | Beat | Camera | Duration | What happens |
 |---|---|---|---|---|
-| 1 | **windup** | at-bat | 0.50 s | pitcher's three frames. A slice made now is ignored, not punished. |
+| 1 | **windup** | at-bat | 0.50 s, held for the organ if one is playing (`Timings.maxMusicHold`, ≤ 2.5 s more, §11, #46) | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
 | 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. On a home run, which one of the park's count it was: `HR 2 OF 3`, or `PARK CLEARED` on the one that makes it (§10, #40). `NEW RECORD` and the record's name when a career best just fell, with the landing number flashing `score`/`chalk` (§10, #41). The park changes at the **end** of this hold, and only after the clearing home run. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
+
+**The pitcher waits for the organist** (2026-09-20, #46). Dwight: "maybe the pitcher waits for the
+music to stop. usually irl they do." Claude's design, unreviewed: while an organ cue the app just
+started is still sounding, the windup clock does not move — the pitcher stands in his set pose,
+the first of the three frames above, with no scene change — and the ordinary 0.5 s windup plays
+once the cue ends. `Timings.maxMusicHold` (2.5 s) caps the wait; past it the pitch is thrown
+anyway and cuts the organ off exactly as it always has (§11). Only the organ holds him: the ump,
+the crowd, the thuds and the fireworks never do, and neither does an owed park advance or a queued
+Warm Up (§16, §18), which pay at the very next windup whether or not one is in progress.
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
 progress at that moment (`DerbyMachine.sliceInProgress`, mirrored every frame from whether a
@@ -345,6 +354,38 @@ and **stops dead when the pitch is thrown**, as a real organist does when the pi
 The rally prompt is a run up the major scale, deliberately **not** the famous six-note "Charge!"
 fanfare, which was written in 1946 and is still under copyright; license it or leave it.
 
+**The pitcher waits for the organist** (2026-09-20, #46). Dwight: "maybe the pitcher waits for the
+music to stop. usually irl they do." Turned round from the paragraph above: instead of the organ
+always losing to the pitch, the windup now gives it the chance to finish first. Claude's design,
+unreviewed:
+
+- Core knows nothing about audio, so the app tells it how long: every place `GameController`
+  starts an organ cue also calls `DerbyMachine.holdForMusic(seconds)` with that cue's own length,
+  read from `Synth`'s tables (`SoundBoard`'s "Organ cue lengths" section) so nothing here can drift
+  from what actually plays — the rally prompt's length includes the crowd's *CHARGE!* answer, and
+  the funeral march's includes its lead-in, since cutting the pitcher loose mid-call-and-response
+  felt wrong. `DerbyMachine` keeps `musicRemaining`, counts it down every tick regardless of beat,
+  and while it is above zero **at a windup**, that windup's own clock does not advance: the
+  pitcher stands in his set pose (the first of the windup's three frames, §3) with no scene change.
+  Once the cue ends, the ordinary 0.5 s windup plays and `.pitchThrown` fires as it always has.
+- **A cap**, `Timings.maxMusicHold` (2.5 s): past it the pitch is thrown anyway and cuts the organ
+  off dead, exactly as before — the cap is the backstop, not a new behaviour. The funeral march
+  (~3.7 s) is the one cue longer than it.
+- **Organ only.** The ump, the crowd, the thuds and the fireworks never hold him — nothing that
+  plays through an ordinary voice does, only a cue through the organ's own player node. The beeps
+  that stand in for a record's flourish where there is no organist (Single-A) do not hold him
+  either: there is no organist there to wait for. Nothing new sounds during the pitch, as before.
+- Never with `-mute`, and never when the cue would not actually sound: `GameController` checks
+  `SoundBoard.isMuted` and `DerbyMachine.hasOrgan` before ever calling `holdForMusic`, since Core
+  cannot see the silent switch itself. The stats-board tune (below) is the one organ cue that never
+  calls it either — the machine's clock is already stopped for as long as the board is up, so
+  there is no windup for a hold to reach, and calling it anyway would leave a silent hold sitting
+  over the first windup after the board closes.
+- An owed park advance and a queued Warm Up (§16, §18) are never made to wait on the organist:
+  both still happen at the very next windup, hold in progress or not.
+- A replay clip starts inside the pitch (§19) and rebuilds a fresh `DerbyMachine`, which carries no
+  hold with it — nothing of a live hold can leak into a record or the machine built from one.
+
 **The rest of the organ** (#17, 2026-09-19, Claude's, unreviewed — nobody has heard any of this
 against the real songs yet): three more tunes through the same voice, all public domain on
 purpose — *Three Blind Mice* (trad., 1609), the opening of Chopin's *Marche funèbre* (1837, from
@@ -509,10 +550,18 @@ instead of park 4:
   SUBSCRIPTION`, and a dotted line ending in `X`. **Slicing the dotted line signs it**, because a
   slice is the only input the game has. That opens the system purchase sheet.
 - Success: one white frame, hard cut to the windup in park 4. Pending (Ask to Buy): `PENDING`, back
-  to Triple-A, and the cut to park 4 happens when the transaction lands. Cancel or failure: the
-  card stays, with one plain word (`CANCELLED`, `NO CONNECTION`).
-- `RESTORE` in the corner calls `AppStore.sync()`. Entitlements are also read silently at every
-  launch, so a reinstall or a new phone just works; the word is there because App Review requires it.
+  to Triple-A, and the cut to park 4 happens when the transaction lands. Cancel or a real failure:
+  the card stays, with one plain word: `CANCELLED`, `NO CONNECTION` (a network failure and nothing
+  else), or `NOT AVAILABLE` (the store answered but there is nothing to sell here — no app record,
+  no `show.contract`, an unsigned Paid Apps agreement, or anything else StoreKit itself refused or
+  could not explain). Corrected 2026-09-20 (#47): the card used to say `NO CONNECTION` for all of
+  these, which is why Dwight, on an iPad, asked "The Show restore makes me login and i get No
+  Connection. is that normal?" — `Store.Phase` now keeps the real cause.
+- `RESTORE` in the corner calls `AppStore.sync()`, which comes back either with something restored
+  (silent — the card is simply gone) or with `NOTHING TO RESTORE` (2026-09-20, #47): a clean
+  answer, not a failure, for when there is genuinely nothing on the account. Entitlements are also
+  read silently at every launch, so a reinstall or a new phone just works; the word on the card is
+  there because App Review requires it.
 - A tap anywhere off the line declines. **Declining is never punished and never nagged:** the
   player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
   automatically exactly once per career. After that it lives on the stats board as one row
@@ -586,6 +635,16 @@ or a rewarded video.
 - **Not built, because it cannot be reached from `simctl`:** the purchase, pending, refund and
   restore paths were never exercised. A `.storekit` file only takes effect when the app is
   launched from Xcode, so every screenshot was taken against no store at all.
+
+**Testing the purchase** (2026-09-20, #47). The local `.storekit` file only applies to a Run from
+Xcode's own default `SandlotDerby` scheme; a second scheme, `SandlotDerby (Sandbox)`, builds the
+same target without it, so a Run from Xcode on that one reaches Apple's actual sandbox instead.
+Reaching the sandbox for real needs, beyond just the scheme: the Paid Apps agreement Active, the
+app record created, `show.contract` created as a Non-Consumable and at "Ready to Submit", and a
+Sandbox Apple Account signed in under Settings → Developer. TestFlight purchases are free and also
+use the sandbox. `RESTORE` always asks for the Apple ID password, because that is what
+`AppStore.sync()` itself does — not a bug in the card. None of this has been exercised for real
+yet; see "Not built" above.
 
 **Build order (M5):** ~~`parkCeiling` + tests~~ (done) → ~~contract card scene~~ (done) →
 ~~StoreKit 2 with the local configuration file~~ (done, untested against a real store) → sandbox
