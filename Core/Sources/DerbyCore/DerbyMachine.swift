@@ -27,6 +27,11 @@ public struct Timings: Equatable {
     public var takeGrace: Double = 0.05
     /// Flight playback speed multiplier. 1 is real time; every classic derby ran faster.
     public var flightSpeed: Double = 2
+    /// The longest the windup will wait for the organist before pitching anyway — past it the
+    /// pitch cuts the organ off exactly as it always has. The funeral march (~3.7 s) is the one
+    /// cue longer than this (#46, DESIGN.md §11). Dwight, 2026-09-20: "maybe the pitcher waits
+    /// for the music to stop. usually irl they do."
+    public var maxMusicHold: Double = 2.5
     public init() {}
     public static let standard = Timings()
 }
@@ -335,6 +340,15 @@ public struct DerbyMachine: Equatable {
     /// The quality of the swing that made contact, 0…1, carried from `slice(_:)` into
     /// `contactHoldNow`.
     private var contactQuality: Double = 0
+    /// Seconds left on the organ cue the app just started, set by `holdForMusic` and counted
+    /// down every tick regardless of beat (#46). Only `.windup` ever holds for it; it decays
+    /// quietly through every other beat, so a cue that outlasted its hold cannot ambush a later
+    /// windup. Never saved, never part of a replay record: it starts at 0 on every machine.
+    private var musicRemaining: Double = 0
+    /// How long the current windup has been holding for the music. Reset whenever a beat is
+    /// (re)entered, so the cap in `Timings.maxMusicHold` is measured from the start of *this*
+    /// windup, not carried over from an earlier one.
+    private var musicHoldElapsed: Double = 0
     /// The tally as it stood the instant before the swing on screen, and the streak with it: the
     /// two halves of the comparison a record is (#41). Nil before the first swing of a machine.
     private var tallyBeforeSwing: Tally? = nil
@@ -535,6 +549,22 @@ public struct DerbyMachine: Equatable {
         queuedWarmUp = WarmUpRun(card: card, pitches: resuming, homeRunStreak: streak)
     }
 
+    /// The app tells the machine how long an organ cue it just started will take to finish
+    /// sounding, so the next windup can wait for it (#46, DESIGN.md §11). Never shortened, only
+    /// extended — two cues that overlap (the app never means for two to, but a cap makes it
+    /// harmless either way) leave the longer of the two standing. Called from any beat; the
+    /// windup that is holding, or the next one to begin, is whichever reads it.
+    public mutating func holdForMusic(_ seconds: Double) {
+        musicRemaining = max(musicRemaining, seconds)
+    }
+
+    /// True while the windup is holding the pitcher set for the organ (#46) — for anyone who
+    /// wants to know without reaching into the beat, `musicRemaining` (private) and the cap
+    /// itself. False the instant the cue finishes or `Timings.maxMusicHold` is reached.
+    public var isHoldingForMusic: Bool {
+        beat == .windup && musicRemaining > 0 && musicHoldElapsed < timings.maxMusicHold
+    }
+
     /// Called by the scene when `Contact.test` returned `.contact` during `.pitch`.
     public mutating func slice(_ crossing: SliceCrossing) {
         guard beat == .pitch else { return }
@@ -731,19 +761,35 @@ public struct DerbyMachine: Equatable {
 
     @discardableResult
     public mutating func tick(_ dt: Double) -> [Transition] {
-        elapsed += dt
+        // Counted down in every beat, not just `.windup` (#46): a cue that started during
+        // `.result` or `.miss` has already spent part of itself by the time the next windup
+        // reads it, and one still running when the cap cuts a windup short decays away quietly
+        // through the beats that follow rather than ambushing a later one.
         tally.add(.secondsPlayed, dt)
+        musicRemaining = max(0, musicRemaining - dt)
+        // Whether *this* tick is held for the organ. Computed once, ahead of the switch, so the
+        // windup clock (`elapsed`) and the hold clock (`musicHoldElapsed`) can never both move on
+        // the same tick — the whole point is that one of them stands still while the other does.
+        let holdingForMusic = beat == .windup && musicRemaining > 0 && musicHoldElapsed < timings.maxMusicHold
+        if holdingForMusic { musicHoldElapsed += dt } else { elapsed += dt }
         var out: [Transition] = []
         switch beat {
         case .windup:
             if advanceOwed && !isAtCeiling {
                 // The ceiling lifted with a call-up owed: pay it between pitches, and start the
-                // windup again under the new park's rules. `.calledUp` already played.
+                // windup again under the new park's rules. `.calledUp` already played. This runs
+                // whether or not the windup above is mid-hold — an owed advance is never made to
+                // wait on the organist (#46).
                 advanceOwed = false
                 advancePark(&out, announcing: false)
                 newPitch()
             } else if queuedWarmUp != nil {
+                // Same rule: the day's ten take the field at the next windup, hold or no hold.
                 beginQueuedWarmUp(&out)
+            } else if holdingForMusic {
+                // The organist is still playing: `elapsed` stayed at whatever it was (0, for an
+                // ordinary fresh windup), so `AtBatScene.drawPitcher` keeps drawing the set pose
+                // with no scene change (#46, DESIGN.md §11).
             } else if elapsed > timings.windup {
                 enter(.pitch)
                 // A pitch is spent the moment it is thrown, as a `.taken` that the swing then
@@ -925,6 +971,7 @@ public struct DerbyMachine: Equatable {
     private mutating func enter(_ b: Beat) {
         beat = b
         elapsed = 0
+        musicHoldElapsed = 0
     }
 
     /// Inside a Warm Up the next pitch is the next one off the day's card; the career's

@@ -289,6 +289,12 @@ final class GameController {
 
     /// Hard cut to the board. The machine stops ticking while it is up (`StatsScene.ticksMachine`).
     /// *Take Me Out to the Ball Game* starts a beat later, if this park has an organ (#17).
+    ///
+    /// This is the one organ cue that never calls `holdForOrganCue` (#46): the machine's clock is
+    /// stopped for as long as the board is up, so there is no windup for a hold to reach — the
+    /// freeze already does what the hold does everywhere else. Calling it anyway would be worse
+    /// than a no-op: nothing would tick it down while the board is open, so the very next windup
+    /// after `hideStats()` cuts the organ dead would sit through a silent hold before throwing.
     func showStats() {
         guard let view, view.scene !== statsScene else { return }
         view.presentScene(statsScene)
@@ -397,13 +403,19 @@ final class GameController {
                 // signed. Anywhere else it is the ordinary one and there is nothing to sell.
                 if machine.isAtCeiling { offerTheContract = true }
             case .calledStrikesInARow:
-                if machine.hasOrgan { sound.threeBlindMice() }   // there is no third strike here (#17)
+                if machine.hasOrgan {
+                    sound.threeBlindMice()   // there is no third strike here (#17)
+                    holdForOrganCue(SoundBoard.threeBlindMiceSeconds)
+                }
             case .newRecord:
                 // The landing number is up and one of the career's bests has just changed hands
                 // (#41). The organ where the park has one, beeps where it does not; the pitch
-                // cuts it off like every other organ cue.
+                // cuts it off like every other organ cue. Only the organ voice holds the pitcher
+                // (#46) — the beeps that stand in where there is no organist never do, since
+                // there is no organist there to wait for either.
                 sound.newRecord(hasOrgan: machine.hasOrgan)
                 haptics.newRecord()
+                if machine.hasOrgan { holdForOrganCue(SoundBoard.newRecordFlourishSeconds) }
             case .warmUpEnded(let result, let bests):
                 finishedCard = (result, bests)
             case .warmUpBegan, .parkChanged, .flash:
@@ -417,6 +429,7 @@ final class GameController {
                 mournStreak(after: 0.35)
             } else if machine.streakNow == 2, machine.hasOrgan {
                 sound.chargePrompt()         // two straight: one more starts the fireworks (§17)
+                holdForOrganCue(SoundBoard.chargePromptSeconds)
             }
         }
         if let finishedCard { finishWarmUp(finishedCard.result, finishedCard.bests) }
@@ -578,9 +591,19 @@ final class GameController {
         streakAtThePitch = 0
         if streak >= 5, machine.hasOrgan {
             sound.funeralMarch(after: seconds)
+            holdForOrganCue(SoundBoard.funeralMarchSeconds(after: seconds))
         } else {
-            sound.streakOver(after: seconds)
+            sound.streakOver(after: seconds)      // boops, not the organ: never holds him
         }
+    }
+
+    /// Extends the pitcher's wait for an organ cue that was just started, capped in Core
+    /// (`Timings.maxMusicHold`, #46) so a long tune like the funeral march cannot stall the game.
+    /// Never called for `-mute`: the app can see the silent switch even though Core cannot
+    /// (DESIGN.md §11), and a cue nobody can hear should not be one anybody waits for.
+    private func holdForOrganCue(_ seconds: Double) {
+        guard !sound.isMuted else { return }
+        machine.holdForMusic(seconds)
     }
 
     // MARK: - Slice input entry points, used by AtBatScene.

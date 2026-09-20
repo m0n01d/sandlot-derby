@@ -59,13 +59,22 @@ games) were bolt-ons inside full sims. The bare loop is open.
 
 | # | Beat | Camera | Duration | What happens |
 |---|---|---|---|---|
-| 1 | **windup** | at-bat | 0.50 s | pitcher's three frames. A slice made now is ignored, not punished. |
+| 1 | **windup** | at-bat | 0.50 s, held for the organ if one is playing (`Timings.maxMusicHold`, ≤ 2.5 s more, §11, #46) | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
 | 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. On a home run, which one of the park's count it was: `HR 2 OF 3`, or `PARK CLEARED` on the one that makes it (§10, #40). `NEW RECORD` and the record's name when a career best just fell, with the landing number flashing `score`/`chalk` (§10, #41). The park changes at the **end** of this hold, and only after the clearing home run. Then hard cut back to 1. |
 | — | **miss** | at-bat | 1.20 s | miss markers (§7), `MISS` / `STRIKE` / `BALL`. Then back to 1. Never cuts. |
+
+**The pitcher waits for the organist** (2026-09-20, #46). Dwight: "maybe the pitcher waits for the
+music to stop. usually irl they do." Claude's design, unreviewed: while an organ cue the app just
+started is still sounding, the windup clock does not move — the pitcher stands in his set pose,
+the first of the three frames above, with no scene change — and the ordinary 0.5 s windup plays
+once the cue ends. `Timings.maxMusicHold` (2.5 s) caps the wait; past it the pitch is thrown
+anyway and cuts the organ off exactly as it always has (§11). Only the organ holds him: the ump,
+the crowd, the thuds and the fireworks never do, and neither does an owed park advance or a queued
+Warm Up (§16, §18), which pay at the very next windup whether or not one is in progress.
 
 A pitch is *taken* when `elapsed > duration × 1.15 + 0.05 s` with no contact. If a slice is in
 progress at that moment (`DerbyMachine.sliceInProgress`, mirrored every frame from whether a
@@ -344,6 +353,38 @@ flourish (#41) is the fourth of them, and its beeps render at launch with the ot
 and **stops dead when the pitch is thrown**, as a real organist does when the pitcher comes set.
 The rally prompt is a run up the major scale, deliberately **not** the famous six-note "Charge!"
 fanfare, which was written in 1946 and is still under copyright; license it or leave it.
+
+**The pitcher waits for the organist** (2026-09-20, #46). Dwight: "maybe the pitcher waits for the
+music to stop. usually irl they do." Turned round from the paragraph above: instead of the organ
+always losing to the pitch, the windup now gives it the chance to finish first. Claude's design,
+unreviewed:
+
+- Core knows nothing about audio, so the app tells it how long: every place `GameController`
+  starts an organ cue also calls `DerbyMachine.holdForMusic(seconds)` with that cue's own length,
+  read from `Synth`'s tables (`SoundBoard`'s "Organ cue lengths" section) so nothing here can drift
+  from what actually plays — the rally prompt's length includes the crowd's *CHARGE!* answer, and
+  the funeral march's includes its lead-in, since cutting the pitcher loose mid-call-and-response
+  felt wrong. `DerbyMachine` keeps `musicRemaining`, counts it down every tick regardless of beat,
+  and while it is above zero **at a windup**, that windup's own clock does not advance: the
+  pitcher stands in his set pose (the first of the windup's three frames, §3) with no scene change.
+  Once the cue ends, the ordinary 0.5 s windup plays and `.pitchThrown` fires as it always has.
+- **A cap**, `Timings.maxMusicHold` (2.5 s): past it the pitch is thrown anyway and cuts the organ
+  off dead, exactly as before — the cap is the backstop, not a new behaviour. The funeral march
+  (~3.7 s) is the one cue longer than it.
+- **Organ only.** The ump, the crowd, the thuds and the fireworks never hold him — nothing that
+  plays through an ordinary voice does, only a cue through the organ's own player node. The beeps
+  that stand in for a record's flourish where there is no organist (Single-A) do not hold him
+  either: there is no organist there to wait for. Nothing new sounds during the pitch, as before.
+- Never with `-mute`, and never when the cue would not actually sound: `GameController` checks
+  `SoundBoard.isMuted` and `DerbyMachine.hasOrgan` before ever calling `holdForMusic`, since Core
+  cannot see the silent switch itself. The stats-board tune (below) is the one organ cue that never
+  calls it either — the machine's clock is already stopped for as long as the board is up, so
+  there is no windup for a hold to reach, and calling it anyway would leave a silent hold sitting
+  over the first windup after the board closes.
+- An owed park advance and a queued Warm Up (§16, §18) are never made to wait on the organist:
+  both still happen at the very next windup, hold in progress or not.
+- A replay clip starts inside the pitch (§19) and rebuilds a fresh `DerbyMachine`, which carries no
+  hold with it — nothing of a live hold can leak into a record or the machine built from one.
 
 **The rest of the organ** (#17, 2026-09-19, Claude's, unreviewed — nobody has heard any of this
 against the real songs yet): three more tunes through the same voice, all public domain on
