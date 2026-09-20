@@ -12,6 +12,31 @@ packages:
   DerbyCore:
     path: ../Core
 
+# The one purchase (DESIGN.md §16). The local StoreKit configuration only takes effect when the
+# app is launched FROM XCODE: run by `simctl`, `Product.products` comes back empty and the card
+# says NO CONNECTION. An explicit scheme, because the autocreated one cannot carry this.
+#
+# The path is relative to the REPO ROOT, not to this file: XcodeGen writes the scheme's
+# reference with a fixed `../../` in front, which climbs out of `App/SandlotDerby.xcodeproj`
+# and out of `App/`. `SandlotDerby.storekit` here would silently point at a file that is not
+# there, and the only symptom would be a card that says NO CONNECTION inside Xcode too.
+schemes:
+  SandlotDerby:
+    build:
+      targets:
+        SandlotDerby: all
+    run:
+      config: Debug
+      storeKitConfiguration: App/SandlotDerby.storekit
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
 targets:
   SandlotDerby:
     type: application

@@ -423,8 +423,13 @@ the player is not entitled, the cut back goes to the **contract card** instead o
   player returns to Triple-A, which goes on counting every stat and the streak. The card is offered
   automatically exactly once per career. After that it lives on the stats board as one row
   (`THE SHOW  $1.99  SLICE TO SIGN`). No timers, sale banners, badges or reminders.
-- The price is the store's localized `displayPrice`. The 3×5 face gains `$ € £ ¥`; any other
-  currency is shown as its ISO code (`BRL 14.90`), which the face already has.
+- The price is the store's localized `displayPrice`, drawn on the card in the **5×7** face, which
+  gains `$ € £ ¥` plus `.` and `,`. Not the 3×5 face, as this section first said: a 3×5 cell has
+  no room for the stroke that has to overshoot the `S` above and below, and without it a `$`
+  reads as a blocky `5` — "$1.99" came out as "51.99" (corrected 2026-09-19). Any currency the
+  5×7 face cannot spell is shown as its ISO code (`BRL 14.90`) in the 3×5 face. The stats-board
+  row always uses the ISO form (`USD 1.99`): its rows are 7 px apart and its grammar is 3×5
+  throughout, so a 7 px-tall glyph would touch its neighbours.
 
 **Core.** `DerbyMachine.parkCeiling: Int?` (nil = no ceiling). A home run in the ceiling park does
 not advance; it emits `.calledUp` so the scene can show the card, and counts as a home run in
@@ -465,8 +470,30 @@ the App Store Small Business Program (15 %).
 direct-sold or swapped with other indies, drawn in the palette. Never an interstitial, a banner
 or a rewarded video.
 
-**Build order (M5):** ~~`parkCeiling` + tests~~ (done) → contract card scene → StoreKit 2 with the local
-configuration file → sandbox on TestFlight → grandfathering → listing copy.
+**Built 2026-09-19** (Claude, unreviewed), app side: `Store` (StoreKit 2, no server),
+`ContractScene`, the ceiling wired to the entitlement, the stats-board row, and
+`App/SandlotDerby.storekit`. What the paragraphs above left for the build to decide:
+
+- **The ceiling is `max(lastMinorsPark, currentPark)`**, derived from `League.theShow`, so the
+  refund rule and the ordinary rule are one line: a refunded player stops where they stand and a
+  new player stops at Triple-A. It is applied at launch and on every entitlement change.
+- **A tap on the dotted line neither signs nor declines.** Signing needs a stroke of at least
+  `minimumSliceLength` that crosses the line. A tap that lands on the band was aimed at it, so
+  treating it as a decline would punish a missed stroke; a tap anywhere else declines, as specced.
+- **The board row goes first, not last.** The board runs out of columns on a 320-wide canvas and
+  drops whatever is last, and a row nobody can reach is not an offer.
+- **The price is `-` until the store answers**, rather than a number the game made up.
+- **The currency glyphs are in the 5×7 face, not the 3×5 one**, and the 3×5 face has none, so
+  the bad `$` cannot be drawn again. Two 3×5 attempts were tried and both failed to read: a
+  zigzag-plus-stroke came out as `£`, and the face's own `S` with the middle column filled came
+  out as `5`. Seven rows are what the symbol needs.
+- **Not built, because it cannot be reached from `simctl`:** the purchase, pending, refund and
+  restore paths were never exercised. A `.storekit` file only takes effect when the app is
+  launched from Xcode, so every screenshot was taken against no store at all.
+
+**Build order (M5):** ~~`parkCeiling` + tests~~ (done) → ~~contract card scene~~ (done) →
+~~StoreKit 2 with the local configuration file~~ (done, untested against a real store) → sandbox
+on TestFlight → ~~grandfathering~~ (done) → listing copy.
 
 **Worth watching in the beta, not a blocker:** a good player clears the minors in three swings, so
 the trial can be short. Median pitches-to-call-up says how short, and the free daily card (#3) is
@@ -480,6 +507,10 @@ what keeps a non-payer around, so ship it first.
    celebration; read another it is exactly the reminder "never nagged" rules out. The quiet
    alternative: the machine announces the first one per session and the app treats the rest as
    ordinary home runs. Decide when the contract card is built and it can be heard.
+   **Still open, now with a number** (2026-09-19): a `-declined -autoslice` run reached 11 home
+   runs and 0 parks cleared in about a minute, so a robot saw `CALLED UP` and heard the arpeggio
+   eleven times in Triple-A. It is built as specced and not decided. A human swinging at a
+   fraction of that rate may find it a celebration; the robot makes it look like a nag.
 
 ## 17. Life: fireworks, sky and backdrops
 
