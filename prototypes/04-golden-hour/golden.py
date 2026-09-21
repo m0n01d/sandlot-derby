@@ -326,9 +326,13 @@ def leafy(c, look, x0, x1, baseline, seed):
                 c.set(px_, py_, t[2] if l > 0.75 else (t[1] if l > 0.1 else t[0]))
 
 
-def wing_top(x):
+TIERS = {'full': (82, 10), 'bleachers': (88, 7), 'lowBleacher': (92, 3)}   # top beside the board, two-pixel steps to the edge
+
+
+def wing_top(x, tier='full'):
     d = (124 - x) / 124 if x < 160 else (x - 196) / 124
-    return 82 - int(max(0, min(1, d)) * 10) * 2
+    top, steps = TIERS[tier]
+    return top - int(max(0, min(1, d)) * steps) * 2
 
 
 def wing(c, look, side, seed):
@@ -757,31 +761,34 @@ def pitcher(frame, look):
     return s
 
 
-def wing(c, look, side, seed):
+def wing(c, look, side, seed, tier='full'):
     lit = side != look['dim_side']
     mass, lip, under = look['stand_lit'] if lit else look['stand_dim']
     heads = look['heads_lit'] if lit else look['heads_dim']
     shirts = look['shirts_lit'] if lit else look['shirts_dim']
     deck_mass, roof, lamp, column = look['deck']
+    full = tier == 'full'
+    head = 10 if full else 2                                # rows under the roof that seat nobody
     xs = range(0, 124) if side < 0 else range(196, W)
     g = random.Random(seed)
     for x in xs:
-        top = wing_top(x)
+        top = wing_top(x, tier)
         c.rect(x, top, 1, 96 - top, mass)
-        c.rect(x, top + 2, 1, 5, deck_mass)
-        c.set(x, top, roof); c.set(x, top + 1, under)
-        if x % 6 == 2:
-            c.set(x, top + 4, lamp); c.set(x + 1, top + 4, lamp)
-        if x % 17 == 5:
-            c.rect(x, top + 7, 1, 3, column)
+        c.set(x, top, roof if full else lip); c.set(x, top + 1, under)
+        if full:
+            c.rect(x, top + 2, 1, 5, deck_mass)
+            if x % 6 == 2:
+                c.set(x, top + 4, lamp); c.set(x + 1, top + 4, lamp)
+            if x % 17 == 5:
+                c.rect(x, top + 7, 1, 3, column)
         for k in (1, 2):
             yy = 96 - 9 * k
-            if yy > top + 10:
+            if yy > top + head:
                 c.set(x, yy, lip)
     row, y = 0, 94
     while y > 64:
         for x in xs:
-            if (x + row) % 2 or y - 1 <= wing_top(x) + 10 or (96 - y) % 9 == 0 or (96 - (y - 1)) % 9 == 0:
+            if (x + row) % 2 or y - 1 <= wing_top(x, tier) + head or (96 - y) % 9 == 0 or (96 - (y - 1)) % 9 == 0:
                 continue
             if x % 23 == 11:
                 c.set(x, y, under); c.set(x, y - 1, under); continue
@@ -789,10 +796,35 @@ def wing(c, look, side, seed):
                 c.set(x, y - 1, g.choice(heads)); c.set(x, y, g.choice(shirts))
         y -= 3; row += 1
     edge = 123 if side < 0 else 196
-    c.rect(edge, wing_top(edge), 1, 96 - wing_top(edge), under)
+    c.rect(edge, wing_top(edge, tier), 1, 96 - wing_top(edge, tier), under)
 
 
-def at_bat(look, beat='pitch'):
+def near_piece(c, look, kind, x, base):
+    """§17's near piece in the stand colours, with one lit edge on the side of the light."""
+    mass, lip, under = look['stand_lit']
+    e = -1 if look['light'][0] < 0 else 1                   # which edge the light catches
+    if kind == 'waterTower':
+        c.rect(x - 6, base - 18, 13, 8, mass); c.rect(x - 5, base - 19, 11, 1, mass); c.rect(x - 2, base - 21, 5, 2, under)
+        c.rect(x - 6 if e < 0 else x + 6, base - 18, 1, 8, lip); c.rect(x - 6, base - 13, 13, 1, under)
+        for lx in (-5, 5):
+            c.rect(x + lx, base - 10, 1, 10, under)
+        c.line(x - 5, base - 9, x + 5, base - 1, under); c.line(x + 5, base - 9, x - 5, base - 1, under)
+    elif kind == 'lightPoles':
+        for dx in (-13, 12):
+            c.rect(x + dx, base - 20, 2, 20, under); c.rect(x + dx - 4, base - 24, 10, 4, mass)
+            c.rect(x + dx - 4 if e < 0 else x + dx + 5, base - 24, 1, 4, lip)
+            if look['towers']:
+                for i in range(3):
+                    c.rect(x + dx - 3 + i * 3, base - 23, 2, 2, look['deck'][2])
+    elif kind == 'house':
+        c.rect(x - 7, base - 9, 14, 9, mass)
+        for j in range(7):
+            c.rect(x - j - 1, base - 15 + j, j * 2 + 2, 1, under)
+            c.set(x - j - 1 if e < 0 else x + j, base - 15 + j, lip)
+        c.rect(x - 2, base - 5, 3, 5, under); c.rect(x + 3, base - 7, 2, 2, look['deck'][2] if look['towers'] else under)
+
+
+def at_bat(look, beat='pitch', tier='full', park=None, feet=None, pole=28, near=None):
     c = Canvas(W, H)
     sky(c, look)
     if look['stars']:
@@ -800,13 +832,20 @@ def at_bat(look, beat='pitch'):
     sun(c, look)
     clouds(c, look, look['clouds_atbat'])
     V.hills(c, look['hill'][0], 20, 5, r=(30, 52)); V.hills(c, look['hill'][1], 12, 9, r=(18, 30))
-    leafy(c, look, 118, 202, 96, 21)
+    if tier == 'full':
+        leafy(c, look, 118, 202, 96, 21)
+    else:                                                   # a low stand, or none: the far side of town shows over it
+        leafy(c, look, 0, W, 96, 21)
     if look['towers']:
         towers(c, look)
-    wing(c, look, -1, 3); wing(c, look, +1, 4)
+    if tier != 'fenceAndTrees':
+        wing(c, look, -1, 3, tier); wing(c, look, +1, 4, tier)
+    if near:
+        kind, nx = near
+        near_piece(c, look, kind, nx, 96 if tier == 'fenceAndTrees' else wing_top(nx, tier))
     lit, dark = look['pole'] if look['light'][0] < 0 else look['pole'][::-1]
     for x in (40, 280):
-        c.rect(x, 96 - 28, 1, 28, lit); c.rect(x + 1, 96 - 28, 1, 28, dark); c.rect(x - 1, 96 - 30, 4, 2, P['score'])
+        c.rect(x, 96 - pole, 1, pole, lit); c.rect(x + 1, 96 - pole, 1, pole, dark); c.rect(x - 1, 96 - pole - 2, 4, 2, P['score'])
     wl, wm, wd = look['wall']
     c.rect(0, 96, W, 8, wm); c.rect(0, 97, W, 1, wl)
     bayer_gradient(c, 0, 98, W, 6, wm, wd)
@@ -843,7 +882,7 @@ def at_bat(look, beat='pitch'):
     c.rect(125, 77, 70, 19, frame)
     c.rect(125 if look['light'][0] < 0 else 193, 77, 2, 19, edge); c.rect(125, 77, 70, 1, edge)
     c.rect(128, 80, 64, 16, face)
-    c.t3(134, 84, NOW.FEET, P['score']); c.t3(134, 91, NOW.PARK, P['chalk'])
+    c.t3(134, 84, feet or NOW.FEET, P['score']); c.t3(134, 91, park or NOW.PARK, P['chalk'])
     for i in range(3):
         c.rect(168 + i * 5, 84, 3, 3, P['score'] if i < 1 else frame)
     for dx in (6, 55):
@@ -886,7 +925,7 @@ def at_bat(look, beat='pitch'):
         c.baseball(bx, by, r, look['ball_hi'])
         c.px(bx + 2, by + 2, look['ball_lo']); c.px(bx + 1, by + 3, look['ball_lo']); c.px(bx + 3, by + 1, look['ball_lo'])
         c.t3(8, H - 12, '87 MPH', P['chalk'], shadow=INK)
-    c.t3(8, 8, NOW.HUD, P['chalk'], shadow=INK)
+    c.t3(8, 8, NOW.HUD if park is None else '%s  12 PITCHES' % park, P['chalk'], shadow=INK)
     return c
 
 
@@ -949,7 +988,27 @@ def cycle(name, render):
     print(name, counts)
 
 
+LADDER = [('SINGLE-A', 'fenceAndTrees', '330 FT', 16, ('house', 72)), ('DOUBLE-A', 'lowBleacher', '350 FT', 20, ('waterTower', 248)),
+          ('TRIPLE-A', 'bleachers', '375 FT', 24, ('lightPoles', 72)), ('PARK 12', 'full', None, 28, None)]
+TIER_WORDS = {'fenceAndTrees': 'NO STAND', 'lowBleacher': 'ONE TIER', 'bleachers': 'TWO TIERS', 'full': 'THE MOCK'}
+
+
+def tiers(name, look):
+    strip = 12
+    sheet = Canvas(W * 2, (H + strip) * 2, INK)
+    for n, (park, tier, feet, pole, near) in enumerate(LADDER):
+        cv = at_bat(look, tier=tier, park=None if tier == 'full' else park, feet=feet, pole=pole, near=near)
+        x, y = (n % 2) * W, (n // 2) * (H + strip)
+        sheet.blit(cv, x, y + strip)
+        sheet.t3(x + 6, y + 4, '%s  %s' % (park, TIER_WORDS[tier]), P['score'])
+        if n % 2:
+            sheet.rect(x, y, 1, H + strip, INK)
+    sheet.png(os.path.join(OUT, name + '.png'), 4)
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
+    tiers('c4-tiers-golden', DUSK)
+    tiers('c4-tiers-night', NIGHT)
     cycle('c3-cycle-atbat', lambda look: at_bat(look))
     cycle('c3-cycle-flight', lambda look: flight(look, 'wide'))
