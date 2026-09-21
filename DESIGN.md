@@ -1544,7 +1544,8 @@ does not force the entitlement.
 - Each park already draws its towers, its stars and its moon from the scenery stream, and throws
   them away by day. Remove the `isNight` gates. Add no draw and no stream. Thus no cloud, breeze,
   moon, tower or star of a park moves.
-- Draw the towers only while the lamps are on. Each park has them then, the ladder parks too.
+- The towers stand in each phase and in each park, the ladder parks too (Dwight, 2026-09-21).
+  Their banks are lit only while the lamps are on.
 - Keep the forty seeded stars of §17 and their blink. `night` shows all forty. `twilight` shows
   the first 22. The counts are `SceneryRules` knobs.
 - The moon shows only in `night`.
@@ -1593,7 +1594,7 @@ The names in the last column are functions in `prototypes/04-golden-hour/`.
 | Crowd | people in rows with aisles. A person is one head pixel above one shirt pixel. In the close framing a person is 2×4. `crowdShare` sets how many seats are full. The bounce of §17 lifts a person by one pixel. The crowd at bat does not bounce | `golden.wing`, `side.crowd_rows` |
 | Upper deck, pennants, stand flags | a roof line, a row of lamps or windows, columns. The pennant posts stop at the roof. The flags of §17 keep their two frames | `side.upper_deck`, `side.pennant_string`, `side.flags` |
 | Out-of-town board | a frame with a lit lip, a dark face, rows of dashes, a lit pane with a glow. The dents and the broken pane of §17 do not change | `side.board` |
-| Towers | a lattice pole and a lamp bank with a dithered bloom. Only while the lamps are on. A bank that is dark in the chase keeps its lamps in the pole colour and its inner bloom only. A bank that is out has no bloom | `golden.towers` |
+| Towers | a lattice pole and a lamp bank, in each phase. While the lamps are off, a bank has its lamps in the pole colour and no bloom. While the lamps are on, a bank has lit lamps and a dithered bloom. A bank that is dark in the chase keeps its lamps in the pole colour and its inner bloom only. A bank that is out has no bloom | `golden.towers` |
 | Wall | a lit top row, an ordered-dither face that gets darker to its foot, panel seams, and a `score` rail | `golden.at_bat`, `golden.flight` |
 | Warning track | a `dirt` band in front of the wall, with the shadow of the wall on it | same |
 | Grass at bat | a checkerboard in perspective. The bands get taller to the camera. The columns meet at a point above the wall | `golden.at_bat` |
@@ -1697,14 +1698,12 @@ The palette lines of each phase are in `docs/palette.md`.
 
 ### Open
 
-1. **Towers by day.** The mock draws no tower until the lamps are on. A real park has dark towers
-   all day. Dwight decides.
+1. **Towers by day.** Decided. Dwight wants the towers by day too (2026-09-21). See the Towers row.
 2. **A player far from the city of the zone.** The error is about two hours at worst. A setting is
    possible, and a menu is not (§1).
-3. **The crowd share.** The numbers are Claude's.
-4. **Contrast on a pale sky.** `chalk` on the `dawn` and `midday` sky is the weakest contrast in
-   the set. This applies to the trail and to the `chalk` firework specks. A darker pixel below
-   each trail dot in those phases is drawn nowhere yet. Make the decision on the iPad mini.
+3. **The crowd share.** Decided. Dwight accepted the numbers (2026-09-21).
+4. **Contrast on a pale sky.** Decided for now. Dwight said that the trail is fine (2026-09-21).
+   `chalk` on the `dawn` and `midday` sky stays the weakest contrast in the set.
 5. **The moon.** The moon phase from the date is possible in a pure function. It is not in this
    spec.
 6. **The three tiers with no mock.** Draw them and show Dwight before step 3 merges.
