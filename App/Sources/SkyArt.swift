@@ -109,6 +109,100 @@ enum SkyArt {
         }
     }
 
+    // MARK: - The sky itself (DESIGN.md §20)
+
+    /// The phase's colour stops, top to horizon: a flat band where two stops share a colour and
+    /// an ordered-dither blend where they do not (`golden.sky`). Every row of the canvas is
+    /// written, the last stop carrying on to the bottom edge, because this is the floor of the
+    /// frame and the field goes in on top of it.
+    ///
+    /// The at-bat camera ends its stops on the top of the wall band; the flight camera stretches
+    /// the same six or seven stops down to the canonical ground in *both* framings — the sky is
+    /// infinitely far away, so the close camera lifting the ground does not move it, it only
+    /// exposes more of the last stop.
+    static func sky(into c: PixelCanvas, look: Look, width: Double, flightCamera: Bool,
+                    rules: LookRules = .standard) {
+        let source = look.skyStops(flightCamera: flightCamera)
+        guard let last = source.last else { return }
+        let bottom = flightCamera ? rules.skyBottomFlight : rules.skyBottomAtBat
+        let stretch = flightCamera ? bottom / rules.skyBottomAtBat * rules.flightStretch : 1
+
+        var stops = source.map { (y: ($0.y * stretch).rounded(), colour: $0.colour) }
+        stops[stops.count - 1].y = bottom
+
+        for i in 0..<(stops.count - 1) {
+            let (y0, a) = stops[i], (y1, b) = stops[i + 1]
+            guard y1 > y0 else { continue }
+            if a == b {
+                c.rect(0, y0, width, y1 - y0, a)
+            } else {
+                c.bayerGradient(0, y0, width, y1 - y0, a, b)
+            }
+        }
+        // Whatever the close camera exposes below the last stop is that last stop, flat.
+        c.rect(0, bottom, width, Double(c.height) - bottom, last.colour)
+    }
+
+    /// A sun or a moon: a disc with a halo that dithers into the sky, because with no alpha a
+    /// light cannot fade into anything (`golden.sun`). The halo is an ellipse wider than it is
+    /// tall, which is what a low sun in haze actually looks like.
+    ///
+    /// `clipY` stops it at the ground, so the low sun at `goldenHour` sits *behind* the horizon
+    /// rather than on it. `bite` is the moon's: a disc of the top sky stop taken out of one side.
+    static func sunOrMoon(into c: PixelCanvas, look: Look,
+                          x sx: Double, y sy: Double, radius r: Double, halo: Double,
+                          clipY: Double? = nil, biteDirection: Int? = nil,
+                          rules: LookRules = .standard, layout: BackdropLayout = .standard) {
+        guard let tones = look.sun, tones.count >= 2 else { return }
+        let body = tones[0], glow = tones[1]
+        guard halo > r else { return }
+
+        let spread = halo * rules.sunHaloSpreadX
+        var y = (sy - halo).rounded(.down)
+        while y < sy + halo {
+            if let clipY, y >= clipY { break }
+            var x = (sx - spread).rounded(.down)
+            while x < sx + spread {
+                let dx = x + 0.5 - sx, dy = (y + 0.5 - sy) * rules.sunHaloSquashY
+                let d = (dx * dx + dy * dy).squareRoot()
+                if d <= r {
+                    c.px(x, y, body)
+                } else if d < halo,
+                          (halo - d) / (halo - r) * rules.sunHaloStrength
+                            > PixelCanvas.threshold(Int(x), Int(y)) {
+                    c.px(x, y, glow)
+                }
+                x += 1
+            }
+            y += 1
+        }
+
+        // The bite: a disc of the very top of the sky, pushed to the seeded side and kept inside
+        // the moon, so the moon is a crescent and not a disc with a hole beside it.
+        if let biteDirection, let top = look.skyAtBat.first?.colour {
+            let bx = sx + Double(biteDirection) * r * layout.moonBiteOffset
+            let by = sy - r * 0.2
+            let br = r * layout.moonBiteRadius
+            for p in Mask.ellipse(cx: bx, cy: by, rx: br, ry: br) {
+                let ddx = Double(p.x) + 0.5 - sx, ddy = Double(p.y) + 0.5 - sy
+                if (ddx * ddx + ddy * ddy).squareRoot() <= r {
+                    c.px(Double(p.x), Double(p.y), top)
+                }
+            }
+        }
+    }
+
+    /// The moon, wherever its park hung it. The disc is the park's — one park in sixteen has one
+    /// at all, and its place, its size and which way it is bitten are seeded (§17) — and the
+    /// phase only says what colour it is and how far its halo reaches.
+    static func moon(into c: PixelCanvas, look: Look, moon: Moon, width: Double,
+                     clipY: Double? = nil, rules: LookRules = .standard,
+                     layout: BackdropLayout = .standard) {
+        sunOrMoon(into: c, look: look, x: (moon.xFraction * width).rounded(), y: moon.y,
+                  radius: moon.radius, halo: moon.radius * rules.moonHaloScale,
+                  clipY: clipY, biteDirection: moon.biteDirection, rules: rules, layout: layout)
+    }
+
     // MARK: - The sky layer (before the clouds)
 
     /// Stars, the moon and the lights' halos, in that order (§17's draw order). Drawn while the
@@ -123,35 +217,51 @@ enum SkyArt {
     /// `chalk` star and a `chalk` halo can share a sky without the star simply disappearing
     /// into it.
     static func nightSky(into c: PixelCanvas, scenery: Scenery, towers: [TowerFrame],
-                         time: Double, width: Double, phase: DayPhase,
+                         time: Double, width: Double, look: Look,
                          layout: BackdropLayout = .standard,
+                         rules: LookRules = .standard,
                          sceneryRules: SceneryRules = .standard) {
-        let showing = phase == .twilight
+        let showing = look.phase == .twilight
             ? min(scenery.stars.count, max(0, sceneryRules.twilightStars))
             : scenery.stars.count
         for star in scenery.stars.prefix(showing) {
             guard SkyLife.starIsLit(star, at: time) else { continue }
             let x = (star.xFraction * width).rounded()
             guard !isInsideAHalo(x: x, y: star.y, towers: towers, layout: layout) else { continue }
-            c.px(x, star.y, Palette.chalk)
+            // Two rolls off the star's own place, so the same star is the same star every night
+            // and Core keeps a `Star` that says where one is and nothing about how it burns
+            // (§20 "Stars", `golden.stars`).
+            let roll = hashRoll(star.xFraction, star.y, salt: 0x51ED)
+            let bright = roll < rules.starBrightShare
+            c.px(x, star.y, bright ? rules.starBright : rules.starDim)
+            // A bright star gets four dim neighbours — and only a bright one does, which is what
+            // keeps the crosses to a handful instead of a third of the sky.
+            if bright, roll < rules.starNeighbourShare {
+                for (ax, ay) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+                    c.px(x + ax, star.y + ay, rules.starNeighbour)
+                }
+            }
         }
 
-        if phase == .night, let moon = scenery.moon {
-            let cx = (moon.xFraction * width).rounded()
-            c.disc(cx, moon.y, moon.radius, Palette.chalk)
-            // The bite is the night sky itself, taken out of one side. Both night sky bands are
-            // within a hair of each other (`#221144` and `#222244`), so the top one does for a
-            // moon that strays across the boundary between them.
-            c.disc(cx + Double(moon.biteDirection) * moon.radius * layout.moonBiteOffset,
-                   moon.y - moon.radius * 0.2,
-                   moon.radius * layout.moonBiteRadius, Palette.night)
+        if look.phase == .night, let m = scenery.moon {
+            moon(into: c, look: look, moon: m, width: width, rules: rules, layout: layout)
         }
 
         for tower in towers where !tower.isOut {
-            halo(into: c, tower: tower,
+            halo(into: c, tower: tower, look: look,
                  rings: tower.lit ? layout.haloRings.count : layout.haloRingsWhenDark,
                  layout: layout)
         }
+    }
+
+    /// A 0…1 roll off two numbers that never change. Not `SplitMix64`: this has to answer for one
+    /// star without walking the stream, so the star's own coordinates are the seed.
+    private static func hashRoll(_ a: Double, _ b: Double, salt: UInt64) -> Double {
+        var h = UInt64(bitPattern: Int64((a * 4096).rounded())) &* 0x9E37_79B9_7F4A_7C15
+        h ^= UInt64(bitPattern: Int64((b * 4096).rounded())) &* 0xBF58_476D_1CE4_E5B9
+        h ^= salt &* 0x94D0_49BB_1331_11EB
+        h ^= h >> 29; h = h &* 0xBF58_476D_1CE4_E5B9; h ^= h >> 32
+        return Double(h % 10_000) / 10_000
     }
 
     /// The half-axes of a bank's glow: the bank itself, plus the spread.
@@ -175,10 +285,10 @@ enum SkyArt {
         towers.contains { haloDistance(x: x, y: y, tower: $0, layout: layout) <= 1 }
     }
 
-    /// The glow. With no alpha a light cannot fade into the sky, so it dithers into it: a
-    /// checkerboard of `chalk` in rings that thin outward, which is the one place the palette
-    /// rules allow a dither at all ("dither only in the sky", docs/palette.md).
-    private static func halo(into c: PixelCanvas, tower: TowerFrame, rings: Int,
+    /// The glow. With no alpha a light cannot fade into the sky, so it dithers into it: rings
+    /// that thin outward, the innermost in the phase's inner bloom and the rest in its outer one
+    /// — one of the places §20 allows a dither at all.
+    private static func halo(into c: PixelCanvas, tower: TowerFrame, look: Look, rings: Int,
                              layout: BackdropLayout) {
         let (rx, ry) = haloAxes(tower, layout)
         let xi = Int(rx.rounded()), yi = Int(ry.rounded())
@@ -193,7 +303,7 @@ enum SkyArt {
                 guard ring < rings else { continue }
                 let x = cx + dx, y = cy + dy
                 guard haloPixel(x, y, ring: ring) else { continue }
-                c.px(Double(x), Double(y), Palette.chalk)
+                c.px(Double(x), Double(y), ring == 0 ? look.tower[2] : look.tower[1])
             }
         }
     }
@@ -210,22 +320,20 @@ enum SkyArt {
 
     // MARK: - The towers themselves (after the birds, before the field)
 
-    /// An `ink` lattice pole carrying a bank of `chalk` lamps with `score` centres (§17). A bank
-    /// that is dark in the chase keeps its lamps and loses its centres, so the chase reads as
-    /// light running along the roof rather than as the towers switching off.
+    /// A lattice pole carrying a bank of lamps (§17, §20). A bank that is dark in the chase keeps
+    /// its lamps in the pole colour, so the chase reads as light running along the roof rather
+    /// than as the towers switching off.
     ///
-    /// `poleColour` is the view's, not the spec's. §17 asks for an `ink` lattice, but a night
-    /// sky's two upper bands *are* `night` and `ink` — the same trap the side view's far pieces
-    /// fell into in step 1 — so the colour has to be whichever of the two reads against the band
-    /// the pole actually stands in. The at-bat pole stands entirely in the `#446688` horizon
-    /// band and keeps `ink`; the side view's climbs through `night` and `ink` and is drawn
-    /// lighter than the sky instead.
-    static func towers(into c: PixelCanvas, frames: [TowerFrame], width: Double,
-                       poleColour: Palette.RGBA8, layout: BackdropLayout = .standard) {
+    /// The pole colour is the phase's `tower[0]`. Step 1 had to pick one of two palette entries
+    /// per view, because a night sky's upper bands *were* `night` and `ink` and an `ink` lattice
+    /// in them was invisible; §20 gives the tower a colour of its own that reads against every
+    /// sky it stands in, and both views take it.
+    static func towers(into c: PixelCanvas, frames: [TowerFrame], width: Double, look: Look,
+                       layout: BackdropLayout = .standard) {
         for tower in frames {
             guard tower.x > -tower.bankW, tower.x < width + tower.bankW else { continue }
-            lattice(into: c, tower: tower, colour: poleColour, layout: layout)
-            bank(into: c, tower: tower, layout: layout)
+            lattice(into: c, tower: tower, colour: look.tower[0], layout: layout)
+            bank(into: c, tower: tower, look: look, layout: layout)
         }
     }
 
@@ -258,21 +366,23 @@ enum SkyArt {
         }
     }
 
-    private static func bank(into c: PixelCanvas, tower: TowerFrame, layout: BackdropLayout) {
+    private static func bank(into c: PixelCanvas, tower: TowerFrame, look: Look,
+                             layout: BackdropLayout) {
         let left = tower.x - tower.bankW / 2
-        c.rect(left, tower.bankY, tower.bankW, tower.bankH, Palette.ink)
+        c.rect(left, tower.bankY, tower.bankW, tower.bankH, look.board[2])
         let pitch = layout.lampSize + layout.lampGap
         for row in 0..<tower.rows {
             for col in 0..<tower.columns {
                 let lx = left + 1 + Double(col) * pitch
                 let ly = tower.bankY + 1 + Double(row) * pitch
-                // A bank a ball has put out keeps its lamps and loses their light: dimmer than
-                // `chalk` and darker than the glass it used to be, so the tower still reads as a
-                // tower with its lights off rather than as a hole in the sky (#5).
+                // A bank a ball has put out, and one that is merely dark in the chase, both keep
+                // their lamps in the pole colour: the tower still reads as a tower with its
+                // lights off rather than as a hole in the sky (#5, §20 "Towers").
+                let alight = tower.lit && !tower.isOut
                 c.rect(lx, ly, layout.lampSize, layout.lampSize,
-                       tower.isOut ? Palette.nightSky3 : Palette.chalk)
-                if tower.lit, !tower.isOut, layout.lampSize >= 3 {
-                    c.px(lx + 1, ly + 1, Palette.score)
+                       alight ? look.tower[3] : look.tower[0])
+                if alight, layout.lampSize >= 3 {
+                    c.px(lx + 1, ly + 1, Palette.chalk)
                 }
             }
         }
@@ -280,16 +390,16 @@ enum SkyArt {
 
     // MARK: - Birds
 
-    /// A flock crossing high, every 20–40 s (§17). Three `ink` pixels in two flap frames — but
-    /// `ink` is all but invisible on a night sky that is itself `ink`, the same trap the side
-    /// view's far pieces fell into, so after dark a bird is drawn lighter than the sky instead.
+    /// A flock crossing high, every 20–40 s (§17). Three pixels in two flap frames, in the
+    /// phase's own bird colour — a bird has one in each of the six lines precisely because `ink`
+    /// does not show on a dark sky (§20 "What the clock replaces").
     ///
     /// `skipping` is the one bird a ball has already gone through (#5). There is no bird state
     /// anywhere to mark, so the machine names it and the sky simply leaves it out for the rest
     /// of the crossing.
     static func birds(into c: PixelCanvas, scenery: Scenery, view: View, time: Double,
-                      width: Double, night: Bool, skipping: (slot: Int, index: Int)? = nil) {
-        let colour = night ? Palette.nightSky3 : Palette.ink
+                      width: Double, look: Look, skipping: (slot: Int, index: Int)? = nil) {
+        let colour = look.bird
         for bird in SkyLife.birds(seed: birdSeed(scenery, view), at: time,
                                   breeze: scenery.breezePixelsPerSecond) {
             if let skipping, bird.slot == skipping.slot, bird.index == skipping.index { continue }
@@ -306,17 +416,18 @@ enum SkyArt {
 
     /// The blimp, past park 100. An envelope, a fin, a gondola and a tail beacon that is the
     /// only thing about it that moves in place — a thing that does not flap still gets two
-    /// frames and no more (§9). Drawn lighter than the sky after dark, the way the birds are.
+    /// frames and no more (§9). Its envelope and its belly come off the phase line, like the
+    /// birds', so it reads against every sky.
     static func blimp(into c: PixelCanvas, scenery: Scenery, view: View, time: Double,
-                      width: Double, night: Bool, layout: BackdropLayout = .standard) {
+                      width: Double, look: Look, layout: BackdropLayout = .standard) {
         guard scenery.hasBlimp,
               let b = SkyLife.blimp(seed: view.blimpSeed(parkNumber: scenery.parkNumber),
                                     at: time, breeze: scenery.breezePixelsPerSecond)
         else { return }
         let cx = (b.x * width).rounded(), cy = b.y.rounded()
         guard cx > -layout.blimpWidth, cx < width + layout.blimpWidth else { return }
-        let body = night ? Palette.nightSky3 : Palette.chalk
-        let detail = night ? Palette.ink : Palette.shade
+        let body = look.blimp[0]
+        let detail = look.blimp[1]
 
         // An ellipse, row by row: the one shape a blimp has.
         let halfW = layout.blimpWidth / 2, halfH = layout.blimpHeight / 2

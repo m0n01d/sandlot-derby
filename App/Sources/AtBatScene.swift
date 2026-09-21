@@ -109,23 +109,43 @@ final class AtBatScene: CanvasScene {
         if Self.autoSlice, !isOffScreen, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
         #endif
 
-        let scheme = Palette.scheme(lampsOn: machine.lampsOn)
+        let look = Look.of(machine.phase)
         let W = 320.0, H = 224.0
         let fullWidth = Double(canvas.width)
         let xOff = xOffset
         func wx(_ x: Double) -> Double { x + xOff }
 
-        // Sky, wall band and grass span the full (possibly wider-than-320) canvas.
-        canvas.rect(0, 0, fullWidth, H, scheme.sky1)
-        canvas.rect(0, 44, fullWidth, 26, scheme.sky2)
-        canvas.rect(0, 70, fullWidth, 26, scheme.sky3)
-        canvas.dither(0, 42, fullWidth, 4, scheme.sky1, scheme.sky2)
-        canvas.dither(0, 68, fullWidth, 4, scheme.sky2, scheme.sky3)
-
-        // The sky and the horizon (DESIGN.md §17). Both sit above y = 96; the strike zone
+        // The sky and the horizon (DESIGN.md §17, §20). Both sit above y = 96; the strike zone
         // starts at y = 136, so nothing new here moves anywhere near it.
         let scenery = self.scenery(for: machine.park)
         let now = SceneryClock.now(machine)
+
+        // Three cached layers: the sky, what is behind the field, and what goes in front of the
+        // ball (§20 "Layers and speed"). Redrawn when the park, the canvas or the phase changes
+        // and copied the rest of the time.
+        let layers = backdrops.layers(
+            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat,
+                             phase: machine.phase),
+            height: canvas.height) { sky, behind, _ in
+            SkyArt.sky(into: sky.canvas, look: look, width: fullWidth, flightCamera: false)
+            // The sun goes in the sky layer with the stops: it is not a thing in the park and
+            // nothing about the at-bat camera ever moves it. The moon is the park's and is drawn
+            // with the stars instead, because a park that has no moon must show none.
+            if let disc = look.sunAtBat, !look.sunIsMoon {
+                SkyArt.sunOrMoon(into: sky.canvas, look: look, x: disc.x(width: fullWidth),
+                                 y: disc.y, radius: disc.radius, halo: disc.halo)
+            }
+            BackdropArt.atBatHorizon(into: behind.canvas, park: machine.park, scenery: scenery,
+                                     width: fullWidth, xOffset: xOff, look: look,
+                                     layout: self.layout)
+            // The foul poles stand in front of the horizon pieces and behind everything on the
+            // field (#28). Off the same two x's the foul lines are drawn from, so they stay
+            // married however wide the canvas is.
+            BackdropArt.atBatFoulPoles(into: behind.canvas, league: machine.park.league,
+                                       xs: [xOff + self.foulLineLeftX, xOff + self.foulLineRightX],
+                                       look: look, layout: self.layout)
+        }
+        layers.sky.blitOpaque(onto: canvas)
         // Every park stands towers since §20, and the clock decides whether they are drawn at
         // all: no frames means no lattice, no bank and no halo, which is the one place that
         // decision has to be made. §20 open question 1 — a real park's towers are there by day,
@@ -136,7 +156,7 @@ final class AtBatScene: CanvasScene {
             : []
         if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
-                            time: now, width: fullWidth, phase: machine.phase, layout: layout)
+                            time: now, width: fullWidth, look: look, layout: layout)
         }
         // Things a long career arrives at, never announced (#5). The at-bat sky is where a
         // player spends most of their time, so the blimp and the comet cross it too — with
@@ -150,62 +170,47 @@ final class AtBatScene: CanvasScene {
         Clouds.draw(into: canvas, clouds: scenery.atBatClouds,
                     breeze: scenery.breezePixelsPerSecond,
                     seconds: now,
-                    width: fullWidth, night: machine.lampsOn)
+                    width: fullWidth, look: look)
         SkyArt.birds(into: canvas, scenery: scenery, view: .atBat, time: now,
-                     width: fullWidth, night: machine.lampsOn)
+                     width: fullWidth, look: look)
         if machine.showsMilestones {
             SkyArt.blimp(into: canvas, scenery: scenery, view: .atBat, time: now,
-                         width: fullWidth, night: machine.lampsOn, layout: layout)
+                         width: fullWidth, look: look, layout: layout)
         }
-        backdrops.layers(
-            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat,
-                             lampsOn: machine.lampsOn),
-            height: canvas.height) { b, _ in
-            BackdropArt.atBatHorizon(into: b.canvas, park: machine.park, scenery: scenery,
-                                     width: fullWidth, xOffset: xOff, night: machine.lampsOn,
-                                     layout: self.layout)
-            // The foul poles stand in front of the horizon pieces and behind everything on the
-            // field (#28). Off the same two x's the foul lines are drawn from, so they stay
-            // married however wide the canvas is.
-            BackdropArt.atBatFoulPoles(into: b.canvas, league: machine.park.league,
-                                       xs: [xOff + self.foulLineLeftX, xOff + self.foulLineRightX],
-                                       layout: self.layout)
-        }.behind.blit(onto: canvas)
+        layers.behind.blit(onto: canvas)
 
         // The towers flank the scoreboard, standing on the wall band, which is drawn next and
         // covers their feet.
-        // `ink` here: this pole stands wholly in the `#446688` horizon band, where it reads.
-        SkyArt.towers(into: canvas, frames: towers, width: fullWidth,
-                      poleColour: Palette.ink, layout: layout)
+        SkyArt.towers(into: canvas, frames: towers, width: fullWidth, look: look, layout: layout)
 
-        canvas.rect(0, 96, fullWidth, 8, Palette.wall)
+        canvas.rect(0, 96, fullWidth, 8, look.wall[1])
         canvas.rect(0, 96, fullWidth, 1, Palette.chalk)
         canvas.rect(0, 104, fullWidth, H - 104, Palette.grassA)
         var gy = 104.0
         while gy < H { canvas.rect(0, gy, fullWidth, 6, Palette.grassB); gy += 12 }
 
         // Everything else is the 320-wide prototype column, centred.
-        canvas.rect(wx(128), 80, 64, 16, Palette.wall)
-        canvas.rect(wx(128), 80, 64, 1, Palette.chalk)
+        canvas.rect(wx(128), 80, 64, 16, look.board[0])
+        canvas.rect(wx(128), 80, 64, 1, look.board[1])
         canvas.t3(wx(134), 84, "\(Int(machine.park.wallDistanceFeet)) FT", Palette.score)
         // The outfield scoreboard says where you are — or that these ten are not the career
         // (DESIGN.md §18). Same board, same place, one word swapped.
         canvas.t3(wx(134), 91, machine.warmUp == nil ? machine.park.displayName : "WARM UP", Palette.chalk)
-        drawProgressLamps(canvas: canvas, wx: wx, machine: machine)
+        drawProgressLamps(canvas: canvas, wx: wx, machine: machine, look: look)
 
         // The two little flags on the scoreboard, fluttering in two frames (§17, step 5).
         BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
-                                    frame: SkyLife.flutterFrame(at: now), layout: layout)
+                                    frame: SkyLife.flutterFrame(at: now), look: look, layout: layout)
 
         canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineLeftX), foulLineWallY, Palette.chalk)
         canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineRightX), foulLineWallY, Palette.chalk)
-        canvas.rect(wx(148), 116, 24, 5, Palette.dirt)
-        canvas.rect(wx(150), 121, 20, 2, Palette.dirtD)
-        canvas.rect(wx(120), 184, 80, 14, Palette.dirt)
-        canvas.rect(wx(124), 198, 72, 4, Palette.dirtD)
+        canvas.rect(wx(148), 116, 24, 5, look.dirt[1])
+        canvas.rect(wx(150), 121, 20, 2, look.dirt[2])
+        canvas.rect(wx(120), 184, 80, 14, look.dirt[1])
+        canvas.rect(wx(124), 198, 72, 4, look.dirt[2])
         canvas.rect(wx(152), 190, 16, 4, Palette.chalk)
 
-        drawPitcher(canvas: canvas, wx: wx, beat: machine.beat, elapsed: machine.elapsed)
+        drawPitcher(canvas: canvas, wx: wx, beat: machine.beat, elapsed: machine.elapsed, look: look)
 
         let z = machine.pitchingRules.strikeZone
         var zi = 0.0
@@ -229,22 +234,26 @@ final class AtBatScene: CanvasScene {
         case .miss where machine.lastCall == .miss: batterFrame = 2
         default: batterFrame = 0
         }
-        drawBatter(canvas: canvas, wx: wx, frame: batterFrame)
+        drawBatter(canvas: canvas, wx: wx, frame: batterFrame, look: look)
 
         switch machine.beat {
         case .pitch:
             let b = machine.ballNow
-            canvas.baseball(wx(b.x), b.y, radius: b.radius, highlight: scheme.sky3)
-            if b.radius >= 2 { canvas.px(wx(b.x + b.radius), b.y, Palette.ink) }
-            canvas.t3(wx(8), H - 12, "\(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk)
+            canvas.baseball(wx(b.x), b.y, radius: b.radius, highlight: look.ballHi)
+            if b.radius >= 2 { canvas.px(wx(b.x + b.radius), b.y, look.ballLo) }
+            canvas.t3(wx(8), H - 12, "\(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk,
+                      shadow: Palette.ink)
         case .contact:
-            drawContactVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed, isBarrel: machine.isBarrelNow, zone: z)
+            drawContactVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed,
+                              isBarrel: machine.isBarrelNow, zone: z, look: look)
         case .miss:
             drawMissVisual(canvas: canvas, wx: wx, elapsed: machine.elapsed)
             let label = callWord(machine.lastCall)
             let labelY = (missVisual?.early ?? false) ? 164.0 : 118.0
-            canvas.t3(wx(W / 2 - Double(label.count) * 4), labelY, label, Palette.score, scale: 2)
-            canvas.t3(wx(8), H - 12, "\(machine.pitch.type.name) \(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk)
+            canvas.t3(wx(W / 2 - Double(label.count) * 4), labelY, label, Palette.score, scale: 2,
+                      shadow: Palette.ink)
+            canvas.t3(wx(8), H - 12, "\(machine.pitch.type.name) \(Int(machine.pitch.speedMPH.rounded())) MPH",
+                      Palette.chalk, shadow: Palette.ink)
         default:
             break
         }
@@ -254,16 +263,17 @@ final class AtBatScene: CanvasScene {
         if let run = machine.warmUp {
             // Where the career's cost would be, the day's count instead: the Warm Up has no
             // cost, and the only thing worth knowing is how many are left (DESIGN.md §18).
-            canvas.t3(8, 8, "WARM UP · \(run.spent)/\(run.total)", Palette.chalk)
+            canvas.t3(8, 8, "WARM UP · \(run.spent)/\(run.total)", Palette.chalk, shadow: Palette.ink)
         } else {
             let pitches = machine.tally.pitches
-            canvas.t3(8, 8, "\(machine.park.displayName)  \(pitches) \(pitches == 1 ? "PITCH" : "PITCHES")", Palette.chalk)
+            canvas.t3(8, 8, "\(machine.park.displayName)  \(pitches) \(pitches == 1 ? "PITCH" : "PITCHES")",
+                      Palette.chalk, shadow: Palette.ink)
         }
         // Not during the contact freeze: the tally already knows how the ball lands, and a
         // streak line appearing or vanishing here would spoil the cut. `streakNow` so the line
         // follows whichever streak is live.
         if machine.streakNow >= 2, machine.beat != .contact {
-            canvas.t3(8, 16, "HR STREAK \(machine.streakNow)", Palette.score)
+            canvas.t3(8, 16, "HR STREAK \(machine.streakNow)", Palette.score, shadow: Palette.ink)
         }
 
         // The instant replay's camera, top right, when there is a swing worth seeing again (#42).
@@ -281,13 +291,14 @@ final class AtBatScene: CanvasScene {
     ///
     /// Nothing during a Warm Up: those ten are played in the day's park and clear nothing
     /// (DESIGN.md §18), so a row of lamps there would be a promise the day cannot keep.
-    private func drawProgressLamps(canvas: PixelCanvas, wx: (Double) -> Double, machine: DerbyMachine) {
+    private func drawProgressLamps(canvas: PixelCanvas, wx: (Double) -> Double,
+                                   machine: DerbyMachine, look: Look) {
         guard machine.warmUp == nil else { return }
         let lit = machine.homeRunsThisPark
         for i in 0..<machine.homeRunsToClearPark {
             let x = wx(progressLampX + Double(i) * (progressLampSize + progressLampGap))
             canvas.rect(x, progressLampY, progressLampSize, progressLampSize,
-                        i < lit ? Palette.score : Palette.ink)
+                        i < lit ? Palette.score : look.board[0])
         }
     }
 
@@ -327,61 +338,66 @@ final class AtBatScene: CanvasScene {
     /// kick/reach back, release (DESIGN.md §3, §9). The third, `.set`, was the one never built
     /// (issue #20): before it, the windup's first 40% and everything past `.pitch` shared the
     /// release silhouette, so the wind-up never had a calm beat to kick off from.
-    private func drawPitcher(canvas: PixelCanvas, wx: (Double) -> Double, beat: Beat, elapsed: Double) {
+    private func drawPitcher(canvas: PixelCanvas, wx: (Double) -> Double, beat: Beat,
+                             elapsed: Double, look: Look) {
         let windup = beat == .windup ? min(1, elapsed / 0.5) : 1
         let px = 160.0, py = 117.0
-        canvas.rect(wx(px - 2), py - 12, 5, 8, Palette.ink)
-        canvas.rect(wx(px - 2), py - 16, 5, 4, Palette.skin)
-        canvas.rect(wx(px - 3), py - 18, 7, 2, Palette.cap)
+        // Still §9's three flat silhouettes — §20 step 4 builds him out of `ShadedSprite` — but
+        // in the phase's own flannel, skin and cap rather than one `ink` shape for every hour.
+        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2]
+        canvas.rect(wx(px - 2), py - 12, 5, 8, cloth)
+        canvas.rect(wx(px - 2), py - 16, 5, 4, skin)
+        canvas.rect(wx(px - 3), py - 18, 7, 2, cap)
         if beat == .windup, windup <= 0.4 {
             // Set: feet together, hands tucked in — the pause before the kick.
-            canvas.rect(wx(px - 1), py - 4, 2, 4, Palette.ink)
+            canvas.rect(wx(px - 1), py - 4, 2, 4, cloth)
         } else if beat == .windup, windup < 0.9 {
             // Leg kick / reach back.
-            canvas.rect(wx(px - 1), py - 4, 3, 4, Palette.ink)
-            canvas.rect(wx(px + 2), py - 8, 2, 4, Palette.ink)
-            canvas.line(wx(px + 3), py - 12, wx(px + 6), py - 20, Palette.ink)
+            canvas.rect(wx(px - 1), py - 4, 3, 4, cloth)
+            canvas.rect(wx(px + 2), py - 8, 2, 4, cloth)
+            canvas.line(wx(px + 3), py - 12, wx(px + 6), py - 20, cloth)
         } else {
             // Release: also held through `.pitch` and beyond — the ball has already left the hand.
-            canvas.rect(wx(px - 2), py - 4, 2, 4, Palette.ink)
-            canvas.rect(wx(px + 1), py - 4, 2, 4, Palette.ink)
-            canvas.line(wx(px + 3), py - 10, wx(px + 7), py - 6, Palette.ink)
+            canvas.rect(wx(px - 2), py - 4, 2, 4, cloth)
+            canvas.rect(wx(px + 1), py - 4, 2, 4, cloth)
+            canvas.line(wx(px + 3), py - 10, wx(px + 7), py - 6, cloth)
         }
     }
 
-    private func drawBatter(canvas: PixelCanvas, wx: (Double) -> Double, frame: Int) {
+    private func drawBatter(canvas: PixelCanvas, wx: (Double) -> Double, frame: Int, look: Look) {
         let bx = 104.0, by = 222.0
-        canvas.rect(wx(bx - 8), by - 24, 7, 24, Palette.ink)
-        canvas.rect(wx(bx + 3), by - 24, 7, 24, Palette.ink)
-        canvas.rect(wx(bx - 9), by - 52, 20, 30, Palette.ink)
-        canvas.rect(wx(bx - 6), by - 64, 12, 12, Palette.skin)
-        canvas.rect(wx(bx - 8), by - 68, 16, 6, Palette.cap)
-        canvas.rect(wx(bx - 8), by - 62, 4, 8, Palette.cap)
+        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2], wood = look.wood[2]
+        canvas.rect(wx(bx - 8), by - 24, 7, 24, cloth)
+        canvas.rect(wx(bx + 3), by - 24, 7, 24, cloth)
+        canvas.rect(wx(bx - 9), by - 52, 20, 30, cloth)
+        canvas.rect(wx(bx - 6), by - 64, 12, 12, skin)
+        canvas.rect(wx(bx - 8), by - 68, 16, 6, cap)
+        canvas.rect(wx(bx - 8), by - 62, 4, 8, cap)
         switch frame {
         case 0:
-            canvas.rect(wx(bx + 8), by - 48, 6, 8, Palette.ink)
-            canvas.rect(wx(bx + 12), by - 52, 4, 4, Palette.skin)
-            canvas.line(wx(bx + 14), by - 52, wx(bx + 22), by - 84, Palette.bat, thickness: 3)
+            canvas.rect(wx(bx + 8), by - 48, 6, 8, cloth)
+            canvas.rect(wx(bx + 12), by - 52, 4, 4, skin)
+            canvas.line(wx(bx + 14), by - 52, wx(bx + 22), by - 84, wood, thickness: 3)
         case 1:
-            canvas.rect(wx(bx + 8), by - 44, 10, 6, Palette.ink)
-            canvas.rect(wx(bx + 16), by - 44, 4, 4, Palette.skin)
-            canvas.line(wx(bx + 18), by - 42, wx(bx + 62), by - 58, Palette.bat, thickness: 3)
+            canvas.rect(wx(bx + 8), by - 44, 10, 6, cloth)
+            canvas.rect(wx(bx + 16), by - 44, 4, 4, skin)
+            canvas.line(wx(bx + 18), by - 42, wx(bx + 62), by - 58, wood, thickness: 3)
         default:
-            canvas.rect(wx(bx - 14), by - 40, 8, 6, Palette.ink)
-            canvas.rect(wx(bx - 16), by - 40, 4, 4, Palette.skin)
-            canvas.line(wx(bx - 16), by - 40, wx(bx - 40), by - 56, Palette.bat, thickness: 3)
+            canvas.rect(wx(bx - 14), by - 40, 8, 6, cloth)
+            canvas.rect(wx(bx - 16), by - 40, 4, 4, skin)
+            canvas.line(wx(bx - 16), by - 40, wx(bx - 40), by - 56, wood, thickness: 3)
         }
     }
 
     private func drawContactVisual(canvas: PixelCanvas, wx: (Double) -> Double, elapsed: Double,
-                                    isBarrel: Bool, zone: Rect) {
+                                    isBarrel: Bool, zone: Rect, look: Look) {
         guard let c = contactVisual else { return }
         drawTrail(canvas: canvas, wx: wx, points: c.trailPoints, color: Palette.chalk, core: nil, thickness: 1)
         let x0 = c.ball.x - c.dir.x * 16, y0 = c.ball.y - c.dir.y * 16
         let x1 = c.ball.x + c.dir.x * 16, y1 = c.ball.y + c.dir.y * 16
         canvas.line(wx(x0), y0, wx(x1), y1, Palette.chalk, thickness: 3)
         canvas.line(wx(x0), y0, wx(x1), y1, Palette.score, thickness: 1)
-        canvas.baseball(wx(c.ball.x), c.ball.y, radius: max(2, c.radius), highlight: Palette.sky3)
+        canvas.baseball(wx(c.ball.x), c.ball.y, radius: max(2, c.radius), highlight: look.ballHi)
         for a in 0..<8 {
             let ang = Double(a) / 8 * 2 * Double.pi + 0.39
             let l = (a % 2 == 1 ? 4.0 : 8.0) + min(8, elapsed * 40)

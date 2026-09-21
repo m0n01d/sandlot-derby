@@ -22,12 +22,12 @@ struct BackdropLayout {
     var sideFarRisePixels = 13.0
     /// Side view: the foul pole stands this many feet above the top of the wall.
     var foulPoleFeet = 30.0
-    /// Side view: one crowd speckle per this many square pixels of seating, and the odds of
-    /// each being a face, a shirt or a cap. Sparse on purpose — packed tight it stopped being
-    /// a crowd and became television static.
+    /// Side view: one crowd speckle per this many square pixels of seating, and the odds of each
+    /// being a face rather than a shirt. Sparse on purpose — packed tight it stopped being a
+    /// crowd and became television static. How many of those seats are taken at all is the
+    /// phase's `crowdShare` (§20).
     var crowdPixelsPerHead = 13.0
     var crowdSkinShare = 0.45
-    var crowdChalkShare = 0.35
     /// Side view: a flag's pole and its pennant.
     var flagPoleHeight = 9.0
     var flagPennant = (w: 5.0, h: 3.0)
@@ -138,17 +138,18 @@ struct BackdropKey: Equatable {
     /// Pixels per foot × 64, rounded — the side view re-frames per flight, never per frame.
     let scale64: Int
     let originX: Int
-    /// Whether the park's lamps are lit (`DayPhase.lampsOn`). Every silhouette in here turns
-    /// round with it, so a layer drawn by day is wrong the moment the clock reaches twilight and
-    /// the key has to say so (DESIGN.md §20).
-    let lampsOn: Bool
+    /// Which of the six looks this art was painted in. Every colour in here comes off the phase's
+    /// palette lines, so a layer drawn at `midday` is wrong the moment the clock reaches
+    /// `goldenHour` and the key has to say so (DESIGN.md §20). It replaces the lamps flag that
+    /// step 1 put here: the lamps are one of the things a phase decides, not the only one.
+    let phase: DayPhase
 
-    init(parkNumber: Int, width: Int, camera: Camera, lampsOn: Bool,
+    init(parkNumber: Int, width: Int, camera: Camera, phase: DayPhase,
          scale: Double = 0, originX: Double = 0) {
         self.parkNumber = parkNumber
         self.width = width
         self.camera = camera
-        self.lampsOn = lampsOn
+        self.phase = phase
         self.scale64 = Int((scale * 64).rounded())
         self.originX = Int(originX.rounded())
     }
@@ -187,6 +188,13 @@ final class BackdropLayer {
         firstRow = top; lastRow = bottom; firstCol = left; lastCol = right
     }
 
+    /// Copies every row straight onto `target`, transparent pixels and all — the opaque blit the
+    /// `sky` layer takes (§20 "Layers and speed"). Nothing is keyed out, because the sky is the
+    /// bottom of the frame and there is nothing under it to show through.
+    func blitOpaque(onto target: PixelCanvas) {
+        target.copyRows(from: canvas)
+    }
+
     /// Copies every painted pixel onto `target`, `dy` rows down.
     func blit(onto target: PixelCanvas, dy: Int = 0) {
         guard lastRow >= firstRow, lastCol >= firstCol else { return }
@@ -201,26 +209,34 @@ final class BackdropLayer {
     }
 }
 
-/// Two layers per camera — what sits behind the field and what sits in front of the ball — held
-/// until the park, the canvas or the framing changes (DESIGN.md §17, "a backdrop cache").
+/// Three layers per camera, held until the park, the canvas, the framing or the phase changes
+/// (DESIGN.md §17 "a backdrop cache", §20 "Layers and speed"):
+///
+/// - `sky` — the stops and whichever of the sun or the moon is up. Opaque, copied by rows, and it
+///   never moves with the ground: the sky is infinitely far away.
+/// - `behind` — the hills and the trees, and in the flight camera the low sun, which *is* a thing
+///   in the park and does move with the ground.
+/// - `front` — the wall, the stands, the poles: everything that goes in on top of the ball.
 final class BackdropCache {
     private var key: BackdropKey?
+    private var sky: BackdropLayer?
     private var behind: BackdropLayer?
     private var front: BackdropLayer?
 
     /// The layers for this key, drawing them first if anything moved. `draw` runs rarely; the
-    /// rest of the time this is two pointer returns.
+    /// rest of the time this is three pointer returns.
     func layers(for key: BackdropKey, height: Int,
-                draw: (_ behind: BackdropLayer, _ front: BackdropLayer) -> Void)
-        -> (behind: BackdropLayer, front: BackdropLayer) {
-        if let behind, let front, self.key == key { return (behind, front) }
+                draw: (_ sky: BackdropLayer, _ behind: BackdropLayer, _ front: BackdropLayer) -> Void)
+        -> (sky: BackdropLayer, behind: BackdropLayer, front: BackdropLayer) {
+        if let sky, let behind, let front, self.key == key { return (sky, behind, front) }
+        let s = sky?.canvas.width == key.width ? sky! : BackdropLayer(width: key.width, height: height)
         let b = behind?.canvas.width == key.width ? behind! : BackdropLayer(width: key.width, height: height)
         let f = front?.canvas.width == key.width ? front! : BackdropLayer(width: key.width, height: height)
-        b.clear(); f.clear()
-        draw(b, f)
-        b.seal(); f.seal()
-        self.key = key; self.behind = b; self.front = f
-        return (b, f)
+        s.clear(); b.clear(); f.clear()
+        draw(s, b, f)
+        s.seal(); b.seal(); f.seal()
+        self.key = key; self.sky = s; self.behind = b; self.front = f
+        return (s, b, f)
     }
 }
 
@@ -230,43 +246,48 @@ enum BackdropArt {
 
     // MARK: - The at-bat horizon (DESIGN.md §17)
 
-    /// A low band above the wall: the park's far piece as a `sky2` silhouette on the `sky3`
-    /// band, one near landmark in `wall` and `shade` beside the scoreboard, and two small flags
-    /// on the scoreboard itself. A lit park turns every silhouette to `ink`.
+    /// A low band above the wall: the park's far piece as a silhouette in the phase's near-hill
+    /// colour with its far hill showing through the windows, and one near landmark in the stand
+    /// colours beside the scoreboard.
+    ///
+    /// §20 gives these two pieces their colours by role rather than by the hour: the far piece
+    /// is the horizon, so it takes `hill`, and a landmark over the roofline is near enough to be
+    /// built of the same stuff as the stands. The night swap that used to turn them all to `ink`
+    /// is gone with `nightSky3` — every phase now has a hill colour of its own that reads against
+    /// its own sky.
     ///
     /// Everything here is above y = 96. The strike zone starts at y = 136, so nothing new is
     /// drawn anywhere near it (§17's motion budget).
     static func atBatHorizon(into c: PixelCanvas, park: Park, scenery: Scenery,
-                             width: Double, xOffset: Double, night: Bool,
+                             width: Double, xOffset: Double, look: Look,
                              layout: BackdropLayout = .standard) {
         let baseline = layout.atBatHorizonBottom
         let rise = baseline - layout.atBatHorizonTop
-        let band = night ? Palette.nightSky3 : Palette.sky3
 
         far(scenery.far, into: c, x0: 0, x1: width, baseline: baseline, rise: rise,
-            body: night ? Palette.ink : Palette.sky2, hole: band, seed: seed(scenery, tag: 0x1))
+            body: look.hill[1], hole: look.hill[0], seed: seed(scenery, tag: 0x1))
 
         var g = SplitMix64(seed: seed(scenery, tag: 0x2))
         let onTheRight = Bool.random(using: &g)
+        let stand = look.standLit
         near(scenery.near, into: c,
              x: xOffset + (onTheRight ? layout.atBatNearRightX : layout.atBatNearLeftX),
              baseline: baseline,
-             body: night ? Palette.ink : Palette.wall,
-             detail: night ? Palette.ink : Palette.shade,
+             body: stand[0], detail: stand[2],
              breeze: scenery.breezePixelsPerSecond)
     }
 
     /// The two little flags on the scoreboard, pointing with the breeze and fluttering in two
     /// frames. Drawn per frame, not cached: the flutter is what step 5 added.
     static func scoreboardFlags(into c: PixelCanvas, scenery: Scenery, xOffset: Double,
-                                frame: Int, layout: BackdropLayout = .standard) {
+                                frame: Int, look: Look, layout: BackdropLayout = .standard) {
         let pointRight = scenery.breezePixelsPerSecond >= 0
         for dx in layout.scoreboardFlagOffsets {
             let x = (xOffset + 128 + dx).rounded()
             let top = 80 - layout.scoreboardFlagPoleHeight
-            c.rect(x, top, 1, layout.scoreboardFlagPoleHeight, Palette.chalk)
+            c.rect(x, top, 1, layout.scoreboardFlagPoleHeight, look.grey[3])
             pennant(into: c, x: x, top: top, pointRight: pointRight, frame: frame,
-                    size: (w: 4, h: 3))
+                    colour: look.red[2], size: (w: 4, h: 3))
         }
     }
 
@@ -274,15 +295,19 @@ enum BackdropArt {
     /// the wall band exactly where its foul line meets it. `score`, at night as well as by day,
     /// so they catch the lights. Static, so they live in the backdrop cache; drawn after the
     /// horizon pieces and before anything on the field.
-    static func atBatFoulPoles(into c: PixelCanvas, league: League, xs: [Double],
+    static func atBatFoulPoles(into c: PixelCanvas, league: League, xs: [Double], look: Look,
                                layout: BackdropLayout = .standard) {
         let height = layout.foulPoleHeight(for: league)
+        // Two columns, lit and shaded, with the lit one on the side the light comes from (§20).
+        // The pole is two pixels wide already, so this is the same shape in two colours.
+        let lit = look.light.x < 0 ? look.pole[0] : look.pole[1]
+        let dark = look.light.x < 0 ? look.pole[1] : look.pole[0]
         for x in xs {
             // No rounding: `PixelCanvas.rect` and `PixelCanvas.line` both truncate, so passing
             // the foul line's own endpoint straight through puts the pole's first column on
             // exactly the pixel the line ends on. Rounding it first put it one to the right.
-            c.rect(x, layout.atBatFoulPoleFootY - height, layout.foulPoleWidth, height,
-                   Palette.score)
+            c.rect(x, layout.atBatFoulPoleFootY - height, 1, height, lit)
+            c.rect(x + 1, layout.atBatFoulPoleFootY - height, layout.foulPoleWidth - 1, height, dark)
         }
     }
 
@@ -305,7 +330,7 @@ enum BackdropArt {
     ///
     /// Drawn with the ground at `BackdropLayout.canonicalGround`, like everything else cached.
     static func outfieldBoard(into c: PixelCanvas, park: Park, scenery: Scenery,
-                              scale: Double, originX: Double, width: Double,
+                              scale: Double, originX: Double, width: Double, look: Look,
                               layout: BackdropLayout = .standard) {
         guard let board = scenery.board else { return }
         let ground = BackdropLayout.canonicalGround
@@ -321,13 +346,13 @@ enum BackdropArt {
         // Two legs first, so the panel sits on top of them.
         let legInset = layout.boardLegInsetFeet * scale
         for lx in [left + legInset, right - legInset - layout.boardLegWidth] {
-            c.rect(lx, bottom, layout.boardLegWidth, ground - bottom, Palette.ink)
+            c.rect(lx, bottom, layout.boardLegWidth, ground - bottom, look.board[0])
         }
 
-        // The panel: `ink` like the stands' mass, with a `wall` lip so its top edge reads
-        // against the sky the way every deck's does.
-        c.rect(left, top, right - left, bottom - top, Palette.ink)
-        c.rect(left, top, right - left, 1, Palette.wall)
+        // The panel: the phase's dark board face, with its lit lip so the top edge reads against
+        // the sky the way every deck's does.
+        c.rect(left, top, right - left, bottom - top, look.board[2])
+        c.rect(left, top, right - left, 1, look.board[1])
 
         // Rows of lettering, dashed: at this size a board says "there is writing here" and
         // nothing more. `chalk` on `ink`, which is what `ink` is for (docs/palette.md).
@@ -351,7 +376,7 @@ enum BackdropArt {
     /// What a ball has already done to the board, drawn per frame over the cached panel: the
     /// dents that stay for the rest of the park, and a pane that is not there any more (#5).
     static func boardDamage(into c: PixelCanvas, park: Park, scenery: Scenery, scars: ParkScars,
-                            scale: Double, originX: Double, ground: Double,
+                            scale: Double, originX: Double, ground: Double, look: Look,
                             layout: BackdropLayout = .standard) {
         guard let board = scenery.board else { return }
         func x(_ feet: Double) -> Double { originX + feet * scale }
@@ -363,7 +388,7 @@ enum BackdropArt {
             let px = x(pane.near), py = y(pane.top)
             let pw = max(2, (pane.far - pane.near) * scale)
             let ph = max(2, (pane.top - pane.bottom) * scale)
-            c.rect(px, py, pw, ph, Palette.ink)                       // the dark where a light was
+            c.rect(px, py, pw, ph, look.board[2])                     // the dark where a light was
             // Two corners of glass still in the frame, and no more: a pane is four pixels by
             // three at this scale, and cracks drawn across one read as a scribble.
             c.px(px, py, Palette.chalk)
@@ -388,7 +413,7 @@ enum BackdropArt {
     /// however far the close camera has lifted.
     static func sideBackdrop(behind: PixelCanvas, front: PixelCanvas,
                              park: Park, scenery: Scenery,
-                             scale: Double, originX: Double, width: Double, night: Bool,
+                             scale: Double, originX: Double, width: Double, look: Look,
                              layout: BackdropLayout = .standard) {
         let ground = BackdropLayout.canonicalGround
         func x(_ feet: Double) -> Double { originX + feet * scale }
@@ -396,27 +421,27 @@ enum BackdropArt {
 
         let wallX = x(park.wallDistanceFeet)
         let wallTopY = y(park.wallHeightFeet)
-        // Everything behind the wall reads as one near mass at this range, so it takes §17's
-        // near colours rather than the horizon's: `wall` and `shade`.
+        // Everything behind the wall is the horizon seen over the grandstand, so it takes the
+        // phase's `hill` pair — near mass, far hill through the windows — and the landmark over
+        // the roofline takes the stand colours.
         //
-        // Night turns them round. This backdrop sits in the side view's `sky2` band, and at
-        // night that band *is* `ink` — an `ink` silhouette there is invisible, which is what
-        // the first night frames showed. So after dark the distant things are lighter than the
-        // sky behind them, the way a city's glow really does pick them out.
-        let body = night ? Palette.nightSky3 : Palette.wall
-        let detail = night ? Palette.ink : Palette.shade
-        let hole = night ? Palette.ink : Palette.sky2
+        // The night swap this used to carry is gone. Step 1's version turned every silhouette
+        // round after dark because `ink` on an `ink` sky is invisible; since §20 every phase has
+        // a hill colour picked against its own sky, and there is nothing left to turn round.
+        let body = look.hill[1]
+        let detail = look.standLit[2]
+        let hole = look.hill[0]
 
         let standsTopY: Double
         if scenery.stands.swallowsTheBall {
             standsTopY = y(scenery.standsTopFeet)
             drawStands(into: front, park: park, scenery: scenery,
-                       scale: scale, originX: originX, width: width, layout: layout)
+                       scale: scale, originX: originX, width: width, look: look, layout: layout)
         } else {
             // Single-A: a chain-link fence over the wall and nothing to sit in.
             standsTopY = wallTopY
-            chainLink(into: front, park: park, scenery: scenery,
-                      scale: scale, wallX: wallX, wallTopY: wallTopY, width: width, layout: layout)
+            chainLink(into: front, park: park, scenery: scenery, scale: scale, wallX: wallX,
+                      wallTopY: wallTopY, width: width, look: look, layout: layout)
         }
 
         // The park's own skyline, sitting on whatever the last thing built was. For Single-A
@@ -428,25 +453,25 @@ enum BackdropArt {
         // One landmark over the grandstand, the way a water tower or a wheel sits over a real one.
         if width - wallX > 60 {
             near(scenery.near, into: behind, x: wallX + (width - wallX) * 0.62,
-                 baseline: standsTopY + 1, body: body, detail: detail,
+                 baseline: standsTopY + 1, body: look.standLit[0], detail: detail,
                  breeze: scenery.breezePixelsPerSecond)
         }
 
-        // The foul pole: the one thing on the wall that is always `score`.
+        // The foul pole: the one thing on the wall that is lit in every phase.
         let poleHeight = layout.foulPoleFeet * scale
         let poleWidth = max(1, (scale * 1.5).rounded())
-        front.rect(wallX, wallTopY - poleHeight, poleWidth, poleHeight, Palette.score)
+        front.rect(wallX, wallTopY - poleHeight, poleWidth, poleHeight, look.pole[0])
 
         // The out-of-town board, in one seeded park in three (#5). In front of the ball with the
         // stands, so a ball that reaches it goes into it.
         outfieldBoard(into: front, park: park, scenery: scenery,
-                      scale: scale, originX: originX, width: width, layout: layout)
+                      scale: scale, originX: originX, width: width, look: look, layout: layout)
     }
 
     /// The stepped bleacher profile and the wall's own face — the parts of the stands that hold
     /// still. Its crowd and its flags move, so they are drawn per frame instead.
     private static func drawStands(into c: PixelCanvas, park: Park, scenery: Scenery,
-                                   scale: Double, originX: Double, width: Double,
+                                   scale: Double, originX: Double, width: Double, look: Look,
                                    layout: BackdropLayout) {
         let ground = BackdropLayout.canonicalGround
         func x(_ feet: Double) -> Double { originX + feet * scale }
@@ -459,7 +484,7 @@ enum BackdropArt {
         // draws it. Everything past the wall is behind it, and without this a ball that had
         // dropped below the wall's top line came back into view over the wall it had just
         // cleared — it vanished into the crowd and then fell out of it again.
-        c.rect(wallX, wallTopY, width - wallX, ground - wallTopY, Palette.wall)
+        c.rect(wallX, wallTopY, width - wallX, ground - wallTopY, look.wall[1])
         c.rect(wallX, wallTopY, width - wallX, 1, Palette.chalk)
         c.rect(wallX, wallTopY - 1, 2, ground - wallTopY + 1, Palette.chalk)
 
@@ -471,35 +496,40 @@ enum BackdropArt {
                 + (scenery.standsTopFeet - park.wallHeightFeet) * Double(i + 1) / Double(steps)
             let x0 = x(f0), x1 = x(f1), top = y(h)
             guard x1 > 0, x0 < width, top < wallTopY else { continue }
-            // `ink` for the mass and `wall` for each deck's lip (§17). The mass has to be the
-            // darker of the two: in `wall` the stands and the outfield wall were one green
-            // shape, and the wall stopped reading as a wall at all.
-            c.rect(x0, top, max(1, x1 - x0), wallTopY - top, Palette.ink)
-            c.rect(x0, top, max(1, x1 - x0), 1, Palette.wall)
+            // The phase's stand mass, with its lip on each deck (§17, §20). The mass has to be
+            // the darker of the two: in the wall's own green the stands and the outfield wall
+            // were one shape, and the wall stopped reading as a wall at all.
+            c.rect(x0, top, max(1, x1 - x0), wallTopY - top, look.standLit[0])
+            c.rect(x0, top, max(1, x1 - x0), 1, look.standLit[1])
         }
         // Behind the back row the profile is flat, all the way out of frame: there is no green
         // band behind an outfield wall, which is the whole point of §17's stands.
         let backX = x(park.wallDistanceFeet + scenery.standsDepthFeet)
         let topY = y(scenery.standsTopFeet)
         if backX < width, topY < wallTopY {
-            c.rect(backX, topY, width - backX, wallTopY - topY, Palette.ink)
-            c.rect(backX, topY, width - backX, 1, Palette.wall)
+            c.rect(backX, topY, width - backX, wallTopY - topY, look.standLit[0])
+            c.rect(backX, topY, width - backX, 1, look.standLit[1])
         }
 
         // The crowd and the flags are *not* drawn here any more: they move (step 5), so they are
         // drawn per frame straight after this layer is copied down.
     }
 
-    /// A `chalk` / `skin` / `cap` speckle over the seating. Seeded by the park, so the same
-    /// crowd turns out every time you come back — and drawn per frame rather than cached,
-    /// because while the cheer plays it bounces.
+    /// A speckle of heads and shirts over the seating, in the phase's own crowd colours. Seeded
+    /// by the park, so the same crowd turns out every time you come back — and drawn per frame
+    /// rather than cached, because while the cheer plays it bounces.
     ///
     /// Half the speckle is a pixel higher on each step and the other half is not, so the stand
     /// ripples instead of sliding. `cheering` comes from `DerbyMachine.crowdIsUp`, never from a
     /// timer in a scene (DESIGN.md §17).
+    ///
+    /// `Look.crowdShare` is how full the park is at this hour (§20): a dawn game has a quarter of
+    /// the seats taken and a night game nearly all of them. It thins the same seeded speckle
+    /// rather than reseeding it, so the people who are there at dawn are there at noon too.
     static func crowd(into c: PixelCanvas, park: Park, scenery: Scenery,
                       scale: Double, originX: Double, width: Double, ground: Double,
-                      time: Double, cheering: Bool, layout: BackdropLayout = .standard) {
+                      time: Double, cheering: Bool, look: Look,
+                      layout: BackdropLayout = .standard) {
         guard scenery.stands.hasCrowd else { return }
         let left = max(0, originX + park.wallDistanceFeet * scale)
         guard width - left > 2, scale > 0 else { return }
@@ -518,10 +548,16 @@ enum BackdropArt {
             guard wallTopY - seatTop > 2 else { continue }
             let py = Double.random(in: (seatTop + 1)..<wallTopY, using: &g)
             let roll = Double.random(in: 0..<1, using: &g)
+            let seatTaken = Double.random(in: 0..<1, using: &g)
+            guard seatTaken < look.crowdShare else { continue }
+            // A head this often and a shirt the rest of the time: one pixel cannot be both, and
+            // a crowd of faces reads as gravel. The two lists are the phase's own.
             let colour: Palette.RGBA8
-            if roll < layout.crowdSkinShare { colour = Palette.skin }
-            else if roll < layout.crowdSkinShare + layout.crowdChalkShare { colour = Palette.chalk }
-            else { colour = Palette.cap }
+            if roll < layout.crowdSkinShare {
+                colour = look.headsLit[Int(roll * 1000) % look.headsLit.count]
+            } else {
+                colour = look.shirtsLit[Int(roll * 1000) % look.shirtsLit.count]
+            }
             let up = SkyLife.crowdHeadIsUp(i, at: time, cheering: cheering)
                 && py - SkyLifeRules.standard.crowdBounceLift > seatTop
             c.px(px.rounded(.down),
@@ -533,7 +569,7 @@ enum BackdropArt {
     /// Drawn per frame beside the crowd, for the same reason.
     static func standsFlags(into c: PixelCanvas, park: Park, scenery: Scenery,
                             scale: Double, originX: Double, width: Double, ground: Double,
-                            frame: Int, layout: BackdropLayout = .standard) {
+                            frame: Int, look: Look, layout: BackdropLayout = .standard) {
         let x0 = originX + park.wallDistanceFeet * scale
         guard scenery.flags > 0, width > x0 else { return }
         let top = ground - scenery.standsTopFeet * scale
@@ -542,9 +578,9 @@ enum BackdropArt {
             let t = (Double(i) + 1) / Double(scenery.flags + 1)
             let fx = (x0 + (width - x0) * t).rounded()
             let poleTop = top - layout.flagPoleHeight
-            c.rect(fx, poleTop, 1, layout.flagPoleHeight, Palette.chalk)
+            c.rect(fx, poleTop, 1, layout.flagPoleHeight, look.grey[3])
             pennant(into: c, x: fx, top: poleTop, pointRight: pointRight, frame: frame,
-                    size: layout.flagPennant)
+                    colour: look.red[2], size: layout.flagPennant)
         }
     }
 
@@ -552,7 +588,8 @@ enum BackdropArt {
     /// low one. Three rows either way, so a flag never changes size as it flies — with no alpha
     /// and no tweening, two frames is the whole vocabulary (§17).
     private static func pennant(into c: PixelCanvas, x: Double, top: Double,
-                                pointRight: Bool, frame: Int, size: (w: Double, h: Double)) {
+                                pointRight: Bool, frame: Int, colour: Palette.RGBA8,
+                                size: (w: Double, h: Double)) {
         let w = size.w
         let rows: [(dx: Double, w: Double)] = frame == 0
             ? [(0, w), (0, w), (1, w - 1)]
@@ -560,7 +597,7 @@ enum BackdropArt {
         for (j, row) in rows.prefix(Int(size.h)).enumerated() {
             let y = top + Double(j)
             let rw = max(1, row.w)
-            c.rect(pointRight ? x + 1 + row.dx : x - row.dx - rw, y, rw, 1, Palette.cap)
+            c.rect(pointRight ? x + 1 + row.dx : x - row.dx - rw, y, rw, 1, colour)
         }
     }
 
@@ -569,7 +606,7 @@ enum BackdropArt {
     /// the point, because this is the park where the ball is simply seen landing.
     private static func chainLink(into c: PixelCanvas, park: Park, scenery: Scenery,
                                   scale: Double, wallX: Double, wallTopY: Double,
-                                  width: Double, layout: BackdropLayout) {
+                                  width: Double, look: Look, layout: BackdropLayout) {
         let meshFeet = scenery.standsTopFeet - park.wallHeightFeet
         let top = wallTopY - meshFeet * scale
         guard wallTopY - top >= 2, width > wallX else { return }
@@ -583,7 +620,7 @@ enum BackdropArt {
         var postFeet = park.wallDistanceFeet
         while originXPost(postFeet, wallX: wallX, park: park, scale: scale) < width {
             let px = originXPost(postFeet, wallX: wallX, park: park, scale: scale)
-            c.rect(px, top, 1, wallTopY - top, Palette.ink)
+            c.rect(px, top, 1, wallTopY - top, look.standLit[2])
             postFeet += layout.fencePostSpacingFeet
         }
     }
