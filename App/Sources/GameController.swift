@@ -74,6 +74,12 @@ final class GameController {
         // Core and drawn from it in the scenes, so `-skyclock` has to wind one clock and not two.
         machine.skyClockOffset = SceneryClock.offset
         #if DEBUG
+        // The shaded-figure primitives against the prototype that is their oracle (§20 step 2).
+        // There are no UI tests in this project, so this is where a port that has drifted says so.
+        for line in ShadedSprite.selfCheck() { print("ShadedSprite: \(line)") }
+        assert(ShadedSprite.selfCheck().isEmpty, "ShadedSprite no longer matches golden.py")
+        #endif
+        #if DEBUG
         contractOffered = Self.startDeclined || (save?.contractOffered ?? false)
         #else
         contractOffered = save?.contractOffered ?? false
