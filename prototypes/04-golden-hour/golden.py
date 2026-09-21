@@ -676,6 +676,10 @@ DAY.update(dim_side=0, crowd=0.8, towers=False, stars=0, mist=None, vignette=Fal
            clouds_atbat=((60, 40, 22, 4), (214, 34, 26, 5), (150, 58, 16, 3)), clouds_flight=((90, 50, 26, 5), (230, 40, 22, 4)),
            flight_sun=None, flight_wash=False, flight_sky=None)
 
+DUSK.update(L(bird='#EECC88', blimp=['#EECC88', '#CC8888'], tower=['#446688', '#444488', '#6666AA', '#EEEEAA']))
+NIGHT.update(L(bird='#8888AA', blimp=['#8888AA', '#444466'], tower=['#446688', '#444488', '#6666AA', '#EEEEAA']))
+DAY.update(L(bird='#222244', blimp=['#EEEEEE', '#AACCEE'], tower=['#446688', '#444488', '#6666AA', '#EEEEAA']))
+
 DAWN = dict(DUSK)
 DAWN.update(L(name='dawn',
               sky=[(0, '#222266'), (8, '#222266'), (24, '#444488'), (30, '#444488'), (46, '#8888CC'), (50, '#8888CC'),
@@ -689,7 +693,8 @@ DAWN.update(L(name='dawn',
               deck=['#666688', '#EECCCC', '#EEEECC', '#444466'],
               red=['#660022', '#AA2222', '#CC2222', '#EE8888'], grey=['#444466', '#666688', '#8888AA', '#CCCCEE'],
               skin=['#884444', '#CC8866', '#EEAA88', '#EECCCC'], board=['#444466', '#EECCCC', '#222244'],
-              ball_hi='#EEEECC', mist='#CCCCEE', shadows=[(0.9, 0.22, 62)]))
+              ball_hi='#EEEECC', mist='#CCCCEE', bird='#EECCAA', blimp=['#EECCCC', '#CCAACC'],
+              shadows=[(0.9, 0.22, 62)]))
 DAWN.update(dim_side=+1, crowd=0.25,
             clouds_atbat=((170, 24, 30, 2.4), (106, 42, 36, 3.2), (226, 50, 22, 2), (50, 56, 20, 2)),
             clouds_flight=((120, 34, 40, 3.2), (250, 60, 46, 3.4), (60, 78, 30, 2.4)),
@@ -921,8 +926,9 @@ def flight(look, cam, mode='flight'):
         globals()['sun'], globals()['clouds'], globals()['stars'], S.crowd_rows = real_sun, real_clouds, real_stars, real_crowd
 
 
-PHASES = [('DAWN', '06:05-07:35', DAWN), ('MORNING', '07:35-11:00', MORNING), ('MIDDAY', '11:00-17:30', DAY),
-          ('GOLDEN HOUR', '17:30-19:00', DUSK), ('TWILIGHT', '19:00-19:40', TWILIGHT), ('NIGHT', '19:40-06:05', NIGHT)]
+# 21 September at latitude 40 on the zone meridian, daylight saving on: DESIGN.md §20's own table
+PHASES = [('DAWN', '06:08-07:38', DAWN), ('MORNING', '07:38-10:52', MORNING), ('MIDDAY', '10:52-17:26', DAY),
+          ('GOLDEN HOUR', '17:26-18:56', DUSK), ('TWILIGHT', '18:56-19:36', TWILIGHT), ('NIGHT', '19:36-06:08', NIGHT)]
 
 
 def cycle(name, render):

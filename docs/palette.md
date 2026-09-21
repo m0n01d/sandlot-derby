@@ -42,6 +42,8 @@ above goes away, because `night` is one of the six sets.
 - One frame uses 45 colours at most, and transparent.
 - A person has four tones: deep shade, shade, body, lit. The light of the phase selects the tone.
 - The ordered Bayer 4×4 dither replaces the four-row checker band. §20 lists where it is permitted.
+- The birds, the blimp and the towers have a colour in each phase, because `nightSky3` goes away.
+- At `dawn` the flight camera looks away from the sunrise, so it has its own sky stops.
 - Three entries above are not on the eight levels: `score #EEDD22` (its 9-bit value gives
   `#EECC22`), `shade #116633` (`#006622`) and `night #221144` (`#220044`). They stay as they are
   until Dwight decides.
@@ -53,9 +55,12 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#222266` `#444488` `#8888CC` `#CCAACC` `#EEAAAA` `#EECCAA` `#EEEECC` |
+| sky at bat, top to horizon | `#222266` `#444488` `#8888CC` `#CCAACC` `#EEAAAA` `#EECCAA` `#EEEECC` |
+| sky in the flight camera, where it differs | `#444488` `#8888CC` `#CCAACC` `#EEAAAA` `#8888AA` `#6666AA` |
 | sun or moon, then its halo | `#EEEECC` `#EECCAA` |
 | cloud: top, body, lower, underside | `#8888CC` `#CCAACC` `#EEAAAA` `#EECCAA` |
+| birds | `#EECCAA` |
+| blimp: body, belly | `#EECCCC` `#CCAACC` |
 | hills: far, near | `#8888AA` `#666688` |
 | trees: shade, body, lit rim | `#224444` `#226644` `#88CC88` |
 | stand in the light: mass, lip, under the lip | `#666688` `#EECCCC` `#444466` |
@@ -81,9 +86,11 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#4466CC` `#66AAEE` `#AACCEE` `#CCEEEE` `#EEEECC` |
+| sky at bat, top to horizon | `#4466CC` `#66AAEE` `#AACCEE` `#CCEEEE` `#EEEECC` |
 | sun or moon, then its halo | `#EEEECC` `#AACCEE` |
 | cloud: top, body, lower, underside | `#EEEEEE` `#EEEEEE` `#AACCEE` `#88AACC` |
+| birds | `#222244` |
+| blimp: body, belly | `#EEEEEE` `#AACCEE` |
 | hills: far, near | `#88AACC` `#66AA88` |
 | trees: shade, body, lit rim | `#116633` `#228844` `#66CC44` |
 | stand in the light: mass, lip, under the lip | `#666688` `#EEEECC` `#444466` |
@@ -107,8 +114,10 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#4466CC` `#66AAEE` `#AACCEE` `#CCEEEE` |
+| sky at bat, top to horizon | `#4466CC` `#66AAEE` `#AACCEE` `#CCEEEE` |
 | cloud: top, body, lower, underside | `#EEEEEE` `#EEEEEE` `#AACCEE` `#88AACC` |
+| birds | `#222244` |
+| blimp: body, belly | `#EEEEEE` `#AACCEE` |
 | hills: far, near | `#88AACC` `#66AA88` |
 | trees: shade, body, lit rim | `#116633` `#228844` `#66CC44` |
 | stand in the light: mass, lip, under the lip | `#666688` `#EEEEEE` `#444466` |
@@ -132,9 +141,11 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#222266` `#444488` `#6666AA` `#AA88AA` `#CC8888` `#EEAA88` `#EECC88` |
+| sky at bat, top to horizon | `#222266` `#444488` `#6666AA` `#AA88AA` `#CC8888` `#EEAA88` `#EECC88` |
 | sun or moon, then its halo | `#EEEEAA` `#EECC88` |
 | cloud: top, body, lower, underside | `#AA88AA` `#CC8888` `#EEAA88` `#EECC88` |
+| birds | `#EECC88` |
+| blimp: body, belly | `#EECC88` `#CC8888` |
 | hills: far, near | `#886688` `#664466` |
 | trees: shade, body, lit rim | `#224444` `#226644` `#CCAA66` |
 | stand in the light: mass, lip, under the lip | `#666688` `#EECC88` `#444466` |
@@ -159,8 +170,10 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#000022` `#222244` `#222266` `#444488` `#886688` `#CC8866` |
+| sky at bat, top to horizon | `#000022` `#222244` `#222266` `#444488` `#886688` `#CC8866` |
 | cloud: top, body, lower, underside | `#444466` `#664466` `#886688` `#CC8866` |
+| birds | `#8888AA` |
+| blimp: body, belly | `#8888AA` `#444466` |
 | hills: far, near | `#444466` `#222244` |
 | trees: shade, body, lit rim | `#002222` `#224444` `#446666` |
 | stand in the light: mass, lip, under the lip | `#444466` `#AAAACC` `#222244` |
@@ -168,6 +181,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#AAAACC` `#EEEEEE` `#4466CC` `#EEDD22` `#666688` `#EE6666` |
 | upper deck: mass, roof edge, lamp, column | `#222244` `#AAAACC` `#EEEEAA` `#222244` |
+| tower: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#660022` `#AA2222` `#CC2222` `#EE6666` |
@@ -184,9 +198,11 @@ file is correct.
 
 | Role | Colours |
 |---|---|
-| sky, top to horizon | `#000022` `#222244` `#222266` `#444488` |
+| sky at bat, top to horizon | `#000022` `#222244` `#222266` `#444488` |
 | sun or moon, then its halo | `#EEEECC` `#444488` |
 | cloud: top, body, lower, underside | `#666688` `#444488` `#444466` `#222244` |
+| birds | `#8888AA` |
+| blimp: body, belly | `#8888AA` `#444466` |
 | hills: far, near | `#222244` `#000022` |
 | trees: shade, body, lit rim | `#002222` `#224444` `#446666` |
 | stand in the light: mass, lip, under the lip | `#444466` `#AAAACC` `#222244` |
@@ -194,6 +210,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#AAAACC` `#EEEEEE` `#4466CC` `#EEDD22` `#666688` `#EE6666` |
 | upper deck: mass, roof edge, lamp, column | `#222244` `#AAAACC` `#EEEEAA` `#222244` |
+| tower: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#660022` `#AA2222` `#CC2222` `#EE6666` |
