@@ -14,8 +14,15 @@ final class RareEventTests: XCTestCase {
     // MARK: - The landmarks are where they say they are
 
     /// Agent G's rule, applied again: #5's draws come last in `Scenery.generate`'s stream, so no
-    /// park's clouds, breeze, moon, towers or stars moved when the board and the wall tower
-    /// arrived. A fingerprint of all of it over parks 1…200, taken before they existed.
+    /// park's clouds or breeze moved when the board and the wall tower arrived. A fingerprint of
+    /// all of it over parks 1…200, taken before they existed.
+    ///
+    /// The night kit — the moon, the towers and the stars — is deliberately **not** in the
+    /// fingerprint (re-pinned 2026-09-21, on unchanged code, before the clock arrived —
+    /// DESIGN.md §20 "What the clock replaces"). §20 stops throwing those three away by day, so
+    /// by-day parks gain towers and stars they were always seeded with, and a hash that carried
+    /// them could not tell that from a cloud that moved. What is left is what the stream must
+    /// not shift: the breeze, the flags, the stands and every cloud.
     func testLandmarksMovedNoParksExistingScenery() {
         var h: UInt64 = 0xCBF2_9CE4_8422_2325
         func eat(_ v: Double) { h = (h ^ v.bitPattern) &* 0x0000_0100_0000_01B3 }
@@ -29,20 +36,8 @@ final class RareEventTests: XCTestCase {
                 eat(c.xFraction); eat(c.baselineY)
                 for b in c.blocks { eat(Double(b.dx)); eat(Double(b.rise)); eat(Double(b.w)) }
             }
-            if let m = s.moon {
-                eat(m.xFraction); eat(m.y); eat(m.radius); eat(Double(m.biteDirection))
-            }
-            for t in s.lightTowers {
-                eat(t.feetBehindWall); eat(t.heightFeet)
-                eat(Double(t.bankColumns)); eat(Double(t.bankRows))
-            }
-            for star in s.stars {
-                eat(star.xFraction); eat(star.y); eat(star.blinkPeriod ?? -1); eat(star.blinkPhase)
-            }
         }
-        // Measured on `origin/main` before any of #5 existed, not taken from this branch:
-        // main's Core was exported on its own and asked the same question (2026-09-19).
-        XCTAssertEqual(h, 7_243_457_102_344_678_753)
+        XCTAssertEqual(h, 17_689_567_396_415_397_145)
     }
 
     func testTheBoardIsInAboutOneParkInThreeAndNeverOnTheLadder() {
