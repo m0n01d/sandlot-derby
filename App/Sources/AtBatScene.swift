@@ -80,10 +80,16 @@ final class AtBatScene: CanvasScene {
     private let progressLampGap = 2.0
 
     private let layout = BackdropLayout.standard
+    private let atBatLook = AtBatLookRules.standard
     /// The horizon above the wall, drawn once per park and canvas and copied after that
     /// (DESIGN.md §17). Only the clouds are redrawn per frame.
     private let backdrops = BackdropCache()
     private var cachedScenery: Scenery?
+
+    /// The people, built once for each pose and hour and stamped after that, with the shapes of
+    /// their cast shadows beside them (§20 "Layers and speed").
+    private let people = ShadedSpriteCache()
+    private let shadows = ShadowStampCache()
 
     /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds
     /// its cloud stamps fresh every time it is asked.
@@ -126,7 +132,7 @@ final class AtBatScene: CanvasScene {
         let layers = backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat,
                              phase: machine.phase),
-            height: canvas.height) { sky, behind, _ in
+            height: canvas.height) { sky, behind, front in
             SkyArt.sky(into: sky.canvas, look: look, width: fullWidth, flightCamera: false)
             // The sun goes in the sky layer with the stops: it is not a thing in the park and
             // nothing about the at-bat camera ever moves it. The moon is the park's and is drawn
@@ -135,15 +141,38 @@ final class AtBatScene: CanvasScene {
                 SkyArt.sunOrMoon(into: sky.canvas, look: look, x: disc.x(width: fullWidth),
                                  y: disc.y, radius: disc.radius, halo: disc.halo)
             }
-            BackdropArt.atBatHorizon(into: behind.canvas, park: machine.park, scenery: scenery,
-                                     width: fullWidth, xOffset: xOff, look: look,
-                                     layout: self.layout)
-            // The foul poles stand in front of the horizon pieces and behind everything on the
-            // field (#28). Off the same two x's the foul lines are drawn from, so they stay
-            // married however wide the canvas is.
-            BackdropArt.atBatFoulPoles(into: behind.canvas, league: machine.park.league,
+            // `behind`: the hills, the trees, and — in a park with no stand to hide them —
+            // §17's own two pieces on the horizon (§20 "Layers and speed").
+            AtBatArt.horizon(into: behind.canvas, park: machine.park, scenery: scenery,
+                             look: look, width: fullWidth, xOffset: xOff,
+                             layout: self.layout, rules: self.atBatLook)
+
+            // `front`: everything from the stands down. It goes in over the ball's sky and under
+            // the people, and none of it moves — not even the crowd, which at bat does not bounce.
+            let f = front.canvas
+            AtBatArt.stands(into: f, park: machine.park, scenery: scenery, look: look,
+                            width: fullWidth, xOffset: xOff, layout: self.layout,
+                            rules: self.atBatLook)
+            // The foul poles stand in front of the wings and behind everything on the field
+            // (#28). Off the same two x's the foul lines are drawn from, so they stay married
+            // however wide the canvas is.
+            BackdropArt.atBatFoulPoles(into: f, league: machine.park.league,
                                        xs: [xOff + self.foulLineLeftX, xOff + self.foulLineRightX],
                                        look: look, layout: self.layout)
+            AtBatArt.field(into: f, look: look, width: fullWidth, xOffset: xOff,
+                           rules: self.atBatLook)
+            AtBatArt.lowSun(into: f, look: look, width: fullWidth, rules: self.atBatLook)
+            AtBatArt.nightPool(into: f, look: look, width: fullWidth, rules: self.atBatLook)
+            AtBatArt.scoreboardFrame(into: f, look: look, xOffset: xOff, rules: self.atBatLook)
+            AtBatArt.dirtAndChalk(into: f, scenery: scenery, look: look, xOffset: xOff,
+                                  foulLines: (apex: (x: xOff + self.foulLineApexX,
+                                                     y: self.foulLineApexY),
+                                              left: xOff + self.foulLineLeftX,
+                                              right: xOff + self.foulLineRightX,
+                                              wallY: self.foulLineWallY),
+                                  rules: self.atBatLook)
+            // The mist lies on top of all of it and behind the pitcher — `dawn` only.
+            AtBatArt.mist(into: f, look: look, width: fullWidth)
         }
         layers.sky.blitOpaque(onto: canvas)
         // Every park stands towers since §20, and the clock decides whether they are drawn at
@@ -179,19 +208,14 @@ final class AtBatScene: CanvasScene {
         }
         layers.behind.blit(onto: canvas)
 
-        // The towers flank the scoreboard, standing on the wall band, which is drawn next and
-        // covers their feet.
+        // The towers flank the scoreboard, standing on the wall band. The stands go in on top of
+        // them next and cover their feet, so what is left is a bank floating over the roof.
         SkyArt.towers(into: canvas, frames: towers, width: fullWidth, look: look, layout: layout)
 
-        canvas.rect(0, 96, fullWidth, 8, look.wall[1])
-        canvas.rect(0, 96, fullWidth, 1, Palette.chalk)
-        canvas.rect(0, 104, fullWidth, H - 104, Palette.grassA)
-        var gy = 104.0
-        while gy < H { canvas.rect(0, gy, fullWidth, 6, Palette.grassB); gy += 12 }
+        // The stands, the wall, the track, the grass, the dirt and the chalk, in one copy.
+        layers.front.blit(onto: canvas)
 
         // Everything else is the 320-wide prototype column, centred.
-        canvas.rect(wx(128), 80, 64, 16, look.board[0])
-        canvas.rect(wx(128), 80, 64, 1, look.board[1])
         canvas.t3(wx(134), 84, "\(Int(machine.park.wallDistanceFeet)) FT", Palette.score)
         // The outfield scoreboard says where you are — or that these ten are not the career
         // (DESIGN.md §18). Same board, same place, one word swapped.
@@ -202,15 +226,19 @@ final class AtBatScene: CanvasScene {
         BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
                                     frame: SkyLife.flutterFrame(at: now), look: look, layout: layout)
 
-        canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineLeftX), foulLineWallY, Palette.chalk)
-        canvas.line(wx(foulLineApexX), foulLineApexY, wx(foulLineRightX), foulLineWallY, Palette.chalk)
-        canvas.rect(wx(148), 116, 24, 5, look.dirt[1])
-        canvas.rect(wx(150), 121, 20, 2, look.dirt[2])
-        canvas.rect(wx(120), 184, 80, 14, look.dirt[1])
-        canvas.rect(wx(124), 198, 72, 4, look.dirt[2])
-        canvas.rect(wx(152), 190, 16, 4, Palette.chalk)
-
-        drawPitcher(canvas: canvas, wx: wx, beat: machine.beat, elapsed: machine.elapsed, look: look)
+        // The two figures, each with its cast shadow laid on the ground first. Both stand where
+        // they have always stood: the pitcher on the mound at (160, 117), the batter's feet at
+        // (104, 222).
+        let table = PeopleArt.shadowTable(look: look)
+        let pitcherPose = self.pitcherPose(beat: machine.beat, elapsed: machine.elapsed)
+        drawFigure(canvas: canvas, name: "pitcher", pose: pitcherPose, phase: machine.phase,
+                   look: look, x: wx(pitcherX), y: pitcherY, table: table,
+                   // The mound is eight pixels across, so his shadow softens far sooner than a
+                   // figure standing on the open grass (`golden.at_bat`).
+                   shadows: look.shadows.map {
+                       Look.Shadow(slope: $0.slope, rise: $0.rise,
+                                   softFrom: PeopleRules.standard.pitcherShadowSoftFrom)
+                   }) { PeopleArt.pitcher(pose: pitcherPose, look: look) }
 
         let z = machine.pitchingRules.strikeZone
         var zi = 0.0
@@ -234,13 +262,14 @@ final class AtBatScene: CanvasScene {
         case .miss where machine.lastCall == .miss: batterFrame = 2
         default: batterFrame = 0
         }
-        drawBatter(canvas: canvas, wx: wx, frame: batterFrame, look: look)
+        drawFigure(canvas: canvas, name: "batter", pose: batterFrame, phase: machine.phase,
+                   look: look, x: wx(batterX), y: batterY, table: table,
+                   shadows: look.shadows) { PeopleArt.batter(pose: batterFrame, look: look) }
 
         switch machine.beat {
         case .pitch:
             let b = machine.ballNow
-            canvas.baseball(wx(b.x), b.y, radius: b.radius, highlight: look.ballHi)
-            if b.radius >= 2 { canvas.px(wx(b.x + b.radius), b.y, look.ballLo) }
+            drawBall(canvas: canvas, x: wx(b.x), y: b.y, radius: b.radius, look: look)
             canvas.t3(wx(8), H - 12, "\(Int(machine.pitch.speedMPH.rounded())) MPH", Palette.chalk,
                       shadow: Palette.ink)
         case .contact:
@@ -334,58 +363,50 @@ final class AtBatScene: CanvasScene {
         }
     }
 
+    /// Where the two of them stand. Unchanged since the prototype and deliberately named: the
+    /// hit test, the strike zone and the pitch's own geometry are all measured against these.
+    private let pitcherX = 160.0
+    private let pitcherY = 117.0
+    private let batterX = 104.0
+    private let batterY = 222.0
+
     /// Three frames on the windup clock — `elapsed`/`beat`, no state of its own — set, leg
     /// kick/reach back, release (DESIGN.md §3, §9). The third, `.set`, was the one never built
     /// (issue #20): before it, the windup's first 40% and everything past `.pitch` shared the
     /// release silhouette, so the wind-up never had a calm beat to kick off from.
-    private func drawPitcher(canvas: PixelCanvas, wx: (Double) -> Double, beat: Beat,
-                             elapsed: Double, look: Look) {
-        let windup = beat == .windup ? min(1, elapsed / 0.5) : 1
-        let px = 160.0, py = 117.0
-        // Still §9's three flat silhouettes — §20 step 4 builds him out of `ShadedSprite` — but
-        // in the phase's own flannel, skin and cap rather than one `ink` shape for every hour.
-        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2]
-        canvas.rect(wx(px - 2), py - 12, 5, 8, cloth)
-        canvas.rect(wx(px - 2), py - 16, 5, 4, skin)
-        canvas.rect(wx(px - 3), py - 18, 7, 2, cap)
-        if beat == .windup, windup <= 0.4 {
-            // Set: feet together, hands tucked in — the pause before the kick.
-            canvas.rect(wx(px - 1), py - 4, 2, 4, cloth)
-        } else if beat == .windup, windup < 0.9 {
-            // Leg kick / reach back.
-            canvas.rect(wx(px - 1), py - 4, 3, 4, cloth)
-            canvas.rect(wx(px + 2), py - 8, 2, 4, cloth)
-            canvas.line(wx(px + 3), py - 12, wx(px + 6), py - 20, cloth)
-        } else {
-            // Release: also held through `.pitch` and beyond — the ball has already left the hand.
-            canvas.rect(wx(px - 2), py - 4, 2, 4, cloth)
-            canvas.rect(wx(px + 1), py - 4, 2, 4, cloth)
-            canvas.line(wx(px + 3), py - 10, wx(px + 7), py - 6, cloth)
-        }
+    private func pitcherPose(beat: Beat, elapsed: Double) -> Int {
+        guard beat == .windup else { return 2 }
+        let windup = min(1, elapsed / 0.5)
+        if windup <= 0.4 { return 0 }          // set: feet together, hands tucked in
+        if windup < 0.9 { return 1 }           // the leg kick and the reach back
+        return 2                               // release, and held on past it
     }
 
-    private func drawBatter(canvas: PixelCanvas, wx: (Double) -> Double, frame: Int, look: Look) {
-        let bx = 104.0, by = 222.0
-        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2], wood = look.wood[2]
-        canvas.rect(wx(bx - 8), by - 24, 7, 24, cloth)
-        canvas.rect(wx(bx + 3), by - 24, 7, 24, cloth)
-        canvas.rect(wx(bx - 9), by - 52, 20, 30, cloth)
-        canvas.rect(wx(bx - 6), by - 64, 12, 12, skin)
-        canvas.rect(wx(bx - 8), by - 68, 16, 6, cap)
-        canvas.rect(wx(bx - 8), by - 62, 4, 8, cap)
-        switch frame {
-        case 0:
-            canvas.rect(wx(bx + 8), by - 48, 6, 8, cloth)
-            canvas.rect(wx(bx + 12), by - 52, 4, 4, skin)
-            canvas.line(wx(bx + 14), by - 52, wx(bx + 22), by - 84, wood, thickness: 3)
-        case 1:
-            canvas.rect(wx(bx + 8), by - 44, 10, 6, cloth)
-            canvas.rect(wx(bx + 16), by - 44, 4, 4, skin)
-            canvas.line(wx(bx + 18), by - 42, wx(bx + 62), by - 58, wood, thickness: 3)
-        default:
-            canvas.rect(wx(bx - 14), by - 40, 8, 6, cloth)
-            canvas.rect(wx(bx - 16), by - 40, 4, 4, skin)
-            canvas.line(wx(bx - 16), by - 40, wx(bx - 40), by - 56, wood, thickness: 3)
+    /// One figure and the shadow it throws: the stamp and the shadow's shape are built the first
+    /// time this pose comes up at this hour and kept after that (§20 "Layers and speed"), so a
+    /// frame is two copies and a walk over a few hundred ground pixels.
+    private func drawFigure(canvas: PixelCanvas, name: String, pose: Int, phase: DayPhase,
+                            look: Look, x: Double, y: Double,
+                            table: [UInt32: Palette.RGBA8], shadows: [Look.Shadow],
+                            build: () -> ShadedSprite) {
+        let sprite = people.sprite(name, pose: pose, phase: phase, build: build)
+        let stamp = shadows.isEmpty ? nil : self.shadows.stamp(name, pose: pose, phase: phase) {
+            PeopleArt.shadowStamp(for: sprite, shadows: shadows)
+        }
+        if let stamp {
+            PeopleArt.cast(stamp, into: canvas, footX: x, footY: y, table: table)
+        }
+        sprite.blit(onto: canvas, x: Int(x), y: Int(y))
+    }
+
+    /// The ball: `chalk` with its red laces, one highlight pixel where the light catches it and
+    /// three on the underside, so it reads as a sphere rather than a dot (§20 "Ball").
+    private func drawBall(canvas: PixelCanvas, x: Double, y: Double, radius: Double, look: Look) {
+        canvas.baseball(x, y, radius: radius, highlight: look.ballHi)
+        guard radius >= 2 else { return }
+        let bx = x.rounded(.down), by = y.rounded(.down)
+        for (fx, fy) in [(0.67, 0.67), (0.33, 1.0), (1.0, 0.33)] {
+            canvas.px(bx + radius * fx, by + radius * fy, look.ballLo)
         }
     }
 
