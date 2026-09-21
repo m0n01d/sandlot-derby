@@ -36,11 +36,12 @@ final class StatsScene: CanvasScene {
         canvas.fill(Palette.wall)
 
         let left = safeLeft + 8, right = width - safeRight - 8
-        canvas.t3(left, 8, "CAREER", Palette.score, scale: 2)
+        canvas.t3(left, 8, "CAREER", Palette.score, scale: 2, shadow: Palette.ink)
         // The career's park, not the day's: this board is headed CAREER, and a Warm Up only
         // ever borrows the field (DESIGN.md §18).
         let park = controller.machine.careerPark.displayName
-        canvas.t3(right - Double(park.count) * 8, 8, park, Palette.chalk, scale: 2)
+        canvas.t3(right - Double(park.count) * 8, 8, park, Palette.chalk, scale: 2,
+                  shadow: Palette.ink)
 
         let columns = max(2, Int((right - left) / 130))
         let gutter = 12.0
@@ -58,13 +59,17 @@ final class StatsScene: CanvasScene {
             guard column < columns else { break }
             let x = left + Double(column) * (columnWidth + gutter)
 
+            // The title sits on the ink plate just drawn, where an ink shadow would be invisible
+            // (DESIGN.md §20); the label and value below it sit on the plain `wall` fill and get
+            // the shadow like every other readout.
             canvas.rect(x - 2, top + Double(row) * pitch - 1, columnWidth + 4, 7, Palette.ink)
             canvas.t3(x, top + Double(row) * pitch, section.title, Palette.score)
             row += 1
             for r in section.rows {
                 let y = top + Double(row) * pitch
-                canvas.t3(x, y, r.label, Palette.chalk)
-                canvas.t3(x + columnWidth - Double(r.value.count) * 4, y, r.value, Palette.score)
+                canvas.t3(x, y, r.label, Palette.chalk, shadow: Palette.ink)
+                canvas.t3(x + columnWidth - Double(r.value.count) * 4, y, r.value, Palette.score,
+                          shadow: Palette.ink)
                 if section.isContract { contractRow = (x: x, y: y, width: columnWidth) }
                 if section.isWarmUp { warmUpRow = (x: x, y: y, width: columnWidth) }
                 row += 1

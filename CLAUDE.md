@@ -71,9 +71,25 @@ routing, PR screenshot and grooming rules do.
   — and `ShadedSpriteCache`, keyed by name, pose and phase; steps 3 and 4 build the people with
   it, and a DEBUG `selfCheck()` holds the port to the prototype's own batter torso). `Backdrop`
   gained a third cached layer, `sky`, below `behind`: opaque, copied by rows, never shifted with
-  the ground.
+  the ground. §20 step 4 (2026-09-21) added `FlightArt.swift` (`FlightLookRules`, the side view's
+  own knob table ported from `prototypes/04-golden-hour/side.py`, and `FlightArt`, the horizon,
+  grass, field marks, wall, stands, crowd, furniture, batter, trail and ball it draws — both
+  framings are one drawing, the same park at a different scale through `SideView`). `FlightLayer`
+  seals a cached layer to per-row runs of painted pixels instead of one bounding box: this
+  camera's `behind` layer is hills and a tower lattice the full height of the screen, so a box
+  round it would be the whole screen, and a run copies with one `memmove` in place of testing
+  every pixel — why the run-length blit exists. `FlightLayers` holds `sky`/`behind`/`front` and
+  the crowd's three bounce layers together, and `FlightBackdropCache` keeps both framings' layers
+  at once, painted at the head of a flight, so the wide-to-close cut still costs nothing but a
+  pointer. `PixelCanvas` gained `packed` (reads back what is already at a pixel, for the roof
+  shadow and a lit rim to find an edge) and `SkyArt.towers` split into `towerLattices` (cached in
+  `behind`) and `towerBanks` (drawn per frame, since the chase moves it). `WideScene` now draws
+  through `FlightArt`/`FlightBackdropCache` in place of its own code, and `Backdrop.swift` lost
+  the side view's drawing to it, keeping only the at-bat camera's pieces, the shared far/near
+  kit, the stands' flags and the board's damage.
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
-  `docs/shots/looks/` is the six skies in both cameras.
+  `docs/shots/looks/` is the six skies in both cameras. `docs/shots/flight/` is the flight
+  camera in six skies, both framings, three stand tiers and an iPad mini.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
 
@@ -181,6 +197,13 @@ overrides whatever StoreKit itself would say.
     recipes) need `xcode-select` pointing at `Xcode.app`, not just the Command Line Tools —
     switching it needs Dwight's password, so an agent that hits an `xcode-select` error should say
     so rather than trying to work around it.
+
+  One more, from §20 step 5: `cropdetect`'s black threshold is content-aware, not fixed. At
+  `-phase night` and `twilight` the top of the sky is `#000022`, under the default limit of 24, so
+  the iPad crop above read it as more letterbox bar and cropped into the game, past the first
+  readout line at y = 8. Checked against the raw, uncropped framebuffer in every phase before
+  picking a number: the same sky's luma sits over 0, so `limit=8` (see the script) tells the two
+  apart without changing what a day shot crops.
 
   `SURVEY=1 swift test --filter RareEventSurvey` un-skips `RareEventTests`' two rarity-survey
   tests, which sweep every park (and, for the sky, every half-second of the clock) against the

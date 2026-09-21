@@ -20,7 +20,9 @@
 # mini's framebuffer is also portrait, but the landscape app is drawn upright and letterboxed
 # inside it already — rotating it would turn the picture sideways, so an iPad's frames instead get
 # their top/bottom letterbox bars cropped off, computed from the image itself (never a guessed
-# fixed crop) via ffmpeg's cropdetect.
+# fixed crop) via ffmpeg's cropdetect, with its black threshold tuned low enough that the darkest
+# sky in the game (night and twilight's `#000022`) still reads as picture, not bar — see the crop
+# step below.
 #
 # For a rare event's ~0.5 s two-frame burst, these stills lag the game clock too much to land
 # inside the window (wave 3, CLAUDE.md Verification) — record video instead and pull frames:
@@ -96,7 +98,15 @@ for f in "$OUT"/f*.png; do
       # Crop the top/bottom letterbox bars off, computed from the image's own pure-black rows via
       # ffmpeg's cropdetect — never a guessed fixed crop. Leaves the frame alone (bars and all) if
       # cropdetect can't find a clean edge, rather than risk cutting into the game's own picture.
-      CROP=$(ffmpeg -i "$f" -vf "cropdetect=24:2:0:skip=0" -f null - 2>&1 | grep -o 'crop=[0-9:]*' | tail -1)
+      #
+      # limit=8, not cropdetect's default 24: at `-phase night` and `twilight` the top of the sky
+      # is `#000022` (docs/palette.md), whose luma is under 24, so the default limit read it as
+      # more letterbox and cropped 36 px into the game — past the first readout line at y = 8
+      # (DESIGN.md §20 step 5). Checked against a raw, uncropped iPad framebuffer in every phase:
+      # 8 sits under that sky's luma (so it never counts as bar) and well clear of true black
+      # (crop still lands on the same edge all the way down to limit=0), so day shots crop exactly
+      # as before and a night or twilight shot keeps its whole top row.
+      CROP=$(ffmpeg -i "$f" -vf "cropdetect=8:2:0:skip=0" -f null - 2>&1 | grep -o 'crop=[0-9:]*' | tail -1)
       if [ -n "$CROP" ]; then
         CH=$(echo "$CROP" | cut -d: -f2); CY=$(echo "$CROP" | cut -d: -f4)
         ffmpeg -y -loglevel error -i "$f" -vf "crop=$w:$CH:0:$CY" "$f.crop.png" \
