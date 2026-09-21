@@ -8,6 +8,29 @@ where the ball flies with real drag, and the only number that matters ticks up u
 
 No outs. No menus. No timers. Parks are seeded and endless. The score is total feet, forever.
 
+## Screenshots
+
+![At bat, golden hour](docs/shots/readme/atbat-goldenhour.png)
+*At bat, golden hour. Full stands, a low sun, and a slice about to happen.*
+
+![At bat, night](docs/shots/readme/atbat-night.png)
+*At bat under the lights.*
+
+![Contact](docs/shots/readme/contact-goldenhour.png)
+*The frame freezes on the slash — a BARREL, full power.*
+
+![The wide view](docs/shots/readme/flight-wide-goldenhour.png)
+*The cut to the wide view: real drag, feet ticking up.*
+
+![The close cut, at night](docs/shots/readme/flight-close-night.png)
+*The close cut, near the wall, at night.*
+
+![A home-run streak](docs/shots/readme/homerun-fireworks-goldenhour.png)
+*A home-run streak earns fireworks.*
+
+![Six times a day](docs/shots/readme/six-phases-atbat.png)
+*The same at bat, six times a day: dawn, morning, midday, golden hour, twilight, night.*
+
 - **Spec:** [`DESIGN.md`](DESIGN.md)
 - **Physics and calibration oracle:** [`docs/physics.md`](docs/physics.md)
 - **Palette:** [`docs/palette.md`](docs/palette.md)
