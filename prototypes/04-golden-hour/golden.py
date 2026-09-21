@@ -382,15 +382,18 @@ def towers(c, look, slots=(62, 96, 224, 258), foot=96, height=34):
             elif (y - top) % 7 == 3:
                 c.set(int(x - half + ((y * 3) % max(1, int(half * 2)))), y, col('#446688'))
         bx, by = x - 7, top - 2
+        lit = look['towers']                                # the lamps are on in twilight and at night only
         for yy in range(int(by - 8), int(by + 14)):
             for xx in range(int(bx - 9), int(bx + 24)):
                 d = math.hypot((xx - (bx + 7)) / 15, (yy - (by + 3)) / 9)
-                if d < 1 and (1 - d) * 0.9 > (BAYER[yy % 4][xx % 4] + .5) / 16:
+                if lit and d < 1 and (1 - d) * 0.9 > (BAYER[yy % 4][xx % 4] + .5) / 16:
                     c.set(xx, yy, col('#444488') if d > 0.55 else col('#6666AA'))
         c.rect(bx - 1, by - 1, 17, 9, INK)
         for j in range(2):
-            for i in range(4):
-                c.rect(bx + i * 4, by + j * 4, 3, 3, col('#EEEEAA')); c.px(bx + i * 4 + 1, by + j * 4 + 1, P['chalk'])
+            for i in range(4):                              # a dark bank keeps its lamps in the pole colour
+                c.rect(bx + i * 4, by + j * 4, 3, 3, col('#EEEEAA') if lit else col('#446688'))
+                if lit:
+                    c.px(bx + i * 4 + 1, by + j * 4 + 1, P['chalk'])
 
 
 def cast(c, sp, fx, fy, look, table):
@@ -572,7 +575,7 @@ def flight(look, cam, mode='flight'):
                       (236, 70, 17, [look['red'][2], P['score'], P['chalk']])])
     V.hills(c, look['hill'][0], 30, 5, baseline=g0, r=(34, 60)); V.hills(c, look['hill'][1], 17, 9, baseline=g0, r=(20, 34))
     leafy(c, look, 0, int(fr.x(S.WALL)), int(g0), 21)
-    if night:                                           # two towers behind the stands, banks lit
+    if True:                                            # two towers behind the stands, in every phase; lit when `night`
         for feet, tall in ((40, 168), (128, 182)):
             x, top = fr.x(S.WALL + feet), fr.y(tall)
             for y in range(int(top + 8), int(fr.y(S.TOP))):
@@ -586,12 +589,14 @@ def flight(look, cam, mode='flight'):
             for yy in range(int(by - 12), int(by + 22)):
                 for xx in range(int(bx - 14), int(bx + 36)):
                     d = math.hypot((xx - (bx + 10)) / 24, (yy - (by + 5)) / 14)
-                    if d < 1 and (1 - d) > (BAYER[yy % 4][xx % 4] + .5) / 16:
+                    if night and d < 1 and (1 - d) > (BAYER[yy % 4][xx % 4] + .5) / 16:
                         c.set(xx, yy, col('#444488') if d > 0.55 else col('#6666AA'))
             c.rect(bx - 1, by - 1, 22, 13, INK)
             for j in range(3):
                 for k in range(5):
-                    c.rect(bx + k * 4, by + j * 4, 3, 3, col('#EEEEAA')); c.px(bx + k * 4 + 1, by + j * 4 + 1, P['chalk'])
+                    c.rect(bx + k * 4, by + j * 4, 3, 3, col('#EEEEAA') if night else col('#446688'))
+                    if night:
+                        c.px(bx + k * 4 + 1, by + j * 4 + 1, P['chalk'])
     deck_mass, roof, lamp, column = look['deck']
     S.upper_deck(c, fr, deck_mass, roof, column, column, glow=lamp)
     S.pennant_string(c, fr, column, [look['red'][2], roof])
@@ -836,8 +841,7 @@ def at_bat(look, beat='pitch', tier='full', park=None, feet=None, pole=28, near=
         leafy(c, look, 118, 202, 96, 21)
     else:                                                   # a low stand, or none: the far side of town shows over it
         leafy(c, look, 0, W, 96, 21)
-    if look['towers']:
-        towers(c, look)
+    towers(c, look)                                         # by day too (Dwight, 2026-09-21): dark until the lamps come on
     if tier != 'fenceAndTrees':
         wing(c, look, -1, 3, tier); wing(c, look, +1, 4, tier)
     if near:

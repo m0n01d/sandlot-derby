@@ -1,6 +1,6 @@
 # Sandlot Derby
 
-A minimalist home run derby for iOS. Sixteen colours, two cameras, one gesture.
+A minimalist home run derby for iOS. Forty-five colours, two cameras, one gesture.
 
 The pitch comes at you. You slice through it, Fruit Ninja style. The direction of your slice is the
 swing angle, its speed is the power. The frame freezes on the slash, then cuts to a wide side view

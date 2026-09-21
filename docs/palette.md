@@ -68,6 +68,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#AAAACC` `#CCAACC` `#EEAAAA` `#8888AA` `#6666AA` |
 | upper deck: mass, roof edge, lamp, column | `#666688` `#EECCCC` `#EEEECC` `#444466` |
+| tower, lamps off: the pole, and the dark lamps in the same colour | `#446688` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | grass the low sun rakes | `#66AA44` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
@@ -98,6 +99,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` `#884422` |
 | crowd shirts | `#CC2222` `#EEEEEE` `#4466CC` `#EEDD22` `#66CC44` `#EE6666` `#AAAACC` |
 | upper deck: mass, roof edge, lamp, column | `#8888AA` `#EEEEEE` `#66AAEE` `#666688` |
+| tower, lamps off: the pole, and the dark lamps in the same colour | `#446688` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#880022` `#AA2222` `#CC2222` `#EE6666` |
@@ -125,6 +127,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` `#884422` |
 | crowd shirts | `#CC2222` `#EEEEEE` `#4466CC` `#EEDD22` `#66CC44` `#EE6666` `#AAAACC` |
 | upper deck: mass, roof edge, lamp, column | `#8888AA` `#EEEEEE` `#66AAEE` `#666688` |
+| tower, lamps off: the pole, and the dark lamps in the same colour | `#446688` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#880022` `#AA2222` `#CC2222` `#EE6666` |
@@ -153,6 +156,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#EE8866` `#AAAACC` `#CC8888` `#EECC88` `#8888AA` `#6666AA` |
 | upper deck: mass, roof edge, lamp, column | `#664466` `#EECC88` `#EEEEAA` `#444466` |
+| tower, lamps off: the pole, and the dark lamps in the same colour | `#446688` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | grass the low sun rakes | `#66AA44` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
@@ -181,7 +185,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#AAAACC` `#EEEEEE` `#4466CC` `#EEDD22` `#666688` `#EE6666` |
 | upper deck: mass, roof edge, lamp, column | `#222244` `#AAAACC` `#EEEEAA` `#222244` |
-| tower: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
+| tower, lamps on: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#660022` `#AA2222` `#CC2222` `#EE6666` |
@@ -210,7 +214,7 @@ file is correct.
 | crowd heads | `#EEAA88` `#EECCAA` `#CC8866` |
 | crowd shirts | `#CC2222` `#AAAACC` `#EEEEEE` `#4466CC` `#EEDD22` `#666688` `#EE6666` |
 | upper deck: mass, roof edge, lamp, column | `#222244` `#AAAACC` `#EEEEAA` `#222244` |
-| tower: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
+| tower, lamps on: pole, outer bloom, inner bloom, lamp | `#446688` `#444488` `#6666AA` `#EEEEAA` |
 | wall: lit top, face, foot | `#44AA66` `#226644` `#004422` |
 | dirt: light, body, shade, deep shade | `#EEAA66` `#CC8844` `#AA6622` `#884422` |
 | team red: deep, shade, body, lit | `#660022` `#AA2222` `#CC2222` `#EE6666` |
