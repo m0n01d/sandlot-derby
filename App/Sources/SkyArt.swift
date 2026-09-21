@@ -55,8 +55,11 @@ enum SkyArt {
         let footY: Double
         let columns: Int
         let rows: Int
-        /// Whether this bank is at full blaze this instant. Steady between pitches; chasing
-        /// bank to bank while the cheer plays.
+        /// Whether this bank is at full blaze this instant. Always false by day: the lamps
+        /// themselves are off, whatever the chase would otherwise say, because every park now
+        /// stands its towers in every phase and only the lamps come and go (§20 "Towers"; §20
+        /// open question 1, decided — Dwight, 2026-09-21). Once the lamps are on, steady between
+        /// pitches and chasing bank to bank while the cheer plays, exactly as before.
         let lit: Bool
         /// Whether a no-doubter has put this bank out (#5). Not the same as dark in the chase:
         /// a bank in the chase keeps its glow's innermost ring and comes back a fifth of a
@@ -76,9 +79,10 @@ enum SkyArt {
     /// The side view's towers: real places in the park, in feet, so the close camera simply sees
     /// them bigger and the tallest of them run out of the top of the frame (§17).
     /// `allTowers`, not `lightTowers`: the short standard over the wall stands in the park like
-    /// any other and chases with them, and it is the only one a ball can reach (#5).
+    /// any other and chases with them, and it is the only one a ball can reach (#5). `lampsOn`
+    /// gates every bank's `lit` the same way — see `TowerFrame.lit`.
     static func sideTowerFrames(park: Park, scenery: Scenery, scale: Double, originX: Double,
-                                ground: Double, time: Double, chasing: Bool,
+                                ground: Double, time: Double, chasing: Bool, lampsOn: Bool,
                                 isOut: (Int) -> Bool = { _ in false },
                                 layout: BackdropLayout = .standard) -> [TowerFrame] {
         scenery.allTowers.enumerated().map { i, tower in
@@ -88,7 +92,7 @@ enum SkyArt {
                               bankY: (ground - tower.heightFeet * scale).rounded(),
                               bankW: size.w, bankH: size.h, footY: ground,
                               columns: tower.bankColumns, rows: tower.bankRows,
-                              lit: SkyLife.bankIsLit(i, at: time, chasing: chasing),
+                              lit: lampsOn && SkyLife.bankIsLit(i, at: time, chasing: chasing),
                               isOut: isOut(i))
         }
     }
@@ -96,16 +100,17 @@ enum SkyArt {
     /// The at-bat view's towers flank the scoreboard above the wall, well clear of the zone
     /// (§17). They are not the side view's towers seen from another angle — you are looking the
     /// other way down the park — so they take fixed slots rather than the seeded depths, and only
-    /// the count and the banks' own shapes carry over.
+    /// the count and the banks' own shapes carry over. `lampsOn` gates every bank's `lit` the
+    /// same way — see `TowerFrame.lit`.
     static func atBatTowerFrames(scenery: Scenery, xOffset: Double, time: Double, chasing: Bool,
-                                 layout: BackdropLayout = .standard) -> [TowerFrame] {
+                                 lampsOn: Bool, layout: BackdropLayout = .standard) -> [TowerFrame] {
         scenery.lightTowers.prefix(layout.atBatTowerSlots.count).enumerated().map { i, tower in
             let size = bankSize(columns: tower.bankColumns, rows: tower.bankRows, layout: layout)
             return TowerFrame(x: (xOffset + layout.atBatTowerSlots[i]).rounded(),
                               bankY: layout.atBatTowerFootY - layout.atBatTowerHeight,
                               bankW: size.w, bankH: size.h, footY: layout.atBatTowerFootY,
                               columns: tower.bankColumns, rows: tower.bankRows,
-                              lit: SkyLife.bankIsLit(i, at: time, chasing: chasing))
+                              lit: lampsOn && SkyLife.bankIsLit(i, at: time, chasing: chasing))
         }
     }
 

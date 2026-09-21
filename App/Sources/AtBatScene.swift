@@ -175,14 +175,17 @@ final class AtBatScene: CanvasScene {
             AtBatArt.mist(into: f, look: look, width: fullWidth)
         }
         layers.sky.blitOpaque(onto: canvas)
-        // Every park stands towers since §20, and the clock decides whether they are drawn at
-        // all: no frames means no lattice, no bank and no halo, which is the one place that
-        // decision has to be made. §20 open question 1 — a real park's towers are there by day,
-        // dark; the mock draws none until the lamps are on, and Dwight has the final word.
-        let towers = machine.lampsOn
-            ? SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
-                                      chasing: machine.crowdIsUp, layout: layout)
-            : []
+        // Every park stands towers in every phase (§20 "What the clock replaces"; §20 open
+        // question 1, decided — Dwight, 2026-09-21: the towers stand by day too, dark until the
+        // lamps come on). The clock only decides whether a bank is *lit* — `atBatTowerFrames`
+        // folds `lampsOn` into `lit` for every bank at once, so the lattice and a dark bank still
+        // draw below whatever the hour.
+        let towers = SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
+                                             chasing: machine.crowdIsUp,
+                                             lampsOn: machine.lampsOn, layout: layout)
+        // Stars, the moon and a bank's halo stay lamps-only: nothing new here to draw by day, and
+        // `nightSky` only narrows its star count at `twilight` — it does not know to hide them
+        // itself, so the gate has to stay here.
         if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, look: look, layout: layout)
