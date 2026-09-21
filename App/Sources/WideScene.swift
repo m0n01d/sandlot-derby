@@ -44,34 +44,41 @@ final class WideScene: CanvasScene {
 
     override func render(into canvas: PixelCanvas) {
         guard let machine = renderMachine else { return }
-        let scheme = Palette.scheme(lampsOn: machine.lampsOn)
+        let look = Look.of(machine.phase)
         let H = 224.0
         let fullWidth = Double(canvas.width)
         let (frame, camera) = framing(machine, width: fullWidth)
         let ground = frame.ground
 
         let scenery = self.scenery(for: machine.park)
-        let (behind, front) = backdrops.layers(
+        let (sky, behind, front) = backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width,
                              camera: camera == .close ? .close : .wide,
-                             lampsOn: machine.lampsOn,
+                             phase: machine.phase,
                              scale: frame.scale, originX: frame.originX),
-            height: canvas.height) { b, f in
+            height: canvas.height) { s, b, f in
+            // The stops, stretched to the canonical ground whichever framing this is: the sky is
+            // infinitely far away and the close camera only exposes more of the last of them.
+            SkyArt.sky(into: s.canvas, look: look, width: fullWidth, flightCamera: true)
+            // The low sun at `goldenHour` is a thing in the park, low behind the hills, so it
+            // goes in `behind` and rides down with the ground. The moon does not move and stays
+            // in the sky (§20 "Layers and speed").
+            if let disc = look.sunFlight, look.sunFlightMovesWithGround {
+                SkyArt.sunOrMoon(into: b.canvas, look: look, x: disc.x(width: fullWidth),
+                                 y: BackdropLayout.canonicalGround - disc.y,
+                                 radius: disc.radius, halo: disc.halo,
+                                 clipY: BackdropLayout.canonicalGround)
+            }
             BackdropArt.sideBackdrop(behind: b.canvas, front: f.canvas,
                                      park: machine.park, scenery: scenery,
                                      scale: frame.scale, originX: frame.originX,
-                                     width: fullWidth, night: machine.lampsOn,
+                                     width: fullWidth, look: look,
                                      layout: self.layout)
         }
         // The layers are drawn with the ground at its canonical place; the close camera lifts it.
         let backdropDY = Int((ground - BackdropLayout.canonicalGround).rounded())
 
-        // The sky is infinitely far away: it never moves, whatever the camera does.
-        canvas.rect(0, 0, fullWidth, H, scheme.sky1)
-        canvas.rect(0, 70, fullWidth, 60, scheme.sky2)
-        canvas.rect(0, 130, fullWidth, max(0, ground - 130), scheme.sky3)
-        canvas.dither(0, 66, fullWidth, 8, scheme.sky1, scheme.sky2)
-        canvas.dither(0, 126, fullWidth, 8, scheme.sky2, scheme.sky3)
+        sky.blitOpaque(onto: canvas)
 
         // §17's draw order, from the back: sky → stars / moon → light halos → clouds →
         // fireworks → birds → towers → field and wall face → trail and ball → stands and
@@ -89,8 +96,10 @@ final class WideScene: CanvasScene {
                                      isOut: machine.bankIsOut, layout: layout)
             : []
         if machine.lampsOn {
+            // The moon hangs in this camera too, where §20 puts it: never moving, whatever the
+            // ground does. `nightSky` draws it with the stars and the halos.
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
-                            time: now, width: fullWidth, phase: machine.phase, layout: layout)
+                            time: now, width: fullWidth, look: look, layout: layout)
         }
 
         // What a long career has arrived at, never announced (#5). A Warm Up is played in a park
@@ -105,16 +114,16 @@ final class WideScene: CanvasScene {
         Clouds.draw(into: canvas, clouds: scenery.sideClouds,
                     breeze: scenery.breezePixelsPerSecond,
                     seconds: now,
-                    width: fullWidth, night: machine.lampsOn)
+                    width: fullWidth, look: look)
 
-        drawFireworks(canvas, machine, fullWidth: fullWidth)
+        drawFireworks(canvas, machine, fullWidth: fullWidth, look: look)
 
         SkyArt.birds(into: canvas, scenery: scenery, view: .side, time: now,
-                     width: fullWidth, night: machine.lampsOn,
+                     width: fullWidth, look: look,
                      skipping: machine.struckBird)
         if machine.showsMilestones {
             SkyArt.blimp(into: canvas, scenery: scenery, view: .side, time: now,
-                         width: fullWidth, night: machine.lampsOn, layout: layout)
+                         width: fullWidth, look: look, layout: layout)
         }
         // Feathers, where the ball went through something (#5). In the sky, with the thing it
         // happened to, and before the field goes in on top.
@@ -124,9 +133,7 @@ final class WideScene: CanvasScene {
         behind.blit(onto: canvas, dy: backdropDY)
 
         // The towers stand behind the stands, so their feet are covered when the stands go in.
-        // Lighter than the sky, not `ink`: this pole climbs through `night` and `ink`.
-        SkyArt.towers(into: canvas, frames: towers, width: fullWidth,
-                      poleColour: Palette.nightSky3, layout: layout)
+        SkyArt.towers(into: canvas, frames: towers, width: fullWidth, look: look, layout: layout)
         // …and the sparks off a bank that has just gone out, over the bank they came from.
         drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth, kinds: [.lightsOut])
 
@@ -138,7 +145,7 @@ final class WideScene: CanvasScene {
 
         let wallX = frame.x(machine.park.wallDistanceFeet)
         let wallH = machine.park.wallHeightFeet * frame.scale
-        canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, Palette.wall)
+        canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, look.wall[1])
         canvas.rect(wallX, ground - wallH, fullWidth - wallX, 1, Palette.chalk)
         canvas.rect(wallX, ground - wallH - 1, 2, wallH + 1, Palette.chalk)
 
@@ -146,8 +153,8 @@ final class WideScene: CanvasScene {
         let tick = max(1, (frame.scale / 0.75).rounded())
         while frame.x(f) < fullWidth { canvas.rect(frame.x(f), ground, tick, 4 * tick, Palette.chalk); f += 100 }
 
-        canvas.rect(frame.x(-6), ground, 12 * frame.scale, 3, Palette.dirt)
-        drawBatter(canvas, x: frame.x(0), y: ground, scale: frame.scale, machine: machine)
+        canvas.rect(frame.x(-6), ground, 12 * frame.scale, 3, look.dirt[1])
+        drawBatter(canvas, x: frame.x(0), y: ground, scale: frame.scale, machine: machine, look: look)
 
         if let flightResult = machine.flight, !flightResult.points.isEmpty {
             let points = flightResult.points
@@ -164,26 +171,29 @@ final class WideScene: CanvasScene {
             switch camera {
             case .wide:
                 canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
-                canvas.px(X, Y, scheme.sky3)
+                canvas.px(X, Y, look.ballHi)
                 canvas.px(X + 1, Y + 1, Palette.cap)        // all the lace a 4 px ball has room for
             case .close:
                 // The 6 px ball with its one highlight pixel (DESIGN.md §9), and its shadow.
                 canvas.rect(X - 3, ground + 1, 6, 2, Palette.shade)
-                canvas.baseball(X, Y, radius: 3, highlight: scheme.sky3)
+                canvas.baseball(X, Y, radius: 3, highlight: look.ballHi)
             }
 
             drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
-                                 machine: machine, frame: frame, scenery: scenery)
+                                 machine: machine, frame: frame, scenery: scenery, look: look)
 
             if let launch = machine.launch {
-                canvas.t3(8, 8, "\(Int(launch.exitVelocityMPH.rounded())) MPH", Palette.score, scale: 2)
-                canvas.t3(8, 20, "\(Int(launch.launchAngleDegrees.rounded())) DEG", Palette.score, scale: 2)
+                canvas.t3(8, 8, "\(Int(launch.exitVelocityMPH.rounded())) MPH", Palette.score,
+                          scale: 2, shadow: Palette.ink)
+                canvas.t3(8, 20, "\(Int(launch.launchAngleDegrees.rounded())) DEG", Palette.score,
+                          scale: 2, shadow: Palette.ink)
             }
-            canvas.t3(8, 34, machine.pitch.type.name, Palette.chalk)
+            canvas.t3(8, 34, machine.pitch.type.name, Palette.chalk, shadow: Palette.ink)
 
             if machine.beat == .flight {
                 let d = Int(min(b.xFeet, flightResult.distanceFeet).rounded())
-                canvas.t3(min(fullWidth - 30, X + 6), max(6, Y - 10), "\(d) FT", Palette.chalk)
+                canvas.t3(min(fullWidth - 30, X + 6), max(6, Y - 10), "\(d) FT", Palette.chalk,
+                          shadow: Palette.ink)
             }
             if machine.beat == .result {
                 let d = Int(flightResult.distanceFeet.rounded())
@@ -195,27 +205,31 @@ final class WideScene: CanvasScene {
                 let blink = Int(machine.elapsed * 6) % 2 == 0
                 let record = machine.recordNow
                 let numberColour = record == nil ? Palette.score : (blink ? Palette.chalk : Palette.score)
-                canvas.t5(fullWidth / 2 - Double(distanceText.count) * 6 * 3 / 2 + 3, 52, distanceText, numberColour, scale: 3)
+                canvas.t5(fullWidth / 2 - Double(distanceText.count) * 6 * 3 / 2 + 3, 52,
+                          distanceText, numberColour, scale: 3, shadow: Palette.ink)
                 drawParkProgress(canvas, machine, flight: flightResult, fullWidth: fullWidth)
                 if flightResult.homeRun, blink {
-                    canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", Palette.cap, scale: 3)
+                    canvas.t5(fullWidth / 2 - 6 * 3, 88, "HR", look.red[2], scale: 3, shadow: Palette.ink)
                 }
                 // `streakNow`: the Warm Up's streak while one is live, the career's otherwise.
                 if flightResult.homeRun, machine.streakNow >= 2 {
                     let streak = "STREAK \(machine.streakNow)"
-                    canvas.t3(fullWidth / 2 - Double(streak.count) * 4, 116, streak, Palette.score, scale: 2)
+                    canvas.t3(fullWidth / 2 - Double(streak.count) * 4, 116, streak, Palette.score,
+                              scale: 2, shadow: Palette.ink)
                 }
                 if flightResult.wallHit {
-                    canvas.t3(fullWidth / 2 - 30, 90, "OFF THE WALL", Palette.chalk)
+                    canvas.t3(fullWidth / 2 - 30, 90, "OFF THE WALL", Palette.chalk, shadow: Palette.ink)
                 }
                 // Minors only: one word on a ball that stayed in (DerbyMachine.coachingWord).
                 if let word = machine.coachingWord {
-                    canvas.t3(fullWidth / 2 - Double(word.count) * 4, 102, word, Palette.chalk, scale: 2)
+                    canvas.t3(fullWidth / 2 - Double(word.count) * 4, 102, word, Palette.chalk,
+                              scale: 2, shadow: Palette.ink)
                 }
                 // Once per career, on the home run that clears Triple-A.
                 if machine.isBeingCalledUp, !blink {
                     // The 5×7 face only has digits and F T H R, so this is the 3×5 at 3×.
-                    canvas.t3(fullWidth / 2 - 9 * 4 * 3 / 2, 134, "CALLED UP", Palette.score, scale: 3)
+                    canvas.t3(fullWidth / 2 - 9 * 4 * 3 / 2, 134, "CALLED UP", Palette.score,
+                              scale: 3, shadow: Palette.ink)
                 }
                 // A career number just fell (#41). Below everything else the hold draws, so it
                 // can never collide with `HR`, `STREAK n`, `OFF THE WALL`, a coaching word,
@@ -227,13 +241,14 @@ final class WideScene: CanvasScene {
             }
         } else {
             drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
-                                 machine: machine, frame: frame, scenery: scenery)
+                                 machine: machine, frame: frame, scenery: scenery, look: look)
         }
 
         // The same word the outfield scoreboard carries: during a Warm Up this is the day's
         // park, not a park anyone is trying to clear, and its number is a date (DESIGN.md §18).
         let parkName = machine.warmUp == nil ? machine.park.displayName : "WARM UP"
-        canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk)
+        canvas.t3(fullWidth - 10 - Double(parkName.count) * 4, H - 12, parkName, Palette.chalk,
+                  shadow: Palette.ink)
 
         // The instant replay's camera, top right — the same corner and the same picture the
         // at-bat view carries, so it does not move across the cut (#42).
@@ -262,7 +277,8 @@ final class WideScene: CanvasScene {
     private func centred(_ canvas: PixelCanvas, _ text: String, y: Double, fullWidth: Double,
                          _ colour: Palette.RGBA8) {
         let width = Double(text.count * 4 * holdTextScale - holdTextScale)
-        canvas.t3((fullWidth / 2 - width / 2).rounded(), y, text, colour, scale: holdTextScale)
+        canvas.t3((fullWidth / 2 - width / 2).rounded(), y, text, colour, scale: holdTextScale,
+                  shadow: Palette.ink)
     }
 
     /// This park's scenery, kept between frames: `Park.scenery` is a pure function and builds
@@ -278,7 +294,8 @@ final class WideScene: CanvasScene {
     /// number. §17's draw order puts the stands after the trail and the ball — which is what
     /// makes a home run drop into the crowd and be gone — and the text after everything.
     private func drawInFrontOfTheBall(_ canvas: PixelCanvas, front: BackdropLayer, dy: Int,
-                                      machine: DerbyMachine, frame: SideView, scenery: Scenery) {
+                                      machine: DerbyMachine, frame: SideView, scenery: Scenery,
+                                      look: Look) {
         front.blit(onto: canvas, dy: dy)
 
         // The crowd and the flags are the parts of the stands that move, so they are not in the
@@ -289,17 +306,18 @@ final class WideScene: CanvasScene {
         BackdropArt.crowd(into: canvas, park: machine.park, scenery: scenery,
                           scale: frame.scale, originX: frame.originX, width: fullWidth,
                           ground: frame.ground, time: now, cheering: machine.crowdIsUp,
-                          layout: layout)
+                          look: look, layout: layout)
         BackdropArt.standsFlags(into: canvas, park: machine.park, scenery: scenery,
                                 scale: frame.scale, originX: frame.originX, width: fullWidth,
                                 ground: frame.ground, frame: SkyLife.flutterFrame(at: now),
-                                layout: layout)
+                                look: look, layout: layout)
 
         // What this park already carries: dents that stay and a pane that has gone (#5). Over
         // the cached board, and with the shards of the shot on screen on top of them.
         BackdropArt.boardDamage(into: canvas, park: machine.park, scenery: scenery,
                                 scars: machine.parkScars, scale: frame.scale,
-                                originX: frame.originX, ground: frame.ground, layout: layout)
+                                originX: frame.originX, ground: frame.ground, look: look,
+                                layout: layout)
         drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth,
                    kinds: [.scoreboardDent, .windowBroken])
 
@@ -382,18 +400,21 @@ final class WideScene: CanvasScene {
     /// place whether this frame is wide or close, drawn right after the sky so the field, wall,
     /// ball and every readout land on top of it. `DerbyCore.Fireworks` does all the maths; this
     /// only turns a particle's role into a palette pixel.
-    private func drawFireworks(_ canvas: PixelCanvas, _ machine: DerbyMachine, fullWidth: Double) {
+    private func drawFireworks(_ canvas: PixelCanvas, _ machine: DerbyMachine, fullWidth: Double,
+                               look: Look) {
         guard let show = machine.fireworks else { return }
-        let scheme = Palette.scheme(lampsOn: show.lampsOn)
         let particles = Fireworks.particles(show: show, at: machine.tally[.secondsPlayed], rules: machine.fireworksRules)
         for particle in particles where particle.visible {
+            // §20: a firework colour has to differ from every sky stop between y 20 and y 110.
+            // `sky3` was the one role that used to be a sky colour by definition; it becomes the
+            // phase's lit stand lip, which is a pale tone in every line and is never a stop.
             let colour: Palette.RGBA8
             switch particle.colour {
             case .score: colour = Palette.score
-            case .cap: colour = Palette.cap
+            case .cap: colour = look.red[2]
             case .chalk: colour = Palette.chalk
-            case .skin: colour = Palette.skin
-            case .sky3: colour = scheme.sky3
+            case .skin: colour = look.skin[2]
+            case .sky3: colour = look.standLit[1]
             }
             let x = fullWidth * particle.x
             if particle.size >= 2 {
@@ -410,7 +431,8 @@ final class WideScene: CanvasScene {
     private let batterFeet = 6.5
     private let minBatterPixels = 6.0
 
-    private func drawBatter(_ canvas: PixelCanvas, x: Double, y: Double, scale: Double, machine: DerbyMachine) {
+    private func drawBatter(_ canvas: PixelCanvas, x: Double, y: Double, scale: Double,
+                            machine: DerbyMachine, look: Look) {
         let frame: Int = machine.flight != nil ? (machine.playbackIndex < 12 ? 1 : 2) : 0
         let bx = x.rounded(.down), by = y
         let h = max(minBatterPixels, (batterFeet * scale).rounded())
@@ -420,18 +442,19 @@ final class WideScene: CanvasScene {
         let left = bx - (w / 2).rounded(.down), legW = max(1, (w / 3).rounded(.down))
         let shoulders = by - legs - torso
 
-        canvas.rect(left, by - legs, legW, legs, Palette.ink)
-        canvas.rect(left + w - legW, by - legs, legW, legs, Palette.ink)
-        canvas.rect(left, shoulders, w, torso, Palette.ink)
-        canvas.rect(left, shoulders - head, w, head, Palette.skin)
-        canvas.rect(left, shoulders - head, w + 1, capRows, Palette.cap)      // the brim faces the field
+        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2], wood = look.wood[2]
+        canvas.rect(left, by - legs, legW, legs, cloth)
+        canvas.rect(left + w - legW, by - legs, legW, legs, cloth)
+        canvas.rect(left, shoulders, w, torso, cloth)
+        canvas.rect(left, shoulders - head, w, head, skin)
+        canvas.rect(left, shoulders - head, w + 1, capRows, cap)      // the brim faces the field
 
         let handsX = left + w - 1, handsY = shoulders + (torso * 0.4).rounded()
         let thick = h >= 16 ? 2 : 1
         switch frame {
-        case 0: canvas.line(handsX, handsY, bx - h * 0.15, by - h * 1.3, Palette.bat, thickness: thick)   // stance
-        case 1: canvas.line(handsX, handsY, handsX + h * 0.7, handsY - 1, Palette.bat, thickness: thick)  // contact
-        default: canvas.line(left, handsY, left - h * 0.5, by - h * 1.15, Palette.bat, thickness: thick)  // follow-through
+        case 0: canvas.line(handsX, handsY, bx - h * 0.15, by - h * 1.3, wood, thickness: thick)   // stance
+        case 1: canvas.line(handsX, handsY, handsX + h * 0.7, handsY - 1, wood, thickness: thick)  // contact
+        default: canvas.line(left, handsY, left - h * 0.5, by - h * 1.15, wood, thickness: thick)  // follow-through
         }
     }
 

@@ -1,8 +1,12 @@
 import Foundation
 
-/// The Genesis-style, sixteen-entry palette from `docs/palette.md`, as packed RGBA8 pixels.
-/// Every channel is one of the Mega Drive's eight levels; no other colour is ever mixed in,
-/// there is no alpha blending, and no gradients — one palette line, nothing else.
+/// The sixteen named colours of `docs/palette.md`, as packed RGBA8 pixels. Every channel is one
+/// of the Mega Drive's eight levels; there is no alpha blending and no gradient.
+///
+/// These sixteen keep their roles, but since §20 they are no longer the whole frame: a phase
+/// carries three palette lines of its own and `Look.of(_:)` hands them out by role. What is left
+/// here is what has one job whatever the hour — the chalk lines, the readout yellow, the grass,
+/// the label ink — plus the two the fireworks and the ball still borrow.
 enum Palette {
     struct RGBA8: Equatable {
         let r: UInt8
@@ -16,6 +20,14 @@ enum Palette {
         init(_ r: UInt8, _ g: UInt8, _ b: UInt8, _ a: UInt8 = 255) {
             self.r = r; self.g = g; self.b = b; self.a = a
             packed = UInt32(r) | UInt32(g) << 8 | UInt32(b) << 16 | UInt32(a) << 24
+        }
+
+        /// One opaque colour written the way `docs/palette.md` and the prototype write it,
+        /// `0xRRGGBB`. The phase lines are hundreds of entries long and a triple of bytes for
+        /// each of them hid the colour behind its punctuation; this reads as the hex in the
+        /// table, which is also what `scripts/check-looks.py` compares against `golden.py`.
+        init(hex: UInt32) {
+            self.init(UInt8((hex >> 16) & 0xFF), UInt8((hex >> 8) & 0xFF), UInt8(hex & 0xFF))
         }
     }
 
@@ -35,24 +47,5 @@ enum Palette {
     static let score = RGBA8(0xEE, 0xDD, 0x22)
     static let shade = RGBA8(0x11, 0x66, 0x33)
     static let night = RGBA8(0x22, 0x11, 0x44)
-    /// Night-only stand-in for `sky3`, `#446688` per docs/palette.md.
-    static let nightSky3 = RGBA8(0x44, 0x66, 0x88)
     static let clear = RGBA8(0, 0, 0, 0)
-
-    /// The three sky colours currently in effect. A lit park swaps `sky1 → night`, `sky2 → ink`,
-    /// `sky3 → nightSky3`; nothing else about the palette changes (docs/palette.md).
-    struct SkyScheme {
-        let sky1: RGBA8
-        let sky2: RGBA8
-        let sky3: RGBA8
-    }
-
-    /// `lampsOn` is `DayPhase.lampsOn` — the clock's answer, not the park's (DESIGN.md §20).
-    /// §20 step 2 replaces this pair of lines with `Look.of(_ phase:)` and a line per phase; for
-    /// now the two lines that already ship are the two the six phases share out.
-    static func scheme(lampsOn: Bool) -> SkyScheme {
-        lampsOn
-            ? SkyScheme(sky1: night, sky2: ink, sky3: nightSky3)
-            : SkyScheme(sky1: sky1, sky2: sky2, sky3: sky3)
-    }
 }
