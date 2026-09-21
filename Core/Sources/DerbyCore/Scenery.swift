@@ -180,8 +180,8 @@ public struct SceneryRules: Equatable {
     public var bleachersFlags: Int = 2
     public var fullStandsFlags: Int = 3
 
-    /// Every night park has two to four light towers (§17). The minors and The Show are day
-    /// games, so the first lights a player ever sees belong to a seeded park.
+    /// Every park has two to four light towers (§17). They were night-park-only until §20 gave
+    /// the sky to the clock; now every park has them and the clock lights them.
     public var towersPerNightPark: ClosedRange<Int> = 2...4
     /// How far behind the wall a tower stands and how high it carries its bank, in feet. The
     /// towers are shared out along the depth range rather than drawn independently, so two of
@@ -193,7 +193,7 @@ public struct SceneryRules: Equatable {
     public var towerBankColumns: ClosedRange<Int> = 3...4
     public var towerBankRows: ClosedRange<Int> = 2...3
 
-    /// A moon in one night park in four.
+    /// A moon in one park with the night gear in four — so one seeded park in sixteen has one.
     public var moonProbability: Double = 0.25
     public var moonRadius: ClosedRange<Double> = 5...8
     public var moonBand: ClosedRange<Double> = 14...40
@@ -203,6 +203,9 @@ public struct SceneryRules: Equatable {
     /// view's is `night` to 70 — so a `chalk` star reads anywhere inside it, and it sits well
     /// above the scoreboard and the horizon.
     public var starCount = 40
+    /// How many of the forty `twilight` shows: the first of them, so the sky fills in as the
+    /// light goes rather than arriving all at once at `night` (§20 "The phases").
+    public var twilightStars = 22
     public var blinkingStarInEvery = 8
     public var starBand: ClosedRange<Double> = 3...64
     public var starBlinkPeriod: ClosedRange<Double> = 3...7
@@ -231,10 +234,11 @@ public struct SceneryRules: Equatable {
     public var boardPaneWidthFeet: Double = 6
     public var boardPaneHeightFeet: Double = 5
 
-    /// One night park in this many carries a short light standard over the wall, on top of the
-    /// seeded towers. It is the **one** bank a batted ball can ever reach: the towers proper
-    /// stand 150–190 ft up, and nothing this game can hit gets within eighty feet of one
-    /// (DESIGN.md §17 "Rare things"). Day parks have no lights at all, so no lights to put out.
+    /// One park with the night gear in this many carries a short light standard over the wall,
+    /// on top of the seeded towers. It is the **one** bank a batted ball can ever reach: the
+    /// towers proper stand 150–190 ft up, and nothing this game can hit gets within eighty feet
+    /// of one (DESIGN.md §17 "Rare things"). Since §20 the shot also needs the lamps on, so a
+    /// player who only plays by day never puts one out — the cost of the clock rule.
     public var wallTowerInEveryNightPark = 2
     public var wallTowerDepthFeet: ClosedRange<Double> = 14...38
     public var wallTowerHeightFeet: ClosedRange<Double> = 74...98
@@ -288,20 +292,25 @@ public struct Scenery: Equatable {
     /// share the side one: the sky never moves, whatever the camera does (§8).
     public let atBatClouds: [Cloud]
     public let sideClouds: [Cloud]
-    /// Night only, and only one night park in four.
+    /// Only one park in four has the night gear, and only one of those in four a moon. Drawn
+    /// whatever the hour is; `night` is the one phase that shows it (§20).
     public let moon: Moon?
-    /// Night only: where this park's two to four light towers stand and how tall they are.
-    /// Empty by day, so `towers` reads 0 there.
+    /// Where this park's two to four light towers stand and how tall they are. Every park has
+    /// them, the ladder's rungs too — a rec park has lights on poles as much as The Show does.
+    /// The clock says whether they are lit: they are drawn while the lamps are on and nowhere
+    /// else (§20 "What the clock replaces").
     public let lightTowers: [Tower]
-    /// Night only: forty fixed stars, one in eight of them blinking. Empty by day.
+    /// Forty fixed stars, one in eight of them blinking. Every park has them; `night` shows all
+    /// forty and `twilight` the first `SceneryRules.twilightStars` (§20).
     public let stars: [Star]
 
     /// The out-of-town board over the stands, in one seeded park in three (#5). Nil everywhere
     /// else, and never on the ladder's four rungs.
     public let board: OutfieldBoard?
-    /// Night only, and only some night parks: the short light standard over the wall. The
+    /// Only some of the parks with the night gear: the short light standard over the wall. The
     /// seeded towers are far too tall to hit, so this is the bank a no-doubter can put out
-    /// (DESIGN.md §17 "Rare things"). It is drawn and chases exactly like the others.
+    /// (DESIGN.md §17 "Rare things"). It is drawn and chases exactly like the others, and like
+    /// them only while the lamps are on — so a player who plays only by day never puts one out.
     public let wallTower: Tower?
     /// Things a long career arrives at, never announced (#5). Pure functions of the park number.
     public let hasBlimp: Bool
@@ -379,8 +388,12 @@ public struct Scenery: Equatable {
         let atBat = clouds(band: rules.atBatCloudBand, rules: rules, using: &g)
         let side = clouds(band: rules.sideCloudBand, rules: rules, using: &g)
 
-        // Night only, and drawn from the same stream whether or not it is used, so that a day
-        // park and a night park with the same number never share a cloud.
+        // Drawn from the same stream whether or not it is used, so that a park with the night
+        // gear and one without, at the same number, never share a cloud. Since §20 the towers
+        // and the stars below are kept for every park rather than thrown away by day: the clock
+        // says whether they are lit, and every park's lamps come on at twilight. Nothing here
+        // draws differently — the gates went, not the draws — so no park's clouds, breeze, moon
+        // or towers moved.
         let moonRoll = Double.random(in: 0..<1, using: &g)
         let moonX = Double.random(in: 0.08...0.92, using: &g)
         let moonY = Double.random(in: rules.moonBand, using: &g).rounded()
@@ -388,8 +401,8 @@ public struct Scenery: Equatable {
         let bite = Bool.random(using: &g) ? 1 : -1
         let towerCount = Int.random(in: rules.towersPerNightPark, using: &g)
 
-        // Step 4's draws come last on purpose. Everything above keeps the number it had before
-        // the night kit existed, so no park's clouds, breeze or moon moved when it arrived.
+        // The night kit's draws come last on purpose. Everything above keeps the number it had
+        // before the kit existed, so no park's clouds, breeze or moon moved when it arrived.
         let lightTowers = towers(count: towerCount, rules: rules, using: &g)
         let stars = starfield(rules: rules, using: &g)
 
@@ -422,10 +435,10 @@ public struct Scenery: Equatable {
             standsTopFeet: top, standsDepthFeet: depth, standsSteps: rules.standsSteps,
             flags: flags,
             breezePixelsPerSecond: breeze, atBatClouds: atBat, sideClouds: side,
-            moon: park.isNight && moonRoll < rules.moonProbability
+            moon: park.nightSeed && moonRoll < rules.moonProbability
                 ? Moon(xFraction: moonX, y: moonY, radius: moonR, biteDirection: bite) : nil,
-            lightTowers: park.isNight ? lightTowers : [],
-            stars: park.isNight ? stars : [],
+            lightTowers: lightTowers,
+            stars: stars,
             board: hasBoard
                 ? OutfieldBoard(feetBehindWall: boardDepth,
                                 bottomFeet: (standsAtBoard + boardClearance).rounded(),
@@ -435,7 +448,7 @@ public struct Scenery: Equatable {
                                 paneWidthFeet: rules.boardPaneWidthFeet,
                                 paneHeightFeet: rules.boardPaneHeightFeet)
                 : nil,
-            wallTower: park.isNight && wallTowerRoll == 0
+            wallTower: park.nightSeed && wallTowerRoll == 0
                 ? Tower(feetBehindWall: wallTowerDepth, heightFeet: wallTowerHeight,
                         bankColumns: wallTowerColumns, bankRows: wallTowerRows)
                 : nil,

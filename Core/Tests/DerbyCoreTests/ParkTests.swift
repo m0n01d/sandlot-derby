@@ -28,21 +28,28 @@ final class ParkTests: XCTestCase {
 
     /// A fingerprint of every park 1…200 exactly as they were generated before `Park.scenery`
     /// existed (captured 2026-09-19). Scenery draws from its own RNG stream precisely so that
-    /// adding it cannot quietly move a wall or turn a day game into a night one; this is the
-    /// test that says so.
+    /// adding it cannot quietly move a wall; this is the test that says so.
+    ///
+    /// The seeded night draw is deliberately **not** in the fingerprint (re-pinned 2026-09-21,
+    /// on unchanged code, before the clock arrived — DESIGN.md §20 "What the clock replaces").
+    /// §20 renames that field to `nightSeed` and takes the sky away from it, and a hash that
+    /// carried it could not tell a rename from a wall that moved. What is left is the wall, the
+    /// height and the number, which is exactly what must not move.
     func testParkFieldsAreUnchangedByScenery() {
         var h: UInt64 = 0xCBF2_9CE4_8422_2325
         for n in 1...200 {
             let p = Park.generate(number: n)
-            for v in [Double(p.number), p.wallDistanceFeet, p.wallHeightFeet, p.isNight ? 1.0 : 0.0] {
+            for v in [Double(p.number), p.wallDistanceFeet, p.wallHeightFeet] {
                 h = (h ^ v.bitPattern) &* 0x0000_0100_0000_01B3
             }
         }
-        XCTAssertEqual(h, 5_400_621_804_638_548_389)
+        XCTAssertEqual(h, 13_974_837_599_773_724_677)
     }
 
-    func testSomeParksAreNightGames() {
-        let nights = (2...400).filter { Park.generate(number: $0).isNight }.count
+    /// The seeded draw survives its rename: one park in four is built as a night-game park, which
+    /// is what carries a wall tower and a moon. It no longer chooses the sky (§20).
+    func testSomeParksAreBuiltAsNightGameParks() {
+        let nights = (2...400).filter { Park.generate(number: $0).nightSeed }.count
         XCTAssertGreaterThan(nights, 40)
         XCTAssertLessThan(nights, 160)
     }

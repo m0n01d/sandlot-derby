@@ -111,22 +111,32 @@ enum SkyArt {
 
     // MARK: - The sky layer (before the clouds)
 
-    /// Stars, the moon and the lights' halos, in that order (§17's draw order). Night only —
-    /// by day there is nothing here to draw and nothing is drawn.
+    /// Stars, the moon and the lights' halos, in that order (§17's draw order). Drawn while the
+    /// lamps are on and not otherwise — by day there is nothing here to draw.
+    ///
+    /// The `phase` decides how much of it: `twilight` shows the first `SceneryRules.twilightStars`
+    /// of the forty and no moon at all, so the sky fills in as the light goes rather than arriving
+    /// all at once (DESIGN.md §20 "The phases"). Which stars those are is the park's own seeded
+    /// order, so the twenty-two that come out at dusk are the same twenty-two every evening.
     ///
     /// Stars are skipped inside a halo: the lights wash them out, which is also the one way a
     /// `chalk` star and a `chalk` halo can share a sky without the star simply disappearing
     /// into it.
     static func nightSky(into c: PixelCanvas, scenery: Scenery, towers: [TowerFrame],
-                         time: Double, width: Double, layout: BackdropLayout = .standard) {
-        for star in scenery.stars {
+                         time: Double, width: Double, phase: DayPhase,
+                         layout: BackdropLayout = .standard,
+                         sceneryRules: SceneryRules = .standard) {
+        let showing = phase == .twilight
+            ? min(scenery.stars.count, max(0, sceneryRules.twilightStars))
+            : scenery.stars.count
+        for star in scenery.stars.prefix(showing) {
             guard SkyLife.starIsLit(star, at: time) else { continue }
             let x = (star.xFraction * width).rounded()
             guard !isInsideAHalo(x: x, y: star.y, towers: towers, layout: layout) else { continue }
             c.px(x, star.y, Palette.chalk)
         }
 
-        if let moon = scenery.moon {
+        if phase == .night, let moon = scenery.moon {
             let cx = (moon.xFraction * width).rounded()
             c.disc(cx, moon.y, moon.radius, Palette.chalk)
             // The bite is the night sky itself, taken out of one side. Both night sky bands are

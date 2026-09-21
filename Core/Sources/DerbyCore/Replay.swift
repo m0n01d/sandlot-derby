@@ -66,18 +66,27 @@ public struct Replay: Codable, Equatable {
         public var number: Int
         public var wallDistanceFeet: Double
         public var wallHeightFeet: Double
-        public var isNight: Bool
+        /// The seeded draw that decides whether this park has a wall tower and a moon. It was
+        /// called `isNight` in version 1 and chose the sky; since §20 the clock chooses the sky
+        /// and this chooses the gear. The key on the wire keeps the old name so that a version-1
+        /// record still decodes — the value means the same thing it always did.
+        public var nightSeed: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case number, wallDistanceFeet, wallHeightFeet
+            case nightSeed = "isNight"
+        }
 
         public init(_ p: Park) {
             number = p.number
             wallDistanceFeet = p.wallDistanceFeet
             wallHeightFeet = p.wallHeightFeet
-            isNight = p.isNight
+            nightSeed = p.nightSeed
         }
 
         public var park: Park {
             Park(number: number, wallDistanceFeet: wallDistanceFeet,
-                 wallHeightFeet: wallHeightFeet, isNight: isNight)
+                 wallHeightFeet: wallHeightFeet, nightSeed: nightSeed)
         }
     }
 
@@ -200,9 +209,15 @@ public struct Replay: Codable, Equatable {
     }
 
     /// Bumped if the shape ever changes under a clip that has been shared as data rather than as
-    /// a file. 1 is the first.
+    /// a file. 1 was the first; 2 added `phaseName` (§20).
     public var version: Int
     public var park: ParkRecord
+    /// The phase the swing was drawn in, as its name — the same way `PitchRecord` carries its
+    /// type, and for the same reason: a name is one field instead of a table, and a name the game
+    /// does not know can be shrugged off rather than failing the whole record (§20).
+    ///
+    /// Optional because a version-1 record has none. `phase` below is what to read.
+    public var phaseName: String?
     public var pitch: PitchRecord
     public var swing: SwingRecord
     /// Every career number as it stood **before** the swing, so replaying `slice(_:)` counts it
@@ -226,8 +241,9 @@ public struct Replay: Codable, Equatable {
     /// (zero or negative); `AtBatScene` keeps them alongside the points it already kept.
     public init(capturing machine: DerbyMachine, crossing: SliceCrossing,
                 slash: Point, trail: [Point], trailTimes: [Double]? = nil) {
-        version = 1
+        version = 2
         park = ParkRecord(machine.park)
+        phaseName = machine.phase.rawValue
         pitch = PitchRecord(machine.pitch)
         swing = SwingRecord(crossing)
         tally = machine.tally
@@ -244,9 +260,22 @@ public struct Replay: Codable, Equatable {
     /// the career (#33).
     public static func machine(from replay: Replay) -> DerbyMachine {
         var m = DerbyMachine.atPitch(park: replay.park.park, tally: replay.tally,
-                                     pitch: replay.pitch.pitch, warmUp: replay.warmUp?.run)
+                                     pitch: replay.pitch.pitch, warmUp: replay.warmUp?.run,
+                                     phase: replay.phase)
         m.slice(replay.swing.crossing)
         return m
+    }
+
+    /// The phase to draw this record in (§20 "The replay record").
+    ///
+    /// A version-1 record has no phase at all, and the one thing it does say about the sky is the
+    /// park's own seeded night draw — which is exactly what chose the sky back then. So a record
+    /// from a night park replays at `night` and every other one at `midday`, and a name this
+    /// build has never heard of replays at `midday` too, the same shrug `PitchRecord` gives an
+    /// unknown pitch type. A clip is a brag, not a save.
+    public var phase: DayPhase {
+        if let name = phaseName { return DayPhase(rawValue: name) ?? .midday }
+        return park.nightSeed ? .night : .midday
     }
 
     /// True when this swing is worth a clip at all. Only a home run is offered one (#4).
@@ -290,7 +319,8 @@ public struct Replay: Codable, Equatable {
         tally.set(.secondsPlayed, max(0, tally[.secondsPlayed] - lead))
         return DerbyMachine.atPitch(park: replay.park.park, tally: tally,
                                     pitch: replay.pitch.pitch, warmUp: replay.warmUp?.run,
-                                    elapsed: max(0, (replay.pitchElapsedAtContact ?? 0) - lead))
+                                    elapsed: max(0, (replay.pitchElapsedAtContact ?? 0) - lead),
+                                    phase: replay.phase)
     }
 
     /// The finger's stroke as it stood `secondsBeforeContact` before the slash: the samples that

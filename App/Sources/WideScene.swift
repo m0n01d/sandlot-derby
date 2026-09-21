@@ -44,7 +44,7 @@ final class WideScene: CanvasScene {
 
     override func render(into canvas: PixelCanvas) {
         guard let machine = renderMachine else { return }
-        let scheme = Palette.scheme(isNight: machine.park.isNight)
+        let scheme = Palette.scheme(lampsOn: machine.lampsOn)
         let H = 224.0
         let fullWidth = Double(canvas.width)
         let (frame, camera) = framing(machine, width: fullWidth)
@@ -54,12 +54,14 @@ final class WideScene: CanvasScene {
         let (behind, front) = backdrops.layers(
             for: BackdropKey(parkNumber: machine.park.number, width: canvas.width,
                              camera: camera == .close ? .close : .wide,
+                             lampsOn: machine.lampsOn,
                              scale: frame.scale, originX: frame.originX),
             height: canvas.height) { b, f in
             BackdropArt.sideBackdrop(behind: b.canvas, front: f.canvas,
                                      park: machine.park, scenery: scenery,
                                      scale: frame.scale, originX: frame.originX,
-                                     width: fullWidth, layout: self.layout)
+                                     width: fullWidth, night: machine.lampsOn,
+                                     layout: self.layout)
         }
         // The layers are drawn with the ground at its canonical place; the close camera lifts it.
         let backdropDY = Int((ground - BackdropLayout.canonicalGround).rounded())
@@ -75,14 +77,20 @@ final class WideScene: CanvasScene {
         // fireworks → birds → towers → field and wall face → trail and ball → stands and
         // crowd → text. Everything that moves reads one clock, the machine's own.
         let now = SceneryClock.now(machine)
-        let towers = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
-                                            scale: frame.scale, originX: frame.originX,
-                                            ground: ground, time: now,
-                                            chasing: machine.crowdIsUp,
-                                            isOut: machine.bankIsOut, layout: layout)
-        if machine.park.isNight {
+        // Every park stands towers since §20, and the clock decides whether they are drawn at
+        // all: no frames means no lattice, no bank and no halo (see `AtBatScene`, and §20's open
+        // question 1). A bank that is not drawn cannot be put out either, which is the same
+        // answer `RareEvents.detect` gives when `lampsOn` is false.
+        let towers = machine.lampsOn
+            ? SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                     scale: frame.scale, originX: frame.originX,
+                                     ground: ground, time: now,
+                                     chasing: machine.crowdIsUp,
+                                     isOut: machine.bankIsOut, layout: layout)
+            : []
+        if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
-                            time: now, width: fullWidth, layout: layout)
+                            time: now, width: fullWidth, phase: machine.phase, layout: layout)
         }
 
         // What a long career has arrived at, never announced (#5). A Warm Up is played in a park
@@ -97,16 +105,16 @@ final class WideScene: CanvasScene {
         Clouds.draw(into: canvas, clouds: scenery.sideClouds,
                     breeze: scenery.breezePixelsPerSecond,
                     seconds: now,
-                    width: fullWidth, night: machine.park.isNight)
+                    width: fullWidth, night: machine.lampsOn)
 
         drawFireworks(canvas, machine, fullWidth: fullWidth)
 
         SkyArt.birds(into: canvas, scenery: scenery, view: .side, time: now,
-                     width: fullWidth, night: machine.park.isNight,
+                     width: fullWidth, night: machine.lampsOn,
                      skipping: machine.struckBird)
         if machine.showsMilestones {
             SkyArt.blimp(into: canvas, scenery: scenery, view: .side, time: now,
-                         width: fullWidth, night: machine.park.isNight, layout: layout)
+                         width: fullWidth, night: machine.lampsOn, layout: layout)
         }
         // Feathers, where the ball went through something (#5). In the sky, with the thing it
         // happened to, and before the field goes in on top.
@@ -376,7 +384,7 @@ final class WideScene: CanvasScene {
     /// only turns a particle's role into a palette pixel.
     private func drawFireworks(_ canvas: PixelCanvas, _ machine: DerbyMachine, fullWidth: Double) {
         guard let show = machine.fireworks else { return }
-        let scheme = Palette.scheme(isNight: show.isNight)
+        let scheme = Palette.scheme(lampsOn: show.lampsOn)
         let particles = Fireworks.particles(show: show, at: machine.tally[.secondsPlayed], rules: machine.fireworksRules)
         for particle in particles where particle.visible {
             let colour: Palette.RGBA8

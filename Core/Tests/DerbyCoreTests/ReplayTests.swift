@@ -22,7 +22,10 @@ final class ReplayTests: XCTestCase {
         var parkNumber: Int
         var wallDistanceFeet: Double
         var wallHeightFeet: Double
-        var isNight: Bool
+        var nightSeed: Bool
+        /// The phase the frame is drawn in (§20). It is a machine input, so a clip that
+        /// reproduced every other field but this one would still draw a different sky.
+        var phase: DayPhase
 
         var exitVelocityMPH: Double?
         var launchAngleDegrees: Double?
@@ -39,7 +42,7 @@ final class ReplayTests: XCTestCase {
         var fireworksShells: Int?
         var fireworksSeed: UInt64?
         var fireworksStart: Double?
-        var fireworksIsNight: Bool?
+        var fireworksLampsOn: Bool?
 
         var secondsPlayed: Double
         var homeRunStreak: Int
@@ -70,7 +73,8 @@ final class ReplayTests: XCTestCase {
             parkNumber = m.park.number
             wallDistanceFeet = m.park.wallDistanceFeet
             wallHeightFeet = m.park.wallHeightFeet
-            isNight = m.park.isNight
+            nightSeed = m.park.nightSeed
+            phase = m.phase
 
             exitVelocityMPH = m.launch?.exitVelocityMPH
             launchAngleDegrees = m.launch?.launchAngleDegrees
@@ -87,7 +91,7 @@ final class ReplayTests: XCTestCase {
             fireworksShells = m.fireworks?.shellCount
             fireworksSeed = m.fireworks?.seed
             fireworksStart = m.fireworks?.start
-            fireworksIsNight = m.fireworks?.isNight
+            fireworksLampsOn = m.fireworks?.lampsOn
 
             secondsPlayed = m.tally[.secondsPlayed]
             homeRunStreak = m.tally.homeRunStreak
@@ -108,8 +112,9 @@ final class ReplayTests: XCTestCase {
 
     /// Walks a fresh machine to `.pitch` and hands back the crossing a perfect swing would make.
     private func machineAtThePitch(seed: UInt64 = 99, park: Park = .first,
-                                   tally: Tally = Tally()) -> DerbyMachine {
-        var m = DerbyMachine(seed: seed, park: park, tally: tally)
+                                   tally: Tally = Tally(),
+                                   phase: DayPhase = .midday) -> DerbyMachine {
+        var m = DerbyMachine(seed: seed, park: park, tally: tally, phase: phase)
         while m.beat != .pitch { m.tick(dt) }
         // Most of the way to the plate, where a real finger meets it.
         while m.pitchProgress < 0.9 { m.tick(dt) }
@@ -344,6 +349,75 @@ final class ReplayTests: XCTestCase {
         }
         XCTAssertEqual(decoded.marks.slash.point, marksSlash)
         XCTAssertEqual(decoded.marks.trail.map(\.point), marksTrail)
+    }
+
+    // MARK: - The phase (§20)
+
+    /// The phase travels by name and a rebuilt machine stands in it before `slice(_:)` runs, so a
+    /// clip lights its fireworks against the same sky and finds the same lights-out shot.
+    func testThePhaseTravelsByNameAndIsSetBeforeTheSwingIsReplayed() {
+        for phase in DayPhase.allCases {
+            var live = machineAtThePitch(seed: 5, park: Park.generate(number: 63), phase: phase)
+            let crossing = perfectCrossing(live)
+            let replay = record(live, crossing)
+            live.slice(crossing)
+            XCTAssertEqual(replay.phaseName, phase.rawValue)
+            XCTAssertEqual(replay.phase, phase)
+            XCTAssertEqual(replay.version, 2)
+            let rebuilt = Replay.machine(from: replay)
+            XCTAssertEqual(rebuilt.phase, phase)
+            XCTAssertEqual(rebuilt.fireworks?.lampsOn, live.fireworks?.lampsOn)
+            XCTAssertEqual(rebuilt.parkEvents, live.parkEvents, "\(phase.rawValue)")
+            XCTAssertEqual(Replay.leadInMachine(from: replay).phase, phase)
+        }
+    }
+
+    /// A version-1 record has no phase at all. The one thing it said about the sky was the park's
+    /// own night flag, which is what chose the sky back then — so it replays as `night`, and
+    /// anything else as `midday` (§20 "The replay record").
+    func testAVersionOneRecordFallsBackToItsParkNightFlag() throws {
+        var live = machineAtThePitch(seed: 5, park: Park.generate(number: 63))
+        let crossing = perfectCrossing(live)
+        live.slice(crossing)
+
+        for (nightSeed, expected) in [(true, DayPhase.night), (false, DayPhase.midday)] {
+            let data = try JSONEncoder().encode(record(machineAtThePitch(), perfectCrossing(machineAtThePitch())))
+            guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  var park = object["park"] as? [String: Any] else {
+                return XCTFail("the record did not encode as a JSON object")
+            }
+            // Wind it back to what version 1 wrote: no phase, and the park's flag under its old
+            // name — which is still the key `ParkRecord` decodes.
+            object.removeValue(forKey: "phaseName")
+            object["version"] = 1
+            park["isNight"] = nightSeed
+            object["park"] = park
+
+            let decoded = try JSONDecoder().decode(
+                Replay.self, from: try JSONSerialization.data(withJSONObject: object))
+            XCTAssertNil(decoded.phaseName)
+            XCTAssertEqual(decoded.park.nightSeed, nightSeed)
+            XCTAssertEqual(decoded.phase, expected)
+            XCTAssertEqual(Replay.machine(from: decoded).phase, expected)
+        }
+    }
+
+    /// A name this build has never heard of is a shrug, not a failure — the same leniency
+    /// `PitchRecord` gives an unknown pitch type. A clip is a brag, not a save.
+    func testAPhaseNameTheGameDoesNotKnowDrawsMidday() throws {
+        var live = machineAtThePitch(seed: 5, park: Park.generate(number: 63), phase: .night)
+        let crossing = perfectCrossing(live)
+        let replay = record(live, crossing)
+        live.slice(crossing)
+
+        let data = try JSONEncoder().encode(replay)
+        guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return XCTFail("the record did not encode as a JSON object")
+        }
+        object["phaseName"] = "blueHour"
+        let decoded = try JSONDecoder().decode(
+            Replay.self, from: try JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(decoded.phase, .midday, "an unknown name draws midday, whatever the park is")
     }
 
     /// The park travels as its own numbers, so a clip does not move when the ladder does.

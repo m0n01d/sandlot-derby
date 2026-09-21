@@ -93,15 +93,15 @@ final class WarmUpTests: XCTestCase {
         XCTAssertEqual(WarmUp.generate(day: 1).park.league, .theShow)
     }
 
-    func testTheDaysParkComesFromTheOrdinarySeededRangesAndNightIsAllowed() {
+    func testTheDaysParkComesFromTheOrdinarySeededRangesAndTheNightGearIsAllowed() {
         var nights = 0
         for offset in 0..<60 {
             let park = WarmUp.generate(day: 20260901 + offset % 28).park
             XCTAssertTrue(Park.Rules.standard.wallDistance.contains(park.wallDistanceFeet))
             XCTAssertTrue(Park.Rules.standard.wallHeight.contains(park.wallHeightFeet))
-            if park.isNight { nights += 1 }
+            if park.nightSeed { nights += 1 }
         }
-        XCTAssertGreaterThan(nights, 0, "night has to be allowed in the day's park")
+        XCTAssertGreaterThan(nights, 0, "the day's park has to be allowed the night gear")
     }
 
     func testTheDaysPitchesDoNotComeFromTheParksOwnStream() {

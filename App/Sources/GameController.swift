@@ -68,7 +68,8 @@ final class GameController {
         #endif
         machine = DerbyMachine(seed: seed,
                                park: startPark ?? save.map { Park.generate(number: $0.parkNumber) } ?? .first,
-                               tally: startingTally)
+                               tally: startingTally,
+                               phase: Self.phaseNow())
         // The sky's clock belongs to the machine (#5): a rare event is judged against the sky in
         // Core and drawn from it in the scenes, so `-skyclock` has to wind one clock and not two.
         machine.skyClockOffset = SceneryClock.offset
@@ -112,8 +113,33 @@ final class GameController {
         // reach the controller; the notification is already addressed to it.
         foregroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.startTodaysWarmUpIfNeeded() }
+            Task { @MainActor in
+                self?.startTodaysWarmUpIfNeeded()
+                // Coming back after dark is the commonest way the sky changes (§20). Offered
+                // here; the next windup is what takes it up.
+                self?.offerThePhase()
+            }
         }
+    }
+
+    // MARK: - The clock (DESIGN.md §20)
+
+    /// What the real time of day says the sky should be. `PhaseClock` is the one place the
+    /// system clock is read; DEBUG `-phase <name>` stands in for it entirely, so a screenshot of
+    /// one phase is not at the mercy of when it is taken.
+    private static func phaseNow() -> DayPhase {
+        #if DEBUG
+        if let forced = debugPhase { return forced }
+        #endif
+        return PhaseClock.phase()
+    }
+
+    /// Offers the machine the phase the clock says. Called at launch, when the app becomes
+    /// active, and on every beat change — the machine takes the offer up at the next windup and
+    /// never during a pitch, a flight or a result hold, so the swap is always a hard cut between
+    /// two frames (§20).
+    private func offerThePhase() {
+        machine.phaseOffered = Self.phaseNow()
     }
 
     deinit {
@@ -352,6 +378,7 @@ final class GameController {
         if machine.beat != beatBefore {
             recordWarmUpProgress()
             persist()
+            offerThePhase()
         }
         #if DEBUG
         // `-showstats`: cut to the board once a robot career is worth looking at (screenshots).
@@ -655,6 +682,17 @@ final class GameController {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-park"), i + 1 < args.count else { return nil }
         return Int(args[i + 1])
+    }()
+
+    /// `-phase <name>`: force one of the six phases and never read the clock, so a screenshot of
+    /// `goldenHour` does not have to be taken at golden hour. Implies `-nosave` (`SaveStore`):
+    /// `-phase night` and `-phase twilight` permit a lights-out shot, which is counted, and a
+    /// faked evening has no business writing that into a real career. It does **not** force the
+    /// entitlement — the sky has nothing to do with the ceiling (DESIGN.md §20).
+    private static let debugPhase: DayPhase? = {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-phase"), i + 1 < args.count else { return nil }
+        return DayPhase(rawValue: args[i + 1])
     }()
 
     /// `-streak <n>`: start the career with a home-run streak of `n` already going, so a shell

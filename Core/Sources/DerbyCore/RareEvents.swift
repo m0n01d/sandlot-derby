@@ -143,10 +143,14 @@ public enum RareEvents {
     /// like at each point of the flight *without* reading the clock again. That is deliberate.
     /// Reading the live clock would make the answer depend on where the frames happened to fall,
     /// and a clip is ticked at a fixed 60 Hz while a phone is not.
+    ///
+    /// `lampsOn` is `DayPhase.lampsOn` — the one thing a phase changes that is counted (§20).
+    /// Lights that are not on cannot be put out, so the light standard is only looked for while
+    /// they are. Everything else here reads the same in every phase.
     public static func detect(park: Park, scenery: Scenery, flight: FlightResult,
                               birdSeed: UInt64, blimpSeed: UInt64,
                               clockAtContact: Double, contactHold: Double,
-                              flightSpeed: Double,
+                              flightSpeed: Double, lampsOn: Bool,
                               statRules: StatRules = .standard,
                               rules: RareEventRules = .standard,
                               sideViewRules: SideViewRules = .standard,
@@ -184,7 +188,7 @@ public enum RareEvents {
             }
         }
 
-        if let tower = scenery.wallTower, let bank = scenery.wallTowerIndex,
+        if lampsOn, let tower = scenery.wallTower, let bank = scenery.wallTowerIndex,
            !rules.lightsOutNeedsNoDoubter
             || flight.distanceFeet - wall >= statRules.noDoubterMarginFeet {
             let bx = wall + tower.feetBehindWall

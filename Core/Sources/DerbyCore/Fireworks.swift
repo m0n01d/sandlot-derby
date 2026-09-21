@@ -40,11 +40,13 @@ public struct FireworksShow: Equatable {
     /// The machine's own clock (`Tally[.secondsPlayed]`) at the moment the ball cleared the
     /// wall — never `Date()`. `Fireworks.particles` measures elapsed time from this.
     public let start: Double
-    /// `Park.isNight` at the same moment: `sky3` is only ever offered as a colour at night.
-    public let isNight: Bool
+    /// `DayPhase.lampsOn` at the same moment: `sky3` is only ever offered as a colour against a
+    /// dark sky. The phase, not the park, since §20 — the same park puts on a differently
+    /// coloured show at noon and at nine.
+    public let lampsOn: Bool
 
-    public init(shellCount: Int, seed: UInt64, start: Double, isNight: Bool) {
-        self.shellCount = shellCount; self.seed = seed; self.start = start; self.isNight = isNight
+    public init(shellCount: Int, seed: UInt64, start: Double, lampsOn: Bool) {
+        self.shellCount = shellCount; self.seed = seed; self.start = start; self.lampsOn = lampsOn
     }
 }
 
@@ -143,7 +145,7 @@ public enum Fireworks {
             let bandWidth = rules.bandXRange.upperBound - rules.bandXRange.lowerBound
             let shellX = rules.bandXRange.lowerBound + Double.random(in: 0..<1, using: &g) * bandWidth
             let shellY = Double.random(in: rules.burstYRange, using: &g)
-            let colour = pickColour(using: &g, night: show.isNight)
+            let colour = pickColour(using: &g, night: show.lampsOn)
             let count = Int.random(in: rules.particleCountRange, using: &g)
 
             if local < rules.risePeriod {
