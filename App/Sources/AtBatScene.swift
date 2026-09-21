@@ -126,8 +126,14 @@ final class AtBatScene: CanvasScene {
         // starts at y = 136, so nothing new here moves anywhere near it.
         let scenery = self.scenery(for: machine.park)
         let now = SceneryClock.now(machine)
-        let towers = SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
-                                             chasing: machine.crowdIsUp, layout: layout)
+        // Every park stands towers since §20, and the clock decides whether they are drawn at
+        // all: no frames means no lattice, no bank and no halo, which is the one place that
+        // decision has to be made. §20 open question 1 — a real park's towers are there by day,
+        // dark; the mock draws none until the lamps are on, and Dwight has the final word.
+        let towers = machine.lampsOn
+            ? SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
+                                      chasing: machine.crowdIsUp, layout: layout)
+            : []
         if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, phase: machine.phase, layout: layout)

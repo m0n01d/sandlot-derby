@@ -77,11 +77,17 @@ final class WideScene: CanvasScene {
         // fireworks → birds → towers → field and wall face → trail and ball → stands and
         // crowd → text. Everything that moves reads one clock, the machine's own.
         let now = SceneryClock.now(machine)
-        let towers = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
-                                            scale: frame.scale, originX: frame.originX,
-                                            ground: ground, time: now,
-                                            chasing: machine.crowdIsUp,
-                                            isOut: machine.bankIsOut, layout: layout)
+        // Every park stands towers since §20, and the clock decides whether they are drawn at
+        // all: no frames means no lattice, no bank and no halo (see `AtBatScene`, and §20's open
+        // question 1). A bank that is not drawn cannot be put out either, which is the same
+        // answer `RareEvents.detect` gives when `lampsOn` is false.
+        let towers = machine.lampsOn
+            ? SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                     scale: frame.scale, originX: frame.originX,
+                                     ground: ground, time: now,
+                                     chasing: machine.crowdIsUp,
+                                     isOut: machine.bankIsOut, layout: layout)
+            : []
         if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, phase: machine.phase, layout: layout)
