@@ -73,6 +73,9 @@ struct BackdropLayout {
     /// in `score` like the side view's. Taller the higher up the ladder you are, the way the
     /// stands' heights step: a sandlot's are just shorter.
     var foulPoleWidth = 2.0
+    /// The screen on top of an at-bat pole: this deep, and a pixel wider than the pole on each
+    /// side (§20, `golden.at_bat`).
+    var foulPoleCapHeight = 2.0
     /// The top of the wall band, which is what they stand on. The same number as the towers'
     /// foot and deliberately its own knob: the two have nothing to do with each other.
     var atBatFoulPoleFootY = 96.0
@@ -150,6 +153,12 @@ final class BackdropLayer {
     let canvas: PixelCanvas
     /// The rows and columns that actually carry paint, so the per-frame copy walks no further.
     private var firstRow = 0, lastRow = -1, firstCol = 0, lastCol = -1
+    /// Which of those rows carry paint from `firstCol` to `lastCol` with no gap at all. Most of
+    /// the at-bat `front` layer is like that — the wall, the track and the grass go edge to edge
+    /// — and a solid row is a `memcpy` rather than a test and a store per pixel. In a Debug
+    /// build that is the difference between 12 ms a frame and half of one (§20 "Layers and
+    /// speed"; CLAUDE.md on Debug being slow at pixel work).
+    private var solidRow: [Bool] = []
 
     init(width: Int, height: Int) {
         canvas = PixelCanvas(width: width, height: height)
@@ -159,14 +168,18 @@ final class BackdropLayer {
     func clear() {
         canvas.fill(Palette.clear)
         firstRow = 0; lastRow = -1; firstCol = 0; lastCol = -1
+        solidRow = []
     }
 
-    /// Works out the drawn bounds. Called once, after the art is in.
+    /// Works out the drawn bounds, and which rows are solid across them. Called once, after the
+    /// art is in.
     func seal() {
         var top = Int.max, bottom = -1, left = Int.max, right = -1
+        var painted = [Int](repeating: 0, count: canvas.height)
         for y in 0..<canvas.height {
             let row = canvas.buffer + y * canvas.width
             for x in 0..<canvas.width where row[x] != 0 {
+                painted[y] += 1
                 if y < top { top = y }
                 if y > bottom { bottom = y }
                 if x < left { left = x }
@@ -174,6 +187,10 @@ final class BackdropLayer {
             }
         }
         firstRow = top; lastRow = bottom; firstCol = left; lastCol = right
+        // Every painted pixel is inside the box by construction, so a row holding as many as the
+        // box is wide is a row that fills it.
+        let span = right - left + 1
+        solidRow = painted.map { $0 == span && span > 0 }
     }
 
     /// Copies every row straight onto `target`, transparent pixels and all — the opaque blit the
@@ -183,16 +200,31 @@ final class BackdropLayer {
         target.copyRows(from: canvas)
     }
 
-    /// Copies every painted pixel onto `target`, `dy` rows down.
+    /// Copies every painted pixel onto `target`, `dy` rows down. A row the art filled end to end
+    /// goes over in one move; the rest are keyed pixel by pixel, which is what lets the sky show
+    /// through the gap the scoreboard stands in.
     func blit(onto target: PixelCanvas, dy: Int = 0) {
         guard lastRow >= firstRow, lastCol >= firstCol else { return }
         guard target.width == canvas.width else { return }
+        let count = lastCol - firstCol + 1
         for y in firstRow...lastRow {
             let ty = y + dy
             guard ty >= 0, ty < target.height else { continue }
             let src = canvas.buffer + y * canvas.width
             let dst = target.buffer + ty * target.width
-            for x in firstCol...lastCol where src[x] != 0 { dst[x] = src[x] }
+            if solidRow.indices.contains(y), solidRow[y] {
+                (dst + firstCol).update(from: src + firstCol, count: count)
+                continue
+            }
+            // A plain `while` over raw pointers, not `for … where`: this is the one loop in the
+            // frame that runs a hundred thousand times, and a Debug build pays for every bit of
+            // iteration machinery in it.
+            var x = firstCol
+            while x <= lastCol {
+                let word = src[x]
+                if word != 0 { dst[x] = word }
+                x += 1
+            }
         }
     }
 }
@@ -232,38 +264,12 @@ final class BackdropCache {
 /// layer or at the frame itself. Colours are borrowed by role, one palette line, whole pixels.
 enum BackdropArt {
 
-    // MARK: - The at-bat horizon (DESIGN.md §17)
-
-    /// A low band above the wall: the park's far piece as a silhouette in the phase's near-hill
-    /// colour with its far hill showing through the windows, and one near landmark in the stand
-    /// colours beside the scoreboard.
-    ///
-    /// §20 gives these two pieces their colours by role rather than by the hour: the far piece
-    /// is the horizon, so it takes `hill`, and a landmark over the roofline is near enough to be
-    /// built of the same stuff as the stands. The night swap that used to turn them all to `ink`
-    /// is gone with `nightSky3` — every phase now has a hill colour of its own that reads against
-    /// its own sky.
-    ///
-    /// Everything here is above y = 96. The strike zone starts at y = 136, so nothing new is
-    /// drawn anywhere near it (§17's motion budget).
-    static func atBatHorizon(into c: PixelCanvas, park: Park, scenery: Scenery,
-                             width: Double, xOffset: Double, look: Look,
-                             layout: BackdropLayout = .standard) {
-        let baseline = layout.atBatHorizonBottom
-        let rise = baseline - layout.atBatHorizonTop
-
-        far(scenery.far, into: c, x0: 0, x1: width, baseline: baseline, rise: rise,
-            body: look.hill[1], hole: look.hill[0], seed: seed(scenery, tag: 0x1))
-
-        var g = SplitMix64(seed: seed(scenery, tag: 0x2))
-        let onTheRight = Bool.random(using: &g)
-        let stand = look.standLit
-        near(scenery.near, into: c,
-             x: xOffset + (onTheRight ? layout.atBatNearRightX : layout.atBatNearLeftX),
-             baseline: baseline,
-             body: stand[0], detail: stand[2],
-             breeze: scenery.breezePixelsPerSecond)
-    }
+    // MARK: - The at-bat horizon (DESIGN.md §17, §20)
+    //
+    // §17's low band above the wall is gone: since §20 step 3 the at-bat horizon is two layers
+    // of round hills and a treeline, and where a park has wings the wings *are* its far piece
+    // (§20 "Stands at bat, by tier"). `AtBatArt.horizon` draws it, and still calls `far` and
+    // `near` below for the parks with no stand to hide them.
 
     /// The two little flags on the scoreboard, pointing with the breeze and fluttering in two
     /// frames. Drawn per frame, not cached: the flutter is what step 5 added.
@@ -280,9 +286,8 @@ enum BackdropArt {
     }
 
     /// The foul poles in the at-bat camera (#28): one at each corner, standing on the top of
-    /// the wall band exactly where its foul line meets it. `score`, at night as well as by day,
-    /// so they catch the lights. Static, so they live in the backdrop cache; drawn after the
-    /// horizon pieces and before anything on the field.
+    /// the wall band exactly where its foul line meets it. Drawn after the wings, which they
+    /// stand in front of, and before anything on the field.
     static func atBatFoulPoles(into c: PixelCanvas, league: League, xs: [Double], look: Look,
                                layout: BackdropLayout = .standard) {
         let height = layout.foulPoleHeight(for: league)
@@ -296,6 +301,10 @@ enum BackdropArt {
             // exactly the pixel the line ends on. Rounding it first put it one to the right.
             c.rect(x, layout.atBatFoulPoleFootY - height, 1, height, lit)
             c.rect(x + 1, layout.atBatFoulPoleFootY - height, layout.foulPoleWidth - 1, height, dark)
+            // The screen on top, in `score`: it is the one thing in the park that is the same
+            // colour in every phase, and without it a foul pole is a stripe (`golden.at_bat`).
+            c.rect(x - 1, layout.atBatFoulPoleFootY - height - layout.foulPoleCapHeight,
+                   layout.foulPoleWidth + 2, layout.foulPoleCapHeight, Palette.score)
         }
     }
 
