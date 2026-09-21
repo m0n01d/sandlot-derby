@@ -63,8 +63,17 @@ routing, PR screenshot and grooming rules do.
   §19, #42). §20 step 1 added `PhaseClock.swift` (the one place in the game that reads the system
   clock: it turns `Date`/`Calendar`/`TimeZone` into the six numbers `SunClock` wants, and
   `GameController` offers the answer to the machine at launch, on `didBecomeActive` and on every
-  beat change).
+  beat change). Step 2 added `Look.swift` (`Look.of(_ phase:)` — the three palette lines of each
+  of the six phases by role, its light direction and its switches, plus the `LookRules` knobs §20
+  lists for the App; the tables are copied from `prototypes/04-golden-hour/golden.py` and
+  `scripts/check-looks.py` holds them to it) and `ShadedSprite.swift` (`Mask.ellipse/capsule/poly`
+  with fake normals, `ShadedSprite.part` — the four-tone ramp picked from one light with two cuts
+  — and `ShadedSpriteCache`, keyed by name, pose and phase; steps 3 and 4 build the people with
+  it, and a DEBUG `selfCheck()` holds the port to the prototype's own batter torso). `Backdrop`
+  gained a third cached layer, `sky`, below `behind`: opaque, copied by rows, never shifted with
+  the ground.
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
+  `docs/shots/looks/` is the six skies in both cameras.
 - `prototypes/` — the HTML pages the design came from. Reference code for the port, especially the
   slice hit test and the two views' layouts. Not shipped.
 
@@ -108,10 +117,15 @@ overrides whatever StoreKit itself would say.
 - **Design units are 320×224.** All layout constants in the spec and core are in that space
   (the Genesis screen). Scenes scale up by an integer where possible and never filter textures:
   `texture.filteringMode = .nearest`.
-- **One palette line.** Every colour comes from `docs/palette.md`. No alpha, no gradients, no
-  anti-aliasing. Dither only in the sky. *DESIGN.md §20 (spec only, 2026-09-21) changes this rule to
-  three lines for each phase and an ordered dither in named places. Until §20 is built, this rule
-  holds.*
+- **Three palette lines for each phase.** Every colour comes from `Look.of(machine.phase)` by
+  role, and every one of them is in `docs/palette.md` (DESIGN.md §20). The sixteen named colours
+  of `Palette` keep the jobs that do not change with the hour — the chalk lines, the readout
+  yellow, the grass, the label ink. No alpha, no anti-aliasing, and every channel is one of the
+  eight Mega Drive levels. Dither with the ordered Bayer 4×4 only, and only where §20 names: the
+  sky, a halo, the wall face, the tip of a cast shadow, the low sun on the grass, the ground
+  mist and the corners of the field at night. Never on a person and never in the strike zone.
+  `scripts/check-looks.py` holds `Look.swift` to `prototypes/04-golden-hour/golden.py`, which is
+  the oracle for the lines.
 - **No outs, no menus, no timers.** A miss brings the next pitch. If a feature needs a menu, it is
   probably the wrong feature.
 - **The cut is hard.** `presentScene` with no transition. Never a wipe, fade or zoom. The same goes
