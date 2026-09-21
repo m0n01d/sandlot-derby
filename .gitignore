@@ -16,3 +16,6 @@ App/*.xcodeproj/
 
 # Scratch
 /tmp/
+
+# the §20 prototype is Python
+__pycache__/
