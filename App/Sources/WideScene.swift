@@ -65,20 +65,20 @@ final class WideScene: CanvasScene {
         // fireworks → birds → towers → field and wall face → trail and ball → stands and
         // crowd → text. Everything that moves reads one clock, the machine's own.
         let now = SceneryClock.now(machine)
-        // Every park stands towers since §20, and the clock decides whether they are drawn at
-        // all: no frames means no lattice, no bank and no halo (see `AtBatScene`, and §20's open
-        // question 1). A bank that is not drawn cannot be put out either, which is the same
-        // answer `RareEvents.detect` gives when `lampsOn` is false.
-        let towers = machine.lampsOn
-            ? SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
-                                     scale: frame.scale, originX: frame.originX,
-                                     ground: ground, time: now,
-                                     chasing: machine.crowdIsUp,
-                                     isOut: machine.bankIsOut, layout: layout)
-            : []
+        // Every park stands towers in every phase (see `AtBatScene`, and §20's open question 1,
+        // decided — Dwight, 2026-09-21). `sideTowerFrames` folds `lampsOn` into `lit` for every
+        // bank, so by day each one draws dark and none of them can be chasing. `isOut` needs no
+        // such fold: `RareEvents.detect` only ever puts a bank out while `lampsOn` is true (Core,
+        // unchanged), so `machine.bankIsOut` already answers false for all of them by day.
+        let towers = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                            scale: frame.scale, originX: frame.originX,
+                                            ground: ground, time: now,
+                                            chasing: machine.crowdIsUp, lampsOn: machine.lampsOn,
+                                            isOut: machine.bankIsOut, layout: layout)
         if machine.lampsOn {
             // The moon hangs in this camera too, where §20 puts it: never moving, whatever the
-            // ground does. `nightSky` draws it with the stars and the halos.
+            // ground does. `nightSky` draws it with the stars and the halos — lamps-only, so the
+            // gate stays here rather than inside `nightSky` itself.
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
                             time: now, width: fullWidth, look: look, layout: layout)
         }
@@ -312,14 +312,14 @@ final class WideScene: CanvasScene {
                                  radius: disc.radius, halo: disc.halo,
                                  clipY: BackdropLayout.canonicalGround)
             }
-            // The lattices belong in this layer, under the roof (§20 step 4). Their geometry is
-            // the park's and the framing's; what the chase does to a bank is drawn per frame.
-            let poles = machine.lampsOn
-                ? SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
-                                         scale: frame.scale, originX: frame.originX,
-                                         ground: BackdropLayout.canonicalGround,
-                                         time: 0, chasing: false, layout: self.layout)
-                : []
+            // The lattices belong in this layer, under the roof (§20 step 4), in every phase now
+            // (§20 open question 1, decided) — only their geometry is wanted here, so `time`,
+            // `chasing` and `lampsOn` are placeholders that `towerLattices` never reads.
+            let poles = SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                               scale: frame.scale, originX: frame.originX,
+                                               ground: BackdropLayout.canonicalGround,
+                                               time: 0, chasing: false, lampsOn: false,
+                                               layout: self.layout)
             FlightArt.behind(into: set.behind.canvas, park: machine.park, scenery: scenery,
                              view: view, width: width, close: close, look: look,
                              towers: poles, layout: self.layout, rules: self.flightRules)
