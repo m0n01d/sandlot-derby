@@ -71,8 +71,21 @@ routing, PR screenshot and grooming rules do.
   — and `ShadedSpriteCache`, keyed by name, pose and phase; steps 3 and 4 build the people with
   it, and a DEBUG `selfCheck()` holds the port to the prototype's own batter torso). `Backdrop`
   gained a third cached layer, `sky`, below `behind`: opaque, copied by rows, never shifted with
-  the ground. §20 step 4 (2026-09-21) added `FlightArt.swift` (`FlightLookRules`, the side view's
-  own knob table ported from `prototypes/04-golden-hour/side.py`, and `FlightArt`, the horizon,
+  the ground. Step 3 (2026-09-21) added `AtBatArt.swift` (`AtBatLookRules` — the at-bat camera's
+  own knobs for the horizon's hills and trees, the wings and their tiers, the wall, the
+  checkerboard grass, the low sun/night pool/mist, the dirt's ellipses and specks, and the
+  scoreboard frame; `AtBatArt`, the static functions that paint them off `Look` and `Scenery`
+  into the cached `behind`/`front` layers, replacing §17's low horizon band) and `PeopleArt.swift`
+  (`PeopleRules`, `BatterPose` — nine points with the rest hung off them; `PeopleArt`, the
+  batter's rig and the pitcher's three stamps, mirrored rather than re-posed when the light is on
+  the right, plus the cast-shadow shape worked out once per pose and phase into a `ShadowStamp`
+  and kept in `ShadowStampCache` beside `ShadedSpriteCache`'s own). `Backdrop.swift`'s
+  `BackdropLayer` gained a solid-row fast path: a row the art fills edge to edge — most of the
+  at-bat `front` layer's wall, track and grass — copies with one pointer `update(from:count:)`
+  instead of a per-pixel test and store, the difference between 12 ms a frame and half of one in
+  a Debug build (§20 "Layers and speed"). §20 step 4 (2026-09-21) added `FlightArt.swift`
+  (`FlightLookRules`, the side view's own knob table ported from
+  `prototypes/04-golden-hour/side.py`, and `FlightArt`, the horizon,
   grass, field marks, wall, stands, crowd, furniture, batter, trail and ball it draws — both
   framings are one drawing, the same park at a different scale through `SideView`). `FlightLayer`
   seals a cached layer to per-row runs of painted pixels instead of one bounding box: this
@@ -226,7 +239,11 @@ record celebration, closing #40 and #41, §10). Audio, haptics, the organ tunes,
 contract card, StoreKit 2 wiring (a local `.storekit` file), the Warm Up, the instant replay, park
 variety, three-home-run parks and the record celebration are all in; the purchase/pending/refund/
 restore paths have not been exercised for real, since a `.storekit` configuration only works
-launched from Xcode. Next: every buildable issue is
+launched from Xcode. M6 (§20, the look and the clock, #52) is also built: steps 1–5, PRs #54,
+#55, #56, #57, #58 and this one. What is open is §20's own list — towers by day, a player far
+from the city of the zone, the crowd share, contrast on a pale sky, the moon — and the three
+stand tiers below `full`, which are merged but judged only on the device. Next: every buildable
+issue is
 closed; what remains is Dwight's — #11 (pricing, §16) needs the purchase, pending, refund and
 restore paths run from Xcode, and the review of every decision still marked unreviewed; then the
 rest of M5 (the app icon, Game Center, TestFlight, the store listing). `docs/watch.md` is a

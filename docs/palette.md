@@ -34,9 +34,9 @@ Rules:
 
 ## The phase lines (DESIGN.md §20)
 
-**Spec only. Nothing below is built.** When §20 is built, a frame has three palette lines, and the
-clock selects the set. The sixteen colours above keep their roles in each phase. The night swap
-above goes away, because `night` is one of the six sets.
+**Built (2026-09-21, #52). The mock and the prototype remain the reference.** When §20 is built, a
+frame has three palette lines, and the clock selects the set. The sixteen colours above keep their
+roles in each phase. The night swap above goes away, because `night` is one of the six sets.
 
 - Each new colour uses one of the eight levels in each channel: `00 22 44 66 88 AA CC EE`.
 - One frame uses 45 colours at most, and transparent.

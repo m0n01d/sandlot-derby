@@ -207,8 +207,7 @@ The batter is a stamp, not scaled art, and is off screen here.
 
 ## 9. Art
 
-> §20 replaces the palette rule and the silhouettes of this section when it is built. Until then
-> this section is what ships.
+> §20 replaced the palette rule and the silhouettes of this section.
 
 - Palette: `docs/palette.md`. Fifteen colours plus transparent.
 - Sprites (all silhouettes, no outlines):
@@ -504,7 +503,7 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
   Center, TestFlight and the store listing.
 - **M6 — the look and the clock.** §20: three palette lines for each phase, people with a light on
   them, PARK 12's stands behind the wall at bat, the flight camera's six fixes, and a sky that
-  follows the real time of day. Spec only (2026-09-21).
+  follows the real time of day. Built (2026-09-21).
 
 ## 14. Open questions
 
@@ -1388,8 +1387,9 @@ an iPad is written but unexercised.
 
 Dwight asked for this on 2026-09-21. His words: "lets polish our 16bit characters and world … ours
 still looks plain", then "I kinda like golden hour. Makes the game feel more polished", then "Let's
-use real time of day to drive the sky. So night games are at night". **Spec only. Nothing is
-built.** Dwight chose the look and the clock rule. Each other choice is Claude's and is not
+use real time of day to drive the sky. So night games are at night". **Built (2026-09-21, #52).
+The mock and the prototype remain the reference.** Dwight chose the look and the clock rule. Each
+other choice is Claude's and is not
 reviewed. A review against the code on 2026-09-21 changed this section before any build.
 
 The approved mock is the design canvas, which is private:
