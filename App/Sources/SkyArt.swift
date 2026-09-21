@@ -337,6 +337,25 @@ enum SkyArt {
         }
     }
 
+    /// The poles alone, and the banks alone. §20's flight camera caches its lattices in the layer
+    /// *behind* the upper deck — a tower stands further back than the roof and the roof cuts it
+    /// off — and draws only the banks per frame, because a bank is what the chase moves. Added
+    /// beside `towers(into:frames:width:look:layout:)`, which is unchanged and is still what the
+    /// at-bat camera draws with.
+    static func towerLattices(into c: PixelCanvas, frames: [TowerFrame], width: Double,
+                              look: Look, layout: BackdropLayout = .standard) {
+        for tower in frames where tower.x > -tower.bankW && tower.x < width + tower.bankW {
+            lattice(into: c, tower: tower, colour: look.tower[0], layout: layout)
+        }
+    }
+
+    static func towerBanks(into c: PixelCanvas, frames: [TowerFrame], width: Double,
+                           look: Look, layout: BackdropLayout = .standard) {
+        for tower in frames where tower.x > -tower.bankW && tower.x < width + tower.bankW {
+            bank(into: c, tower: tower, look: look, layout: layout)
+        }
+    }
+
     private static func lattice(into c: PixelCanvas, tower: TowerFrame, colour: Palette.RGBA8,
                                 layout: BackdropLayout) {
         let top = tower.bankY + tower.bankH

@@ -35,6 +35,15 @@ final class PixelCanvas {
         setPixel(Int(x), Int(y), color)
     }
 
+    /// The packed word already at (x, y), or 0 — the transparent entry — outside the canvas. The
+    /// one primitive that reads the frame back: §20's roof shadow has to leave the tiers' lit lips
+    /// alone, and a lit rim has to find the edge of the shape it is rimming (`engine.Canvas.get`).
+    @inline(__always)
+    func packed(_ x: Int, _ y: Int) -> UInt32 {
+        guard x >= 0, y >= 0, x < width, y < height else { return 0 }
+        return buffer[y * width + x]
+    }
+
     func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double, _ color: Palette.RGBA8) {
         let x0 = max(0, Int(x)), y0 = max(0, Int(y))
         let x1 = min(width, Int(x) + Int(w)), y1 = min(height, Int(y) + Int(h))

@@ -26,11 +26,13 @@ final class WideScene: CanvasScene {
     private let recordNameY = 164.0
     private let holdTextScale = 2
     /// Everything behind the wall that does not move, drawn once per park, canvas and framing
-    /// (DESIGN.md §17). The framing is a pure function of the park and the flight, so this
-    /// rebuilds about once a home run, not once a frame.
-    private let backdrops = BackdropCache()
+    /// (DESIGN.md §17, §20). Two framings' worth at a time: the wide and the close set are built
+    /// together at the head of a flight, so the cut between them costs nothing but a pointer.
+    private let backdrops = FlightBackdropCache()
     /// `Park.scenery` is computed; this keeps the one the frame needs instead of rebuilding it.
     private var cachedScenery: Scenery?
+    /// The flight camera's own knobs (§20 step 4).
+    private let flightRules = FlightLookRules.standard
 
     /// The framing for this frame, and which camera it is. The field starts inside the safe area
     /// so the batter isn't under the Dynamic Island; sky and grass still run edge to edge.
@@ -49,36 +51,15 @@ final class WideScene: CanvasScene {
         let fullWidth = Double(canvas.width)
         let (frame, camera) = framing(machine, width: fullWidth)
         let ground = frame.ground
+        let close = camera == .close
 
         let scenery = self.scenery(for: machine.park)
-        let (sky, behind, front) = backdrops.layers(
-            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width,
-                             camera: camera == .close ? .close : .wide,
-                             phase: machine.phase,
-                             scale: frame.scale, originX: frame.originX),
-            height: canvas.height) { s, b, f in
-            // The stops, stretched to the canonical ground whichever framing this is: the sky is
-            // infinitely far away and the close camera only exposes more of the last of them.
-            SkyArt.sky(into: s.canvas, look: look, width: fullWidth, flightCamera: true)
-            // The low sun at `goldenHour` is a thing in the park, low behind the hills, so it
-            // goes in `behind` and rides down with the ground. The moon does not move and stays
-            // in the sky (§20 "Layers and speed").
-            if let disc = look.sunFlight, look.sunFlightMovesWithGround {
-                SkyArt.sunOrMoon(into: b.canvas, look: look, x: disc.x(width: fullWidth),
-                                 y: BackdropLayout.canonicalGround - disc.y,
-                                 radius: disc.radius, halo: disc.halo,
-                                 clipY: BackdropLayout.canonicalGround)
-            }
-            BackdropArt.sideBackdrop(behind: b.canvas, front: f.canvas,
-                                     park: machine.park, scenery: scenery,
-                                     scale: frame.scale, originX: frame.originX,
-                                     width: fullWidth, look: look,
-                                     layout: self.layout)
-        }
-        // The layers are drawn with the ground at its canonical place; the close camera lifts it.
+        let layers = self.layers(machine, camera: camera, frame: frame, look: look,
+                                 scenery: scenery, canvas: canvas)
+        // The layers are drawn with the ground at its canonical place; the close camera drops it.
         let backdropDY = Int((ground - BackdropLayout.canonicalGround).rounded())
 
-        sky.blitOpaque(onto: canvas)
+        layers.sky.blitOpaque(onto: canvas)
 
         // §17's draw order, from the back: sky → stars / moon → light halos → clouds →
         // fireworks → birds → towers → field and wall face → trail and ball → stands and
@@ -130,56 +111,35 @@ final class WideScene: CanvasScene {
         drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth,
                    kinds: [.birdStrike, .blimpHit])
 
-        behind.blit(onto: canvas, dy: backdropDY)
+        layers.behind.blit(onto: canvas, dy: backdropDY)
 
-        // The towers stand behind the stands, so their feet are covered when the stands go in.
-        SkyArt.towers(into: canvas, frames: towers, width: fullWidth, look: look, layout: layout)
+        // The lattices came down with `behind`, under the roof; only the banks are drawn here,
+        // because a bank is the part of a tower the chase moves (§20 "Towers"). Their feet are
+        // covered when the stands go in, as they always were.
+        SkyArt.towerBanks(into: canvas, frames: towers, width: fullWidth, look: look, layout: layout)
         // …and the sparks off a bank that has just gone out, over the bank they came from.
         drawBursts(canvas, machine, frame: frame, fullWidth: fullWidth, kinds: [.lightsOut])
 
-        // Grass, mown in 16 ft stripes: world space, so they widen with the scale.
-        canvas.rect(0, ground, fullWidth, H - ground, Palette.grassA)
-        let stripe = max(4, (16 * frame.scale).rounded())
-        var gx = frame.x(0).truncatingRemainder(dividingBy: stripe * 2) - stripe * 2
-        while gx < fullWidth { canvas.rect(gx, ground, stripe, H - ground, Palette.grassB); gx += stripe * 2 }
-
-        let wallX = frame.x(machine.park.wallDistanceFeet)
-        let wallH = machine.park.wallHeightFeet * frame.scale
-        canvas.rect(wallX, ground - wallH, fullWidth - wallX, wallH, look.wall[1])
-        canvas.rect(wallX, ground - wallH, fullWidth - wallX, 1, Palette.chalk)
-        canvas.rect(wallX, ground - wallH - 1, 2, wallH + 1, Palette.chalk)
-
-        var f = 100.0
-        let tick = max(1, (frame.scale / 0.75).rounded())
-        while frame.x(f) < fullWidth { canvas.rect(frame.x(f), ground, tick, 4 * tick, Palette.chalk); f += 100 }
-
-        canvas.rect(frame.x(-6), ground, 12 * frame.scale, 3, look.dirt[1])
-        drawBatter(canvas, x: frame.x(0), y: ground, scale: frame.scale, machine: machine, look: look)
+        // The field, under the ball and moving with the ground, so it is drawn per frame: the
+        // mow in three depth bands, the low sun's rake across it, and the marks (§20 step 4).
+        FlightArt.grass(into: canvas, view: frame, width: fullWidth, look: look, rules: flightRules)
+        FlightArt.lowSunWash(into: canvas, view: frame, width: fullWidth, look: look,
+                             rules: flightRules)
+        FlightArt.fieldMarks(into: canvas, park: machine.park, view: frame, width: fullWidth,
+                             close: close, look: look, rules: flightRules)
+        FlightArt.batter(into: canvas, view: frame, look: look, rules: flightRules)
 
         if let flightResult = machine.flight, !flightResult.points.isEmpty {
             let points = flightResult.points
             let i = min(points.count - 1, Int(machine.playbackIndex))
-
-            var k = 0
-            while k < i {
-                let pt = points[k]
-                canvas.px(frame.x(pt.xFeet), frame.y(pt.yFeet) - 2, Palette.chalk)
-                k += camera == .close ? 4 : 8
-            }
+            FlightArt.trail(into: canvas, points: points, index: i, view: frame, close: close,
+                            rules: flightRules)
             let b = points[i]
-            let X = frame.x(b.xFeet), Y = frame.y(b.yFeet) - 3
-            switch camera {
-            case .wide:
-                canvas.rect(X - 1, Y - 1, 4, 4, Palette.chalk)
-                canvas.px(X, Y, look.ballHi)
-                canvas.px(X + 1, Y + 1, Palette.cap)        // all the lace a 4 px ball has room for
-            case .close:
-                // The 6 px ball with its one highlight pixel (DESIGN.md §9), and its shadow.
-                canvas.rect(X - 3, ground + 1, 6, 2, Palette.shade)
-                canvas.baseball(X, Y, radius: 3, highlight: look.ballHi)
-            }
+            let X = frame.x(b.xFeet), Y = frame.y(b.yFeet) - flightRules.ballLift
+            FlightArt.ball(into: canvas, at: b, view: frame, close: close, look: look,
+                           rules: flightRules)
 
-            drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
+            drawInFrontOfTheBall(canvas, layers: layers, dy: backdropDY, close: close,
                                  machine: machine, frame: frame, scenery: scenery, look: look)
 
             if let launch = machine.launch {
@@ -240,7 +200,7 @@ final class WideScene: CanvasScene {
                 }
             }
         } else {
-            drawInFrontOfTheBall(canvas, front: front, dy: backdropDY,
+            drawInFrontOfTheBall(canvas, layers: layers, dy: backdropDY, close: close,
                                  machine: machine, frame: frame, scenery: scenery, look: look)
         }
 
@@ -290,27 +250,117 @@ final class WideScene: CanvasScene {
         return s
     }
 
+    /// The six cached layers for the framing on screen — and, the first time a flight asks for
+    /// them, the other framing's six as well.
+    ///
+    /// §20 asks for both to be painted during the contact freeze rather than at the cut, so that
+    /// the wide → close cut is a hard cut and costs nothing. The machine hands this scene its
+    /// first frame at the end of that freeze (`.cutToWide` leaves `.contact`), which is as early
+    /// as a scene that is not on screen can do any work; the close set is then already standing
+    /// when the ball reaches the wall. A flight that never earns the close camera never pays for
+    /// it — `SideView.closeCutIndex` says so before a single pixel is drawn.
+    private func layers(_ machine: DerbyMachine, camera: FlightCamera, frame: SideView,
+                        look: Look, scenery: Scenery, canvas: PixelCanvas) -> FlightLayers {
+        let mine = build(machine, camera: camera, frame: frame, look: look,
+                         scenery: scenery, canvas: canvas)
+        // Only while the wide camera is up, and only once per flight: `closeCutIndex` walks the
+        // whole arc, which is not a per-frame question.
+        guard camera == .wide, let flight = machine.flight, prebuiltFor != flight.distanceFeet
+        else { return mine }
+        prebuiltFor = flight.distanceFeet
+        guard SideView.closeCutIndex(flight: flight,
+                                     wallDistanceFeet: machine.park.wallDistanceFeet) != nil
+        else { return mine }
+        // The close framing drops the ground for a towering fly, but only the scale and the
+        // origin are in the key, and neither of those moves once the flight is known.
+        let other = SideView.framing(camera: .close, park: machine.park, flight: flight,
+                                     ballFeet: 0, width: Double(canvas.width),
+                                     safeLeft: safeLeft, safeRight: safeRight,
+                                     rules: sideRules)
+        _ = build(machine, camera: .close, frame: other, look: look,
+                  scenery: scenery, canvas: canvas)
+        return mine
+    }
+
+    /// The flight whose close layers are already standing, by its landing number — which is as
+    /// good an identity as a flight has and changes on every swing that produces one.
+    private var prebuiltFor: Double?
+
+    /// One framing's six layers, painted if the cache has not seen this key before.
+    private func build(_ machine: DerbyMachine, camera: FlightCamera, frame: SideView,
+                       look: Look, scenery: Scenery, canvas: PixelCanvas) -> FlightLayers {
+        let width = Double(canvas.width)
+        let close = camera == .close
+        // The layers are painted with the ground at its canonical place, whatever this frame's
+        // ground is, and copied down by the difference. The close camera dropping the ground to
+        // keep a towering fly in frame therefore costs no repaint.
+        let view = SideView(scale: frame.scale, originX: frame.originX,
+                            ground: BackdropLayout.canonicalGround)
+        let key = BackdropKey(parkNumber: machine.park.number, width: canvas.width,
+                              camera: close ? .close : .wide, phase: machine.phase,
+                              scale: frame.scale, originX: frame.originX)
+        return backdrops.layers(for: key, height: canvas.height) { set in
+            // The stops, stretched to the canonical ground whichever framing this is: the sky is
+            // infinitely far away and the close camera only exposes more of the last of them.
+            SkyArt.sky(into: set.sky.canvas, look: look, width: width, flightCamera: true)
+            // The low sun at `goldenHour` is a thing in the park, low behind the hills, so it
+            // goes in `behind` and rides down with the ground. The moon does not move and stays
+            // in the sky (§20 "Layers and speed").
+            if let disc = look.sunFlight, look.sunFlightMovesWithGround {
+                SkyArt.sunOrMoon(into: set.behind.canvas, look: look, x: disc.x(width: width),
+                                 y: BackdropLayout.canonicalGround - disc.y,
+                                 radius: disc.radius, halo: disc.halo,
+                                 clipY: BackdropLayout.canonicalGround)
+            }
+            // The lattices belong in this layer, under the roof (§20 step 4). Their geometry is
+            // the park's and the framing's; what the chase does to a bank is drawn per frame.
+            let poles = machine.lampsOn
+                ? SkyArt.sideTowerFrames(park: machine.park, scenery: scenery,
+                                         scale: frame.scale, originX: frame.originX,
+                                         ground: BackdropLayout.canonicalGround,
+                                         time: 0, chasing: false, layout: self.layout)
+                : []
+            FlightArt.behind(into: set.behind.canvas, park: machine.park, scenery: scenery,
+                             view: view, width: width, close: close, look: look,
+                             towers: poles, layout: self.layout, rules: self.flightRules)
+            FlightArt.front(into: set.front.canvas, park: machine.park, scenery: scenery,
+                            view: view, width: width, close: close, look: look,
+                            layout: self.layout, rules: self.flightRules)
+            for lift: FlightArt.CrowdLift in [.none, .even, .odd] {
+                FlightArt.crowd(into: set.crowd(lift).canvas, park: machine.park,
+                                scenery: scenery, view: view, width: width, close: close,
+                                look: look, lift: lift, rules: self.flightRules)
+            }
+        }
+    }
+
     /// The stands and their crowd, the pop where a home run went into them, and the wall's own
     /// number. §17's draw order puts the stands after the trail and the ball — which is what
     /// makes a home run drop into the crowd and be gone — and the text after everything.
-    private func drawInFrontOfTheBall(_ canvas: PixelCanvas, front: BackdropLayer, dy: Int,
-                                      machine: DerbyMachine, frame: SideView, scenery: Scenery,
-                                      look: Look) {
-        front.blit(onto: canvas, dy: dy)
+    private func drawInFrontOfTheBall(_ canvas: PixelCanvas, layers: FlightLayers, dy: Int,
+                                      close: Bool, machine: DerbyMachine, frame: SideView,
+                                      scenery: Scenery, look: Look) {
+        layers.front.blit(onto: canvas, dy: dy)
 
         // The crowd and the flags are the parts of the stands that move, so they are not in the
         // cached layer: the crowd bounces while the cheer plays (`DerbyMachine.crowdIsUp`) and
         // the flags flutter whatever the beat, because it is the wind that moves them.
         let now = SceneryClock.now(machine)
         let fullWidth = Double(canvas.width)
-        BackdropArt.crowd(into: canvas, park: machine.park, scenery: scenery,
-                          scale: frame.scale, originX: frame.originX, width: fullWidth,
-                          ground: frame.ground, time: now, cheering: machine.crowdIsUp,
-                          look: look, layout: layout)
+        // Three cached crowds, one drawn (§20 "Layers and speed"). `crowdHeadIsUp` of person 0
+        // is the machine's own answer to "is this the even step or the odd one" — index 0 is
+        // even, so it is true exactly on the steps the even people are up.
+        let lift: FlightArt.CrowdLift = !machine.crowdIsUp
+            ? .none
+            : (SkyLife.crowdHeadIsUp(0, at: now, cheering: true) ? .even : .odd)
+        layers.crowd(lift).blit(onto: canvas, dy: dy)
+        // The roof's own shadow falls on the people under it, so it goes on after them.
+        FlightArt.roofShadow(into: canvas, park: machine.park, scenery: scenery, view: frame,
+                             width: fullWidth, close: close, look: look, rules: flightRules)
         BackdropArt.standsFlags(into: canvas, park: machine.park, scenery: scenery,
                                 scale: frame.scale, originX: frame.originX, width: fullWidth,
                                 ground: frame.ground, frame: SkyLife.flutterFrame(at: now),
-                                look: look, layout: layout)
+                                close: close, look: look, layout: layout)
 
         // What this park already carries: dents that stay and a pane that has gone (#5). Over
         // the cached board, and with the shards of the shot on screen on top of them.
@@ -422,39 +472,6 @@ final class WideScene: CanvasScene {
             } else {
                 canvas.px(x, particle.y, colour)
             }
-        }
-    }
-
-    /// The batter is the yardstick for the wall, so he is drawn to the field's scale: most real
-    /// walls are a man tall or more, and a 42 px batter (57 ft at the wide scale) made every
-    /// fence look knee-high. A generous 6.5 ft, and never fewer pixels than still read as a figure.
-    private let batterFeet = 6.5
-    private let minBatterPixels = 6.0
-
-    private func drawBatter(_ canvas: PixelCanvas, x: Double, y: Double, scale: Double,
-                            machine: DerbyMachine, look: Look) {
-        let frame: Int = machine.flight != nil ? (machine.playbackIndex < 12 ? 1 : 2) : 0
-        let bx = x.rounded(.down), by = y
-        let h = max(minBatterPixels, (batterFeet * scale).rounded())
-        let w = max(3, (h / 3).rounded())
-        let legs = max(1, (h * 0.33).rounded()), torso = max(1, (h * 0.38).rounded())
-        let head = max(2, h - legs - torso), capRows = max(1, (head / 3).rounded())
-        let left = bx - (w / 2).rounded(.down), legW = max(1, (w / 3).rounded(.down))
-        let shoulders = by - legs - torso
-
-        let cloth = look.grey[0], skin = look.skin[2], cap = look.red[2], wood = look.wood[2]
-        canvas.rect(left, by - legs, legW, legs, cloth)
-        canvas.rect(left + w - legW, by - legs, legW, legs, cloth)
-        canvas.rect(left, shoulders, w, torso, cloth)
-        canvas.rect(left, shoulders - head, w, head, skin)
-        canvas.rect(left, shoulders - head, w + 1, capRows, cap)      // the brim faces the field
-
-        let handsX = left + w - 1, handsY = shoulders + (torso * 0.4).rounded()
-        let thick = h >= 16 ? 2 : 1
-        switch frame {
-        case 0: canvas.line(handsX, handsY, bx - h * 0.15, by - h * 1.3, wood, thickness: thick)   // stance
-        case 1: canvas.line(handsX, handsY, handsX + h * 0.7, handsY - 1, wood, thickness: thick)  // contact
-        default: canvas.line(left, handsY, left - h * 0.5, by - h * 1.15, wood, thickness: thick)  // follow-through
         }
     }
 

@@ -18,19 +18,12 @@ struct BackdropLayout {
     var scoreboardFlagOffsets = [6.0, 55.0]
     var scoreboardFlagPoleHeight = 8.0
 
-    /// Side view: the far piece rises this many pixels above the top of the stands.
-    var sideFarRisePixels = 13.0
-    /// Side view: the foul pole stands this many feet above the top of the wall.
-    var foulPoleFeet = 30.0
-    /// Side view: one crowd speckle per this many square pixels of seating, and the odds of each
-    /// being a face rather than a shirt. Sparse on purpose — packed tight it stopped being a
-    /// crowd and became television static. How many of those seats are taken at all is the
-    /// phase's `crowdShare` (§20).
-    var crowdPixelsPerHead = 13.0
-    var crowdSkinShare = 0.45
-    /// Side view: a flag's pole and its pennant.
-    var flagPoleHeight = 9.0
-    var flagPennant = (w: 5.0, h: 3.0)
+    /// Side view: a flag's pole and its pennant, in the wide framing and in the close one. The
+    /// close camera is twice the scale, so its flags are the bigger pair (§20, `side.flags`).
+    var flagPoleHeight = 11.0
+    var flagPennant = (w: 6.0, h: 4.0)
+    var flagPoleHeightClose = 16.0
+    var flagPennantClose = (w: 9.0, h: 6.0)
     /// Side view, Single-A only: the chain-link mesh above the wall, and its posts, in feet.
     var chainLinkPitchPixels = 3.0
     var fencePostSpacingFeet = 20.0
@@ -99,14 +92,9 @@ struct BackdropLayout {
 
     // MARK: - Landmarks and the milestone sky (#5)
 
-    /// The out-of-town board: the rows of lettering across its face, how far its legs are set in
-    /// from its edges, and how wide they are. Where it stands and how big it is are in feet in
-    /// `SceneryRules` — a ball hits it in the park, not on the screen.
-    var boardRowPitch = 4.0
-    var boardLegInsetFeet = 6.0
-    var boardLegWidth = 2.0
     /// A dent in the board: a bright scar with rays, the way a dent in a metal panel catches the
     /// light. (A broken pane keeps no cracks — see `boardDamage`: there is no room for them.)
+    /// How the board itself is drawn is `FlightLookRules`', with the stands it stands on.
     var dentRadius = 2.0
 
     /// The blimp's envelope and its tail fin, in design pixels. Big enough to read as a blimp at
@@ -323,56 +311,11 @@ enum BackdropArt {
 
     // MARK: - The out-of-town board (#5)
 
-    /// The board over the stands: a dark panel on two legs, with rows of lettering and the
-    /// operator's lit pane in one top corner. Cached with the stands and drawn **in front of the
-    /// ball** like them, so a ball that reaches it goes into it and is gone — and a dent is left
-    /// where it went in.
+    /// The board itself moved to `FlightArt.board` with §20 step 4: it is the flight camera's
+    /// alone, and its new drawing — a frame with a lit lip, rows of dashes and a lit pane with a
+    /// glow — belongs beside the stands it stands on. What a ball has *done* to it stays here,
+    /// because it is drawn per frame rather than cached.
     ///
-    /// Drawn with the ground at `BackdropLayout.canonicalGround`, like everything else cached.
-    static func outfieldBoard(into c: PixelCanvas, park: Park, scenery: Scenery,
-                              scale: Double, originX: Double, width: Double, look: Look,
-                              layout: BackdropLayout = .standard) {
-        guard let board = scenery.board else { return }
-        let ground = BackdropLayout.canonicalGround
-        func x(_ feet: Double) -> Double { originX + feet * scale }
-        func y(_ feet: Double) -> Double { ground - feet * scale }
-        let w = park.wallDistanceFeet
-
-        let left = x(board.nearFeet(wallDistanceFeet: w))
-        let right = x(board.farFeet(wallDistanceFeet: w))
-        let top = y(board.topFeet), bottom = y(board.bottomFeet)
-        guard right > 0, left < width, bottom - top >= 4, right - left >= 6 else { return }
-
-        // Two legs first, so the panel sits on top of them.
-        let legInset = layout.boardLegInsetFeet * scale
-        for lx in [left + legInset, right - legInset - layout.boardLegWidth] {
-            c.rect(lx, bottom, layout.boardLegWidth, ground - bottom, look.board[0])
-        }
-
-        // The panel: the phase's dark board face, with its lit lip so the top edge reads against
-        // the sky the way every deck's does.
-        c.rect(left, top, right - left, bottom - top, look.board[2])
-        c.rect(left, top, right - left, 1, look.board[1])
-
-        // Rows of lettering, dashed: at this size a board says "there is writing here" and
-        // nothing more. `chalk` on `ink`, which is what `ink` is for (docs/palette.md).
-        var row = top + 3
-        while row < bottom - 2 {
-            var dx = left + 2
-            while dx < right - 2 {
-                c.rect(dx, row, 2, 1, Palette.chalk)
-                dx += 4
-            }
-            row += layout.boardRowPitch
-        }
-
-        // The operator's pane, lit, in its seeded top corner. It is the smaller target inside
-        // the bigger one, and the one that can break.
-        let pane = board.pane(wallDistanceFeet: w)
-        c.rect(x(pane.near), y(pane.top), max(2, (pane.far - pane.near) * scale),
-               max(2, (pane.top - pane.bottom) * scale), Palette.score)
-    }
-
     /// What a ball has already done to the board, drawn per frame over the cached panel: the
     /// dents that stay for the rest of the park, and a pane that is not there any more (#5).
     static func boardDamage(into c: PixelCanvas, park: Park, scenery: Scenery, scars: ParkScars,
@@ -405,182 +348,29 @@ enum BackdropArt {
         }
     }
 
-    /// Everything behind the wall in the side view, into the two cached layers. `behind` is
-    /// drawn before the field, `front` after the ball — which is what makes a home run drop
-    /// into the crowd and vanish.
-    ///
-    /// Drawn with the ground at `BackdropLayout.canonicalGround`; the scene copies it down by
-    /// however far the close camera has lifted.
-    static func sideBackdrop(behind: PixelCanvas, front: PixelCanvas,
-                             park: Park, scenery: Scenery,
-                             scale: Double, originX: Double, width: Double, look: Look,
-                             layout: BackdropLayout = .standard) {
-        let ground = BackdropLayout.canonicalGround
-        func x(_ feet: Double) -> Double { originX + feet * scale }
-        func y(_ feet: Double) -> Double { ground - feet * scale }
-
-        let wallX = x(park.wallDistanceFeet)
-        let wallTopY = y(park.wallHeightFeet)
-        // Everything behind the wall is the horizon seen over the grandstand, so it takes the
-        // phase's `hill` pair — near mass, far hill through the windows — and the landmark over
-        // the roofline takes the stand colours.
-        //
-        // The night swap this used to carry is gone. Step 1's version turned every silhouette
-        // round after dark because `ink` on an `ink` sky is invisible; since §20 every phase has
-        // a hill colour picked against its own sky, and there is nothing left to turn round.
-        let body = look.hill[1]
-        let detail = look.standLit[2]
-        let hole = look.hill[0]
-
-        let standsTopY: Double
-        if scenery.stands.swallowsTheBall {
-            standsTopY = y(scenery.standsTopFeet)
-            drawStands(into: front, park: park, scenery: scenery,
-                       scale: scale, originX: originX, width: width, look: look, layout: layout)
-        } else {
-            // Single-A: a chain-link fence over the wall and nothing to sit in.
-            standsTopY = wallTopY
-            chainLink(into: front, park: park, scenery: scenery, scale: scale, wallX: wallX,
-                      wallTopY: wallTopY, width: width, look: look, layout: layout)
-        }
-
-        // The park's own skyline, sitting on whatever the last thing built was. For Single-A
-        // this is §17's "trees": its far piece is a treeline.
-        far(scenery.far, into: behind, x0: wallX, x1: width,
-            baseline: standsTopY + 1, rise: layout.sideFarRisePixels,
-            body: body, hole: hole, seed: seed(scenery, tag: 0x3))
-
-        // One landmark over the grandstand, the way a water tower or a wheel sits over a real one.
-        if width - wallX > 60 {
-            near(scenery.near, into: behind, x: wallX + (width - wallX) * 0.62,
-                 baseline: standsTopY + 1, body: look.standLit[0], detail: detail,
-                 breeze: scenery.breezePixelsPerSecond)
-        }
-
-        // The foul pole: the one thing on the wall that is lit in every phase.
-        let poleHeight = layout.foulPoleFeet * scale
-        let poleWidth = max(1, (scale * 1.5).rounded())
-        front.rect(wallX, wallTopY - poleHeight, poleWidth, poleHeight, look.pole[0])
-
-        // The out-of-town board, in one seeded park in three (#5). In front of the ball with the
-        // stands, so a ball that reaches it goes into it.
-        outfieldBoard(into: front, park: park, scenery: scenery,
-                      scale: scale, originX: originX, width: width, look: look, layout: layout)
-    }
-
-    /// The stepped bleacher profile and the wall's own face — the parts of the stands that hold
-    /// still. Its crowd and its flags move, so they are drawn per frame instead.
-    private static func drawStands(into c: PixelCanvas, park: Park, scenery: Scenery,
-                                   scale: Double, originX: Double, width: Double, look: Look,
-                                   layout: BackdropLayout) {
-        let ground = BackdropLayout.canonicalGround
-        func x(_ feet: Double) -> Double { originX + feet * scale }
-        func y(_ feet: Double) -> Double { ground - feet * scale }
-        let wallTopY = y(park.wallHeightFeet)
-        let wallX = x(park.wallDistanceFeet)
-        let steps = scenery.standsSteps
-
-        // The wall's own face belongs in this layer too, drawn exactly as the field already
-        // draws it. Everything past the wall is behind it, and without this a ball that had
-        // dropped below the wall's top line came back into view over the wall it had just
-        // cleared — it vanished into the crowd and then fell out of it again.
-        c.rect(wallX, wallTopY, width - wallX, ground - wallTopY, look.wall[1])
-        c.rect(wallX, wallTopY, width - wallX, 1, Palette.chalk)
-        c.rect(wallX, wallTopY - 1, 2, ground - wallTopY + 1, Palette.chalk)
-
-        // The stepped mass sits on top of it.
-        for i in 0..<steps {
-            let f0 = park.wallDistanceFeet + scenery.standsDepthFeet * Double(i) / Double(steps)
-            let f1 = park.wallDistanceFeet + scenery.standsDepthFeet * Double(i + 1) / Double(steps)
-            let h = park.wallHeightFeet
-                + (scenery.standsTopFeet - park.wallHeightFeet) * Double(i + 1) / Double(steps)
-            let x0 = x(f0), x1 = x(f1), top = y(h)
-            guard x1 > 0, x0 < width, top < wallTopY else { continue }
-            // The phase's stand mass, with its lip on each deck (§17, §20). The mass has to be
-            // the darker of the two: in the wall's own green the stands and the outfield wall
-            // were one shape, and the wall stopped reading as a wall at all.
-            c.rect(x0, top, max(1, x1 - x0), wallTopY - top, look.standLit[0])
-            c.rect(x0, top, max(1, x1 - x0), 1, look.standLit[1])
-        }
-        // Behind the back row the profile is flat, all the way out of frame: there is no green
-        // band behind an outfield wall, which is the whole point of §17's stands.
-        let backX = x(park.wallDistanceFeet + scenery.standsDepthFeet)
-        let topY = y(scenery.standsTopFeet)
-        if backX < width, topY < wallTopY {
-            c.rect(backX, topY, width - backX, wallTopY - topY, look.standLit[0])
-            c.rect(backX, topY, width - backX, 1, look.standLit[1])
-        }
-
-        // The crowd and the flags are *not* drawn here any more: they move (step 5), so they are
-        // drawn per frame straight after this layer is copied down.
-    }
-
-    /// A speckle of heads and shirts over the seating, in the phase's own crowd colours. Seeded
-    /// by the park, so the same crowd turns out every time you come back — and drawn per frame
-    /// rather than cached, because while the cheer plays it bounces.
-    ///
-    /// Half the speckle is a pixel higher on each step and the other half is not, so the stand
-    /// ripples instead of sliding. `cheering` comes from `DerbyMachine.crowdIsUp`, never from a
-    /// timer in a scene (DESIGN.md §17).
-    ///
-    /// `Look.crowdShare` is how full the park is at this hour (§20): a dawn game has a quarter of
-    /// the seats taken and a night game nearly all of them. It thins the same seeded speckle
-    /// rather than reseeding it, so the people who are there at dawn are there at noon too.
-    static func crowd(into c: PixelCanvas, park: Park, scenery: Scenery,
-                      scale: Double, originX: Double, width: Double, ground: Double,
-                      time: Double, cheering: Bool, look: Look,
-                      layout: BackdropLayout = .standard) {
-        guard scenery.stands.hasCrowd else { return }
-        let left = max(0, originX + park.wallDistanceFeet * scale)
-        guard width - left > 2, scale > 0 else { return }
-        let wallTopY = ground - park.wallHeightFeet * scale
-        let topY = ground - scenery.standsTopFeet * scale
-        let area = (width - left) * max(0, wallTopY - topY)
-        let heads = Int(area / layout.crowdPixelsPerHead)
-        guard heads > 0 else { return }
-
-        var g = SplitMix64(seed: seed(scenery, tag: 0x4))
-        for i in 0..<heads {
-            let px = Double.random(in: left..<width, using: &g)
-            let feet = (px - originX) / scale
-            let h = standsHeightFeet(at: feet, park: park, scenery: scenery, layout: layout)
-            let seatTop = ground - h * scale
-            guard wallTopY - seatTop > 2 else { continue }
-            let py = Double.random(in: (seatTop + 1)..<wallTopY, using: &g)
-            let roll = Double.random(in: 0..<1, using: &g)
-            let seatTaken = Double.random(in: 0..<1, using: &g)
-            guard seatTaken < look.crowdShare else { continue }
-            // A head this often and a shirt the rest of the time: one pixel cannot be both, and
-            // a crowd of faces reads as gravel. The two lists are the phase's own.
-            let colour: Palette.RGBA8
-            if roll < layout.crowdSkinShare {
-                colour = look.headsLit[Int(roll * 1000) % look.headsLit.count]
-            } else {
-                colour = look.shirtsLit[Int(roll * 1000) % look.shirtsLit.count]
-            }
-            let up = SkyLife.crowdHeadIsUp(i, at: time, cheering: cheering)
-                && py - SkyLifeRules.standard.crowdBounceLift > seatTop
-            c.px(px.rounded(.down),
-                 py.rounded(.down) - (up ? SkyLifeRules.standard.crowdBounceLift : 0), colour)
-        }
-    }
-
     /// Flags along the top of the stands, pointing with the breeze and fluttering in two frames.
-    /// Drawn per frame beside the crowd, for the same reason.
+    /// Drawn per frame beside the crowd, because it is the wind that moves them.
+    ///
+    /// §20 leaves the two frames and the flutter exactly where §17 put them and changes only the
+    /// size: the close framing is twice the scale, so its poles and cloths are the bigger pair
+    /// (`side.flags`).
     static func standsFlags(into c: PixelCanvas, park: Park, scenery: Scenery,
                             scale: Double, originX: Double, width: Double, ground: Double,
-                            frame: Int, look: Look, layout: BackdropLayout = .standard) {
+                            frame: Int, close: Bool = false, look: Look,
+                            layout: BackdropLayout = .standard) {
         let x0 = originX + park.wallDistanceFeet * scale
         guard scenery.flags > 0, width > x0 else { return }
         let top = ground - scenery.standsTopFeet * scale
         let pointRight = scenery.breezePixelsPerSecond >= 0
+        let poleHeight = close ? layout.flagPoleHeightClose : layout.flagPoleHeight
+        let size = close ? layout.flagPennantClose : layout.flagPennant
         for i in 0..<scenery.flags {
             let t = (Double(i) + 1) / Double(scenery.flags + 1)
             let fx = (x0 + (width - x0) * t).rounded()
-            let poleTop = top - layout.flagPoleHeight
-            c.rect(fx, poleTop, 1, layout.flagPoleHeight, look.grey[3])
+            let poleTop = top - poleHeight
+            c.rect(fx, poleTop, 1, poleHeight, look.grey[3])
             pennant(into: c, x: fx, top: poleTop, pointRight: pointRight, frame: frame,
-                    colour: look.red[2], size: layout.flagPennant)
+                    colour: look.red[2], size: size)
         }
     }
 
@@ -599,34 +389,6 @@ enum BackdropArt {
             let rw = max(1, row.w)
             c.rect(pointRight ? x + 1 + row.dx : x - row.dx - rw, y, rw, 1, colour)
         }
-    }
-
-    /// Single-A's chain-link: a sparse `chalk` mesh over the wall with `ink` posts. It is drawn
-    /// in front of the ball like the stands are, but you can see straight through it — which is
-    /// the point, because this is the park where the ball is simply seen landing.
-    private static func chainLink(into c: PixelCanvas, park: Park, scenery: Scenery,
-                                  scale: Double, wallX: Double, wallTopY: Double,
-                                  width: Double, look: Look, layout: BackdropLayout) {
-        let meshFeet = scenery.standsTopFeet - park.wallHeightFeet
-        let top = wallTopY - meshFeet * scale
-        guard wallTopY - top >= 2, width > wallX else { return }
-        var y = top
-        while y < wallTopY {
-            var x = wallX + (Int(y - top) % 2 == 0 ? 0 : layout.chainLinkPitchPixels / 2)
-            while x < width { c.px(x, y, Palette.chalk); x += layout.chainLinkPitchPixels }
-            y += layout.chainLinkPitchPixels
-        }
-        c.rect(wallX, top, width - wallX, 1, Palette.chalk)          // the top rail
-        var postFeet = park.wallDistanceFeet
-        while originXPost(postFeet, wallX: wallX, park: park, scale: scale) < width {
-            let px = originXPost(postFeet, wallX: wallX, park: park, scale: scale)
-            c.rect(px, top, 1, wallTopY - top, look.standLit[2])
-            postFeet += layout.fencePostSpacingFeet
-        }
-    }
-
-    private static func originXPost(_ feet: Double, wallX: Double, park: Park, scale: Double) -> Double {
-        wallX + (feet - park.wallDistanceFeet) * scale
     }
 
     // MARK: - The pieces
