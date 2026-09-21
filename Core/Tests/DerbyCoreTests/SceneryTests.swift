@@ -110,14 +110,17 @@ final class SceneryTests: XCTestCase {
         XCTAssertEqual(differ, 200)
     }
 
-    func testNightKitOnlyAppearsAtNight() {
+    /// Since §20 the towers and the stars belong to every park — the clock says whether they are
+    /// lit — and only the moon still waits on the seeded night gear.
+    func testEveryParkHasTowersAndStarsAndOnlySomeHaveAMoon() {
         var nightParks = 0, moons = 0
         for n in 1...600 {
             let park = Park.generate(number: n)
             let s = park.scenery
-            if park.isNight {
+            XCTAssertTrue(rules.towersPerNightPark.contains(s.towers), "park \(n) towers \(s.towers)")
+            XCTAssertEqual(s.stars.count, rules.starCount, "park \(n)")
+            if park.nightSeed {
                 nightParks += 1
-                XCTAssertTrue(rules.towersPerNightPark.contains(s.towers), "park \(n) towers \(s.towers)")
                 if let moon = s.moon {
                     moons += 1
                     XCTAssertTrue(rules.moonBand.contains(moon.y))
@@ -125,12 +128,11 @@ final class SceneryTests: XCTestCase {
                     XCTAssertTrue([-1, 1].contains(moon.biteDirection))
                 }
             } else {
-                XCTAssertEqual(s.towers, 0, "park \(n) is a day game")
-                XCTAssertNil(s.moon, "park \(n) is a day game")
+                XCTAssertNil(s.moon, "park \(n) was not built as a night-game park")
             }
         }
         XCTAssertGreaterThan(nightParks, 50)
-        // About one night park in four (DESIGN.md §17).
+        // About one park with the night gear in four (DESIGN.md §17), so one in sixteen overall.
         XCTAssertEqual(Double(moons) / Double(nightParks), rules.moonProbability, accuracy: 0.12)
     }
 }

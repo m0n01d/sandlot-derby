@@ -10,21 +10,18 @@ final class SkyLifeTests: XCTestCase {
 
     // MARK: - Stars
 
-    func testNightParksGetTheFullStarfieldAndDayParksNone() {
+    /// Every park is seeded the full forty since §20 — the phase says how many of them show, and
+    /// `twilight` shows the first `twilightStars` of exactly this list.
+    func testEveryParkGetsTheFullStarfield() {
         var nights = 0, days = 0
         for n in 1...200 {
             let park = Park.generate(number: n)
             let s = park.scenery
-            if park.isNight {
-                nights += 1
-                XCTAssertEqual(s.stars.count, scenery.starCount, "park \(n)")
-                for star in s.stars {
-                    XCTAssertTrue(scenery.starBand.contains(star.y), "park \(n) star at \(star.y)")
-                    XCTAssertTrue((0...1).contains(star.xFraction))
-                }
-            } else {
-                days += 1
-                XCTAssertTrue(s.stars.isEmpty, "park \(n) is a day game")
+            if park.nightSeed { nights += 1 } else { days += 1 }
+            XCTAssertEqual(s.stars.count, scenery.starCount, "park \(n)")
+            for star in s.stars {
+                XCTAssertTrue(scenery.starBand.contains(star.y), "park \(n) star at \(star.y)")
+                XCTAssertTrue((0...1).contains(star.xFraction))
             }
         }
         XCTAssertGreaterThan(nights, 0)
@@ -69,15 +66,11 @@ final class SkyLifeTests: XCTestCase {
 
     // MARK: - Towers
 
-    func testNightParksGetTwoToFourTowersAndDayParksNone() {
+    /// Every park stands two to four towers since §20; the clock says whether they are lit.
+    func testEveryParkGetsTwoToFourTowers() {
         for n in 1...200 {
             let park = Park.generate(number: n)
             let s = park.scenery
-            guard park.isNight else {
-                XCTAssertEqual(s.towers, 0, "park \(n) is a day game")
-                XCTAssertTrue(s.lightTowers.isEmpty, "park \(n) is a day game")
-                continue
-            }
             XCTAssertTrue(scenery.towersPerNightPark.contains(s.towers), "park \(n) has \(s.towers)")
             XCTAssertEqual(s.towers, s.lightTowers.count, "the count is the towers themselves")
             for tower in s.lightTowers {
@@ -90,7 +83,7 @@ final class SkyLifeTests: XCTestCase {
     }
 
     func testNoTwoTowersStandInTheSamePlace() {
-        for n in 1...200 where Park.generate(number: n).isNight {
+        for n in 1...200 {
             let depths = Park.generate(number: n).scenery.lightTowers.map(\.feetBehindWall)
             XCTAssertEqual(Set(depths).count, depths.count, "park \(n) stacked two towers")
             XCTAssertEqual(depths, depths.sorted(), "park \(n) towers are not in depth order")
@@ -344,11 +337,13 @@ final class SkyLifeTests: XCTestCase {
                       ball: m.ballNow, crossingPoint: m.ballNow.position)
     }
 
+    /// A park built with the night gear: the towers and the stars belong to every park now, but
+    /// the wall tower and the moon still need this draw (§20).
     private func firstNightPark() -> Park {
         for n in 5...200 {
             let park = Park.generate(number: n)
-            if park.isNight { return park }
+            if park.nightSeed { return park }
         }
-        fatalError("no night park in the first 200")
+        fatalError("no park with the night gear in the first 200")
     }
 }

@@ -46,8 +46,10 @@ final class ParkTests: XCTestCase {
         XCTAssertEqual(h, 13_974_837_599_773_724_677)
     }
 
-    func testSomeParksAreNightGames() {
-        let nights = (2...400).filter { Park.generate(number: $0).isNight }.count
+    /// The seeded draw survives its rename: one park in four is built as a night-game park, which
+    /// is what carries a wall tower and a moon. It no longer chooses the sky (§20).
+    func testSomeParksAreBuiltAsNightGameParks() {
+        let nights = (2...400).filter { Park.generate(number: $0).nightSeed }.count
         XCTAssertGreaterThan(nights, 40)
         XCTAssertLessThan(nights, 160)
     }

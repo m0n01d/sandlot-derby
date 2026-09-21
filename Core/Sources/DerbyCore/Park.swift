@@ -19,11 +19,16 @@ public struct Park: Equatable {
     public let number: Int
     public let wallDistanceFeet: Double
     public let wallHeightFeet: Double
-    public let isNight: Bool
+    /// One seeded park in four. It used to decide whether this was a night game; since §20 the
+    /// clock decides that, and what is left of this draw is the gear a night-game park was built
+    /// with: it is the parks with `nightSeed` that carry a light standard over the wall and a
+    /// moon. The name says what it is — a seed, not a sky. The draw itself has not moved, so no
+    /// park's wall or clouds did either (`ParkTests`, `RareEventTests`).
+    public let nightSeed: Bool
 
-    public init(number: Int, wallDistanceFeet: Double, wallHeightFeet: Double, isNight: Bool) {
+    public init(number: Int, wallDistanceFeet: Double, wallHeightFeet: Double, nightSeed: Bool) {
         self.number = number; self.wallDistanceFeet = wallDistanceFeet
-        self.wallHeightFeet = wallHeightFeet; self.isNight = isNight
+        self.wallHeightFeet = wallHeightFeet; self.nightSeed = nightSeed
     }
 
     /// Park 1 is always the same friendly park: Single-A, the bottom of the ladder.
@@ -36,28 +41,33 @@ public struct Park: Equatable {
     public struct Rules: Equatable {
         public var wallDistance: ClosedRange<Double> = 330...410
         public var wallHeight: ClosedRange<Double> = 6...26
+        /// How many seeded parks are built as night-game parks: the ones with a light standard
+        /// over the wall and a moon (`SceneryRules.wallTowerInEveryNightPark`, `moonProbability`).
+        /// It has not chosen the sky since §20 — the clock does that, and the lamps come on in
+        /// every park at twilight.
         public var nightProbability = 0.25
         public init() {}
         public static let standard = Rules()
     }
 
     /// Park N is a pure function of N. Anyone on park 1,000 sees the same wall.
-    /// Parks 1–3 are the ladder's rungs and park 4 is The Show; all four are day games.
+    /// Parks 1–3 are the ladder's rungs and park 4 is The Show; none of the four has the night
+    /// gear, so none of them has a wall tower or a moon whatever the hour is.
     public static func generate(number: Int, rules: Rules = .standard, ladder: Ladder = .standard) -> Park {
         let number = max(1, number)
         let league = League(parkNumber: number)
         if let rung = ladder.rung(for: league) {
             return Park(number: number, wallDistanceFeet: rung.wallDistanceFeet,
-                        wallHeightFeet: rung.wallHeightFeet, isNight: false)
+                        wallHeightFeet: rung.wallHeightFeet, nightSeed: false)
         }
         if number == League.theShow.rawValue {
             return Park(number: number, wallDistanceFeet: ladder.theShowWallDistanceFeet,
-                        wallHeightFeet: ladder.theShowWallHeightFeet, isNight: false)
+                        wallHeightFeet: ladder.theShowWallHeightFeet, nightSeed: false)
         }
         var g = SplitMix64(seed: UInt64(number) &* 0x2545_F491_4F6C_DD1D)
         let dist = Double(Int(Double.random(in: rules.wallDistance, using: &g)))
         let height = Double(Int(Double.random(in: rules.wallHeight, using: &g)))
         let night = Double.random(in: 0..<1, using: &g) < rules.nightProbability
-        return Park(number: number, wallDistanceFeet: dist, wallHeightFeet: height, isNight: night)
+        return Park(number: number, wallDistanceFeet: dist, wallHeightFeet: height, nightSeed: night)
     }
 }

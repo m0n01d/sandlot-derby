@@ -84,7 +84,6 @@ final class RareEventTests: XCTestCase {
         for n in 5...400 {
             let park = Park.generate(number: n)
             let s = park.scenery
-            guard park.isNight else { continue }
             let best = Flight.simulate(exitVelocityMPH: 112, launchAngleDegrees: 40,
                                        wallDistanceFeet: park.wallDistanceFeet,
                                        wallHeightFeet: park.wallHeightFeet)
@@ -106,13 +105,18 @@ final class RareEventTests: XCTestCase {
         XCTAssertGreaterThan(reachableShort, 0, "no wall tower could ever be put out")
     }
 
-    func testTheWallTowerIsNightOnlyAndJoinsTheChaseAtTheEnd() {
+    /// The seeded towers belong to every park since §20 — the clock lights them, and a rec park
+    /// has lights on poles as much as The Show does. The short standard over the wall still
+    /// belongs only to the parks with the night gear, which is what keeps a lights-out shot rare.
+    func testTheWallTowerNeedsTheNightGearAndJoinsTheChaseAtTheEnd() {
         for n in 1...300 {
             let park = Park.generate(number: n)
             let s = park.scenery
-            guard park.isNight else {
-                XCTAssertNil(s.wallTower, "park \(n) is a day game")
-                XCTAssertTrue(s.allTowers.isEmpty)
+            XCTAssertFalse(s.lightTowers.isEmpty, "park \(n) has no towers to light")
+            XCTAssertEqual(s.stars.count, scenery.starCount, "park \(n) has no stars")
+            guard park.nightSeed else {
+                XCTAssertNil(s.wallTower, "park \(n) was not built as a night-game park")
+                XCTAssertEqual(s.allTowers, s.lightTowers)
                 XCTAssertNil(s.wallTowerIndex)
                 continue
             }
@@ -300,7 +304,7 @@ final class RareEventTests: XCTestCase {
             birdSeed: SkyView.side.birdSeed(parkNumber: clip.park.number),
             blimpSeed: SkyView.side.blimpSeed(parkNumber: clip.park.number),
             clockAtContact: live.clockAtContact, contactHold: live.contactHoldNow,
-            flightSpeed: live.timings.flightSpeed)
+            flightSpeed: live.timings.flightSpeed, lampsOn: live.lampsOn)
         XCTAssertEqual(same, live.parkEvents, "a Warm Up clip found other events")
     }
 
@@ -314,11 +318,11 @@ final class RareEventTests: XCTestCase {
             let a = RareEvents.detect(park: park, scenery: s, flight: f,
                                       birdSeed: SkyView.side.birdSeed(parkNumber: 21),
                                       blimpSeed: SkyView.side.blimpSeed(parkNumber: 21),
-                                      clockAtContact: clock, contactHold: 0.4, flightSpeed: 2)
+                                      clockAtContact: clock, contactHold: 0.4, flightSpeed: 2, lampsOn: true)
             let b = RareEvents.detect(park: park, scenery: s, flight: f,
                                       birdSeed: SkyView.side.birdSeed(parkNumber: 21),
                                       blimpSeed: SkyView.side.blimpSeed(parkNumber: 21),
-                                      clockAtContact: clock, contactHold: 0.4, flightSpeed: 2)
+                                      clockAtContact: clock, contactHold: 0.4, flightSpeed: 2, lampsOn: true)
             XCTAssertEqual(a, b)
         }
     }
@@ -335,7 +339,7 @@ final class RareEventTests: XCTestCase {
                         park: park, scenery: park.scenery, flight: f,
                         birdSeed: SkyView.side.birdSeed(parkNumber: n),
                         blimpSeed: SkyView.side.blimpSeed(parkNumber: n),
-                        clockAtContact: clock, contactHold: 0.4, flightSpeed: 2)
+                        clockAtContact: clock, contactHold: 0.4, flightSpeed: 2, lampsOn: true)
                     XCTAssertEqual(Set(events.map(\.kind)).count, events.count,
                                    "park \(n): the same thing happened twice")
                     XCTAssertEqual(events.map(\.index), events.map(\.index).sorted())
@@ -375,7 +379,7 @@ final class RareEventTests: XCTestCase {
                 }
                 let events = RareEvents.detect(
                     park: park, scenery: park.scenery, flight: f,
-                    birdSeed: 1, blimpSeed: 2, clockAtContact: 0, contactHold: 0.4, flightSpeed: 2)
+                    birdSeed: 1, blimpSeed: 2, clockAtContact: 0, contactHold: 0.4, flightSpeed: 2, lampsOn: true)
                 let out = events.contains { $0.kind == .lightsOut }
                 let noDoubter = f.distanceFeet - park.wallDistanceFeet >= StatRules.standard.noDoubterMarginFeet
                 XCTAssertEqual(out, grazed && noDoubter, "park \(n) at \(la)°")
@@ -383,6 +387,42 @@ final class RareEventTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(checked, 0, "no flight ever came near a bank")
+    }
+
+    /// §20's one counted consequence of the clock: the very same swing in the very same park puts
+    /// a bank out at night and does nothing at all at midday, because lamps that are not lit
+    /// cannot be put out. Everything else the flight passes through reads the same in both.
+    func testTheLampsHaveToBeOnForALightsOutShot() {
+        var lit = DerbyMachine(seed: 5, park: Park.generate(number: 63), phase: .night)
+        var dark = DerbyMachine(seed: 5, park: Park.generate(number: 63), phase: .midday)
+        XCTAssertNotNil(lit.park.scenery.wallTower, "park 63 should have a wall tower")
+        while lit.beat != .pitch { lit.tick(1 / 60) }
+        while dark.beat != .pitch { dark.tick(1 / 60) }
+        let swing = bomb(lit)
+        lit.slice(swing)
+        dark.slice(swing)
+        XCTAssertTrue(lit.parkEvents.contains { $0.kind == .lightsOut }, "the lamps were on")
+        XCTAssertFalse(dark.parkEvents.contains { $0.kind == .lightsOut }, "the lamps were off")
+        // And nothing else moved: the same arc through the same park finds the same everything.
+        XCTAssertEqual(lit.flight?.distanceFeet, dark.flight?.distanceFeet)
+        XCTAssertEqual(lit.parkEvents.filter { $0.kind != .lightsOut },
+                       dark.parkEvents.filter { $0.kind != .lightsOut })
+    }
+
+    /// A phase is taken up at a windup and held through the pitch, the flight and the result, so
+    /// a sky can never change under a swing already in the air (§20).
+    func testThePhaseIsTakenUpAtAWindupAndNotDuringAPitch() {
+        var m = DerbyMachine(seed: 5, park: Park.generate(number: 63), phase: .night)
+        while m.beat != .pitch { m.tick(1 / 60) }
+        m.phaseOffered = .midday
+        XCTAssertEqual(m.phase, .night, "the offer was taken during a pitch")
+        m.slice(bomb(m))
+        XCTAssertTrue(m.parkEvents.contains { $0.kind == .lightsOut })
+        while m.beat != .windup {
+            XCTAssertEqual(m.phase, .night, "the sky changed under a swing in the air")
+            m.tick(1 / 60)
+        }
+        XCTAssertEqual(m.phase, .midday, "the windup never took the offer up")
     }
 
     // MARK: - Counting
@@ -421,8 +461,9 @@ final class RareEventTests: XCTestCase {
 
     func testABankStaysOutUntilTheParkChanges() {
         // Park 63: a wall tower the robot's swing puts out. About the scar dying with the park,
-        // not about the count, so one home run clears this one (#40).
-        var m = DerbyMachine(seed: 5, park: Park.generate(number: 63))
+        // not about the count, so one home run clears this one (#40). The lamps have to be on:
+        // a bank that is not lit cannot be put out (§20), so the machine is given `night`.
+        var m = DerbyMachine(seed: 5, park: Park.generate(number: 63), phase: .night)
         m.progressRules.homeRunsToClear = 1
         guard let bank = m.park.scenery.wallTowerIndex else { return XCTFail("park 63 has no wall tower") }
         XCTAssertFalse(m.bankIsOut(bank))
@@ -695,6 +736,8 @@ final class RareEventSurvey: XCTestCase {
         return out
     }
 
+    /// `lampsOn` is true throughout: the board and the pane read the same in every phase, and a
+    /// `lightsOut` row here means "in a park with `-phase night` or `-phase twilight`" (§20).
     func testFindParksForScreenshots() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["SURVEY"] != nil, "set SURVEY=1")
         var best: [ParkEventKind: [(park: Int, share: Double, clock: Double)]] = [:]
@@ -711,7 +754,7 @@ final class RareEventSurvey: XCTestCase {
                                         wallHeightFeet: park.wallHeightFeet)
                 for e in RareEvents.detect(park: park, scenery: scenery, flight: f,
                                            birdSeed: 1, blimpSeed: 2, clockAtContact: 0,
-                                           contactHold: l.hold, flightSpeed: 2) {
+                                           contactHold: l.hold, flightSpeed: 2, lampsOn: true) {
                     hits[e.kind, default: 0] += 1
                 }
             }
@@ -748,7 +791,7 @@ final class RareEventSurvey: XCTestCase {
                         park: park, scenery: scenery, flight: f,
                         birdSeed: SkyView.side.birdSeed(parkNumber: n),
                         blimpSeed: SkyView.side.blimpSeed(parkNumber: n),
-                        clockAtContact: clock, contactHold: hold, flightSpeed: 2) {
+                        clockAtContact: clock, contactHold: hold, flightSpeed: 2, lampsOn: true) {
                         if e.kind == .birdStrike { birdHits += 1 }
                         if e.kind == .blimpHit { blimpHits += 1 }
                     }
@@ -776,7 +819,7 @@ final class RareEventSurvey: XCTestCase {
                     RareEvents.detect(park: park, scenery: park.scenery, flight: f,
                                       birdSeed: SkyView.side.birdSeed(parkNumber: n),
                                       blimpSeed: SkyView.side.blimpSeed(parkNumber: n),
-                                      clockAtContact: clock, contactHold: hold, flightSpeed: 2)
+                                      clockAtContact: clock, contactHold: hold, flightSpeed: 2, lampsOn: true)
                         .contains { $0.kind == .birdStrike }
                 }
                 if all { run.append(clock) } else { if run.count > best.count { best = run }; run = [] }

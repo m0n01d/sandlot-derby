@@ -40,7 +40,7 @@ final class LadderTests: XCTestCase {
         XCTAssertEqual(walls.map(\.wallDistanceFeet), [280, 320, 350, 380])
         XCTAssertEqual(walls.map(\.wallHeightFeet), [6, 8, 10, 10])
         XCTAssertEqual(walls.map(\.displayName), ["SINGLE-A", "DOUBLE-A", "TRIPLE-A", "PARK 4"])
-        XCTAssertTrue(walls.allSatisfy { !$0.isNight })
+        XCTAssertTrue(walls.allSatisfy { !$0.nightSeed }, "no rung has the night gear (§20)")
         XCTAssertEqual(Park.generate(number: 4).league, .theShow)
         XCTAssertEqual(Park.generate(number: 900).league, .theShow)
         XCTAssertEqual(Park.generate(number: 900).displayName, "PARK 900")

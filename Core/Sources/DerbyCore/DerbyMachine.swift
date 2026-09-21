@@ -301,6 +301,19 @@ public struct DerbyMachine: Equatable {
     public var skyClockOffset: Double = 0
     /// The one clock everything in the sky reads (DESIGN.md §17 "One clock").
     public var skyClock: Double { tally[.secondsPlayed] + skyClockOffset }
+    /// What the app's reading of the real time of day says the phase should be (DESIGN.md §20).
+    /// `GameController` sets it at launch, when the app becomes active and on each beat change;
+    /// a Core test simply assigns one. Nothing reads it but the line below.
+    public var phaseOffered: DayPhase
+    /// The phase this drawing is in. Taken from `phaseOffered` at every windup and held there
+    /// until the next one, so the sky cannot change during a pitch, a flight or a result hold —
+    /// and the change, when it comes, is a hard palette swap between two frames like every other
+    /// cut in this game. It lives on the machine rather than in a scene because it changes one
+    /// counted thing (the lights-out shot, §17 step 6), which means a replay has to reproduce it.
+    public private(set) var phase: DayPhase
+    /// Whether this park's lamps are lit right now — the one thing the phase changes that is
+    /// counted. Everything that used to ask `park.isNight` asks this instead.
+    public var lampsOn: Bool { phase.lampsOn }
     public var timings: Timings
     /// The knobs as they stand in The Show and beyond. The minors lay a `Rung` over them.
     public var majorsSliceRules: SliceRules
@@ -363,14 +376,19 @@ public struct DerbyMachine: Equatable {
     /// own `organ` flag — a sandlot has no organist. Claude's call, unreviewed (DESIGN.md §11).
     public var hasOrgan: Bool { rung?.organ ?? true }
 
-    /// `park` and `tally` are what a save restores; everything else starts fresh.
+    /// `park` and `tally` are what a save restores; everything else starts fresh. `phase` is what
+    /// the clock says as the machine is made — the app's reading, or a test's choice; the default
+    /// is the one phase that needs no sky kit at all (§20).
     public init(seed: UInt64, park: Park = .first, tally: Tally = Tally(), timings: Timings = .standard,
                 sliceRules: SliceRules = .standard, pitchingRules: PitchingRules = .standard,
-                statRules: StatRules = .standard, fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) {
+                statRules: StatRules = .standard, fireworksRules: FireworksRules = .standard,
+                ladder: Ladder = .standard, phase: DayPhase = .midday) {
         var g = SplitMix64(seed: seed)
         let first = Pitching.generate(using: &g, rules: ladder.pitchingRules(pitchingRules, for: park.league))
         self.park = park
         self.tally = tally
+        self.phase = phase
+        self.phaseOffered = phase
         self.statRules = statRules
         self.fireworksRules = fireworksRules
         self.ladder = ladder
@@ -601,7 +619,7 @@ public struct DerbyMachine: Equatable {
             birdSeed: SkyView.side.birdSeed(parkNumber: park.number),
             blimpSeed: SkyView.side.blimpSeed(parkNumber: park.number),
             clockAtContact: clockAtContact, contactHold: contactHoldNow,
-            flightSpeed: timings.flightSpeed,
+            flightSpeed: timings.flightSpeed, lampsOn: lampsOn,
             statRules: statRules, rules: rareEventRules)
         recordWarmUpPitch(WarmUpPitch(outcome: f.homeRun ? .homeRun : f.wallHit ? .offTheWall : .inPlay,
                                       feet: Int(f.distanceFeet.rounded())))
@@ -754,7 +772,7 @@ public struct DerbyMachine: Equatable {
         // A Warm Up does not move `pitches`, so its own count goes in to keep the day's ten
         // shows from all being the same one. Nil outside a Warm Up: the career seed is what it was.
         let seed = UInt64(park.number) &* 0x2545_F491_4F6C_DD1D &+ UInt64(tally.pitches + (warmUp?.spent ?? 0))
-        fireworks = FireworksShow(shellCount: shells, seed: seed, start: tally[.secondsPlayed], isNight: park.isNight)
+        fireworks = FireworksShow(shellCount: shells, seed: seed, start: tally[.secondsPlayed], lampsOn: lampsOn)
     }
 
     // MARK: - Clock
@@ -968,10 +986,14 @@ public struct DerbyMachine: Equatable {
         out.append(.warmUpEnded(run.result, beaten))
     }
 
+    /// The one door into a beat, and so the one place the phase is taken up: every path that
+    /// reaches a windup — a new pitch, a Warm Up taking the field, a Warm Up handing it back —
+    /// comes through here (DESIGN.md §20 "The phase is an input of the machine").
     private mutating func enter(_ b: Beat) {
         beat = b
         elapsed = 0
         musicHoldElapsed = 0
+        if b == .windup { phase = phaseOffered }
     }
 
     /// Inside a Warm Up the next pitch is the next one off the day's card; the career's
@@ -1003,14 +1025,20 @@ public struct DerbyMachine: Equatable {
     /// guessing at the career's park is the honest failure.
     /// `elapsed` is how far into the pitch beat to stand: zero for the moment before a recorded
     /// slice, and the lead-in's start for a replay that begins a few frames earlier (#42).
+    ///
+    /// `phase` is the recorded one, and it is set **before** `slice(_:)` is ever called on this
+    /// machine — a windup is what normally takes a phase up, and a replay never stands in one.
+    /// Without it a clip would light its fireworks for the wrong sky and could lose a lights-out
+    /// shot the player watched (DESIGN.md §19, §20).
     public static func atPitch(park: Park, tally: Tally, pitch: Pitch, warmUp: WarmUpRun? = nil,
-                               elapsed: Double = 0,
+                               elapsed: Double = 0, phase: DayPhase = .midday,
                                timings: Timings = .standard, sliceRules: SliceRules = .standard,
                                pitchingRules: PitchingRules = .standard, statRules: StatRules = .standard,
                                fireworksRules: FireworksRules = .standard, ladder: Ladder = .standard) -> DerbyMachine {
         var m = DerbyMachine(seed: 0, park: park, tally: tally, timings: timings,
                              sliceRules: sliceRules, pitchingRules: pitchingRules,
-                             statRules: statRules, fireworksRules: fireworksRules, ladder: ladder)
+                             statRules: statRules, fireworksRules: fireworksRules, ladder: ladder,
+                             phase: phase)
         m.pitch = pitch
         m.beat = .pitch
         m.elapsed = max(0, elapsed)

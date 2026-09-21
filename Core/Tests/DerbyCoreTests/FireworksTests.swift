@@ -153,7 +153,7 @@ final class FireworksTests: XCTestCase {
     // MARK: - `Fireworks.particles`: pure maths
 
     func testParticlesAreDeterministic() {
-        let show = FireworksShow(shellCount: 5, seed: 12_345, start: 10, isNight: false)
+        let show = FireworksShow(shellCount: 5, seed: 12_345, start: 10, lampsOn: false)
         let a = Fireworks.particles(show: show, at: 10.6)
         let b = Fireworks.particles(show: show, at: 10.6)
         XCTAssertEqual(a, b)
@@ -161,7 +161,7 @@ final class FireworksTests: XCTestCase {
     }
 
     func testRiserIsOneChalkPixelThatClimbs() {
-        let show = FireworksShow(shellCount: 1, seed: 7, start: 0, isNight: false)
+        let show = FireworksShow(shellCount: 1, seed: 7, start: 0, lampsOn: false)
         let rules = FireworksRules.standard
         let early = Fireworks.particles(show: show, at: 0.02, rules: rules)
         XCTAssertEqual(early.count, 1)
@@ -173,7 +173,7 @@ final class FireworksTests: XCTestCase {
     }
 
     func testBurstParticleCountAndLifetimeBounds() {
-        let show = FireworksShow(shellCount: 1, seed: 7, start: 0, isNight: false)
+        let show = FireworksShow(shellCount: 1, seed: 7, start: 0, lampsOn: false)
         let rules = FireworksRules.standard
 
         let beforeLaunch = Fireworks.particles(show: show, at: -0.01, rules: rules)
@@ -188,7 +188,7 @@ final class FireworksTests: XCTestCase {
 
     func testShellsStayWithinTheirScreenBand() {
         let rules = FireworksRules.standard
-        let show = FireworksShow(shellCount: 10, seed: 99, start: 0, isNight: true)
+        let show = FireworksShow(shellCount: 10, seed: 99, start: 0, lampsOn: true)
         // Sample across the whole finale's span: every particle's x is screen-space (drawn as
         // `width * x`) and should sit in (or very near) the right 45%.
         var sampled = 0
@@ -206,16 +206,16 @@ final class FireworksTests: XCTestCase {
         XCTAssertGreaterThan(sampled, 0)
     }
 
-    func testNightOffersSky3ButDayNeverDoes() {
+    func testLampsOnOffersSky3ButDayNeverDoes() {
         let rules = FireworksRules.standard
         var sawSky3 = false
         for seed in UInt64(0)..<40 {
-            let show = FireworksShow(shellCount: 1, seed: seed, start: 0, isNight: false)
+            let show = FireworksShow(shellCount: 1, seed: seed, start: 0, lampsOn: false)
             let particles = Fireworks.particles(show: show, at: rules.risePeriod + 0.1, rules: rules)
             XCTAssertFalse(particles.contains { $0.colour == .sky3 })
         }
         for seed in UInt64(0)..<40 {
-            let show = FireworksShow(shellCount: 1, seed: seed, start: 0, isNight: true)
+            let show = FireworksShow(shellCount: 1, seed: seed, start: 0, lampsOn: true)
             let particles = Fireworks.particles(show: show, at: rules.risePeriod + 0.1, rules: rules)
             if particles.contains(where: { $0.colour == .sky3 }) { sawSky3 = true }
         }
