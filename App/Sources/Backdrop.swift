@@ -138,11 +138,17 @@ struct BackdropKey: Equatable {
     /// Pixels per foot × 64, rounded — the side view re-frames per flight, never per frame.
     let scale64: Int
     let originX: Int
+    /// Whether the park's lamps are lit (`DayPhase.lampsOn`). Every silhouette in here turns
+    /// round with it, so a layer drawn by day is wrong the moment the clock reaches twilight and
+    /// the key has to say so (DESIGN.md §20).
+    let lampsOn: Bool
 
-    init(parkNumber: Int, width: Int, camera: Camera, scale: Double = 0, originX: Double = 0) {
+    init(parkNumber: Int, width: Int, camera: Camera, lampsOn: Bool,
+         scale: Double = 0, originX: Double = 0) {
         self.parkNumber = parkNumber
         self.width = width
         self.camera = camera
+        self.lampsOn = lampsOn
         self.scale64 = Int((scale * 64).rounded())
         self.originX = Int(originX.rounded())
     }
@@ -226,13 +232,13 @@ enum BackdropArt {
 
     /// A low band above the wall: the park's far piece as a `sky2` silhouette on the `sky3`
     /// band, one near landmark in `wall` and `shade` beside the scoreboard, and two small flags
-    /// on the scoreboard itself. Night turns every silhouette to `ink`.
+    /// on the scoreboard itself. A lit park turns every silhouette to `ink`.
     ///
     /// Everything here is above y = 96. The strike zone starts at y = 136, so nothing new is
     /// drawn anywhere near it (§17's motion budget).
     static func atBatHorizon(into c: PixelCanvas, park: Park, scenery: Scenery,
-                             width: Double, xOffset: Double, layout: BackdropLayout = .standard) {
-        let night = park.isNight
+                             width: Double, xOffset: Double, night: Bool,
+                             layout: BackdropLayout = .standard) {
         let baseline = layout.atBatHorizonBottom
         let rise = baseline - layout.atBatHorizonTop
         let band = night ? Palette.nightSky3 : Palette.sky3
@@ -382,10 +388,9 @@ enum BackdropArt {
     /// however far the close camera has lifted.
     static func sideBackdrop(behind: PixelCanvas, front: PixelCanvas,
                              park: Park, scenery: Scenery,
-                             scale: Double, originX: Double, width: Double,
+                             scale: Double, originX: Double, width: Double, night: Bool,
                              layout: BackdropLayout = .standard) {
         let ground = BackdropLayout.canonicalGround
-        let night = park.isNight
         func x(_ feet: Double) -> Double { originX + feet * scale }
         func y(_ feet: Double) -> Double { ground - feet * scale }
 

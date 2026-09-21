@@ -109,7 +109,7 @@ final class AtBatScene: CanvasScene {
         if Self.autoSlice, !isOffScreen, machine.beat == .pitch, machine.pitchProgress >= 0.97 { devSlice() }
         #endif
 
-        let scheme = Palette.scheme(isNight: machine.park.isNight)
+        let scheme = Palette.scheme(lampsOn: machine.lampsOn)
         let W = 320.0, H = 224.0
         let fullWidth = Double(canvas.width)
         let xOff = xOffset
@@ -128,9 +128,9 @@ final class AtBatScene: CanvasScene {
         let now = SceneryClock.now(machine)
         let towers = SkyArt.atBatTowerFrames(scenery: scenery, xOffset: xOff, time: now,
                                              chasing: machine.crowdIsUp, layout: layout)
-        if machine.park.isNight {
+        if machine.lampsOn {
             SkyArt.nightSky(into: canvas, scenery: scenery, towers: towers,
-                            time: now, width: fullWidth, layout: layout)
+                            time: now, width: fullWidth, phase: machine.phase, layout: layout)
         }
         // Things a long career arrives at, never announced (#5). The at-bat sky is where a
         // player spends most of their time, so the blimp and the comet cross it too — with
@@ -144,18 +144,20 @@ final class AtBatScene: CanvasScene {
         Clouds.draw(into: canvas, clouds: scenery.atBatClouds,
                     breeze: scenery.breezePixelsPerSecond,
                     seconds: now,
-                    width: fullWidth, night: machine.park.isNight)
+                    width: fullWidth, night: machine.lampsOn)
         SkyArt.birds(into: canvas, scenery: scenery, view: .atBat, time: now,
-                     width: fullWidth, night: machine.park.isNight)
+                     width: fullWidth, night: machine.lampsOn)
         if machine.showsMilestones {
             SkyArt.blimp(into: canvas, scenery: scenery, view: .atBat, time: now,
-                         width: fullWidth, night: machine.park.isNight, layout: layout)
+                         width: fullWidth, night: machine.lampsOn, layout: layout)
         }
         backdrops.layers(
-            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat),
+            for: BackdropKey(parkNumber: machine.park.number, width: canvas.width, camera: .atBat,
+                             lampsOn: machine.lampsOn),
             height: canvas.height) { b, _ in
             BackdropArt.atBatHorizon(into: b.canvas, park: machine.park, scenery: scenery,
-                                     width: fullWidth, xOffset: xOff, layout: self.layout)
+                                     width: fullWidth, xOffset: xOff, night: machine.lampsOn,
+                                     layout: self.layout)
             // The foul poles stand in front of the horizon pieces and behind everything on the
             // field (#28). Off the same two x's the foul lines are drawn from, so they stay
             // married however wide the canvas is.

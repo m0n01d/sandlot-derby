@@ -39,7 +39,7 @@ enum Palette {
     static let nightSky3 = RGBA8(0x44, 0x66, 0x88)
     static let clear = RGBA8(0, 0, 0, 0)
 
-    /// The three sky colours currently in effect. Night swaps `sky1 → night`, `sky2 → ink`,
+    /// The three sky colours currently in effect. A lit park swaps `sky1 → night`, `sky2 → ink`,
     /// `sky3 → nightSky3`; nothing else about the palette changes (docs/palette.md).
     struct SkyScheme {
         let sky1: RGBA8
@@ -47,8 +47,11 @@ enum Palette {
         let sky3: RGBA8
     }
 
-    static func scheme(isNight: Bool) -> SkyScheme {
-        isNight
+    /// `lampsOn` is `DayPhase.lampsOn` — the clock's answer, not the park's (DESIGN.md §20).
+    /// §20 step 2 replaces this pair of lines with `Look.of(_ phase:)` and a line per phase; for
+    /// now the two lines that already ship are the two the six phases share out.
+    static func scheme(lampsOn: Bool) -> SkyScheme {
+        lampsOn
             ? SkyScheme(sky1: night, sky2: ink, sky3: nightSky3)
             : SkyScheme(sky1: sky1, sky2: sky2, sky3: sky3)
     }
