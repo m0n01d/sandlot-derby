@@ -98,7 +98,9 @@ overrides whatever StoreKit itself would say.
   (the Genesis screen). Scenes scale up by an integer where possible and never filter textures:
   `texture.filteringMode = .nearest`.
 - **One palette line.** Every colour comes from `docs/palette.md`. No alpha, no gradients, no
-  anti-aliasing. Dither only in the sky.
+  anti-aliasing. Dither only in the sky. *DESIGN.md §20 (spec only, 2026-09-21) changes this rule to
+  three lines for each phase and an ordered dither in named places. Until §20 is built, this rule
+  holds.*
 - **No outs, no menus, no timers.** A miss brings the next pitch. If a feature needs a menu, it is
   probably the wrong feature.
 - **The cut is hard.** `presentScene` with no transition. Never a wipe, fade or zoom. The same goes

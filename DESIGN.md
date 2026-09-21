@@ -207,6 +207,9 @@ The batter is a stamp, not scaled art, and is off screen here.
 
 ## 9. Art
 
+> §20 replaces the palette rule and the silhouettes of this section when it is built. Until then
+> this section is what ships.
+
 - Palette: `docs/palette.md`. Fifteen colours plus transparent.
 - Sprites (all silhouettes, no outlines):
 
@@ -499,6 +502,9 @@ like a cheat on device, the levers are the miss margin and fastball speed, not t
   been confirmed to draw and hit-test through the DEBUG arguments and screenshots), and nothing in
   this wave has been measured on the iPad mini 6 Dwight actually plays on, plus the app icon, Game
   Center, TestFlight and the store listing.
+- **M6 — the look and the clock.** §20: three palette lines for each phase, people with a light on
+  them, PARK 12's stands behind the wall at bat, the flight camera's six fixes, and a sky that
+  follows the real time of day. Spec only (2026-09-21).
 
 ## 14. Open questions
 
@@ -1377,3 +1383,250 @@ same door `SHARE` is, with the game paused, rather than behind a running one. Bo
 **Never touched by a finger.** The camera, `SHARE`, `SAVING` and the share sheet have all been
 exercised through the DEBUG arguments and read off screenshots, never tapped. The popover anchor on
 an iPad is written but unexercised.
+
+## 20. The look and the clock
+
+Dwight asked for this on 2026-09-21. His words: "lets polish our 16bit characters and world … ours
+still looks plain", then "I kinda like golden hour. Makes the game feel more polished", then "Let's
+use real time of day to drive the sky. So night games are at night". **Spec only. Nothing is
+built.** Dwight chose the look and the clock rule. Each other choice is Claude's and is not
+reviewed.
+
+The approved mock is the design canvas, which is private:
+<https://claude.ai/artifact/GNLsedBtKJgtdcZvdUU1Qr>. Use columns C, C2 and C3. The code that drew
+the mock is in `prototypes/04-golden-hour/`, and its renders are in `targets/` there. Port from
+that code. If this section and the prototype disagree on a pixel, the prototype is correct.
+
+### What changes in the rules, and what does not
+
+| Rule | Before | Now |
+|---|---|---|
+| Palette | one line of sixteen | three lines for each phase: 45 colours and transparent |
+| New colours | none | permitted. Each channel uses one of the eight Mega Drive levels |
+| Dither | one four-row checker band for each sky transition | the ordered Bayer 4×4 dither, only in the places in the list below |
+| People | flat `ink` silhouettes | four-tone ramps from one light. No outline |
+| Night | one park in four, from the park seed | the clock |
+
+These rules do not change. There is no alpha and no anti-aliasing. Positions are whole pixels. A
+person has no outline. The cut is hard. The ball and its trail are the only smooth things on
+screen (§9). Nothing new moves near the strike zone. The sixteen colours of `docs/palette.md` keep
+their roles.
+
+Dither is permitted in these places only:
+
+- the sky
+- the halo of the sun, of the moon and of a lamp bank
+- the wall face
+- the tip of a cast shadow, and the edge of the shadow of a stand
+- the low sun on the far grass
+- the ground mist
+- the corners of the field at night
+
+Do not dither a person. Do not dither in the strike zone.
+
+The `ios-pixel-house` skill says that each app uses sixteen colours only. This repo now differs
+from that rule.
+
+### The phases
+
+One drawing has six phases. A phase is a set of palette lines, a light direction and a small
+number of switches. A phase never changes the layout, the hit test or the physics.
+
+| Phase | Starts | Sun | Light comes from | Shadows | Extra |
+|---|---|---|---|---|---|
+| `dawn` | 40 min before sunrise | low, on the right at bat | the right | long, to the left | ground mist. The right stand is in shadow |
+| `morning` | 50 min after sunrise | in frame, top right | the right | medium, to the left | none |
+| `midday` | 2 h before solar noon | out of frame | above | short | none |
+| `goldenHour` | 90 min before sunset | low, on the left at bat | the left | long, to the right | the left stand is in shadow |
+| `twilight` | sunset | below the horizon | the lamp banks | two short shadows | the towers are lit. A small number of stars |
+| `night` | 40 min after sunset | a moon, in the seeded parks | the lamp banks | two short shadows | the towers are lit. Stars. The field corners go dark |
+
+Read the starts in the order of the table. If a start is earlier than the start before it, use the
+start before it. Thus a phase can have zero length in a short winter day, and the order stays the
+same. The phase is the last phase whose start is at or before the clock time. Before the start of
+`dawn`, the phase is `night`.
+
+The flight camera looks across the field to the left-field side. Thus it sees the sun at
+`goldenHour`. At `dawn` the sun is behind that camera. The sky there shows a pink band above a
+blue band, and no sun.
+
+The crowd fills with the day. `crowdShare` is the fraction of the seats that hold a person.
+
+### The sun clock
+
+`SunClock` is a new pure file in Core. It turns a date and a clock time into a phase. It does not
+read the system clock.
+
+It has four inputs: the day of the year, the minutes after local midnight, the daylight-saving
+offset in minutes, and a latitude in degrees.
+
+```
+declination     = −23.44° × cos(360° / 365 × (dayOfYear + 10))
+cos(hourAngle)  = (sin(−0.83°) − sin(latitude) × sin(declination)) / (cos(latitude) × cos(declination))
+halfDay (hours) = hourAngle / 15°          clamp the cosine to −1…1 before the arc cosine
+solarNoon       = 12:00 + daylightSavingOffset
+sunrise         = solarNoon − halfDay
+sunset          = solarNoon + halfDay
+```
+
+The model ignores the longitude in the time zone and the equation of time. The error is about 20
+minutes at most. That is acceptable for a sky.
+
+This table is the oracle for `SunClockTests`, as `docs/physics.md` is for the flight. The tolerance
+is 2 minutes.
+
+| Date | Day | Latitude | DST | Sunrise | Sunset | `dawn` | `morning` | `midday` | `goldenHour` | `twilight` | `night` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 21 March | 80 | 40 | 60 | 06:57 | 19:03 | 06:17 | 07:47 | 11:00 | 17:33 | 19:03 | 19:43 |
+| 21 June | 172 | 40 | 60 | 05:30 | 20:30 | 04:50 | 06:20 | 11:00 | 19:00 | 20:30 | 21:10 |
+| 21 September | 264 | 40 | 60 | 06:56 | 19:04 | 06:16 | 07:46 | 11:00 | 17:34 | 19:04 | 19:44 |
+| 21 December | 355 | 40 | 0 | 07:20 | 16:40 | 06:40 | 08:10 | 10:00 | 15:10 | 16:40 | 17:20 |
+| 21 June | 172 | −40 | 0 | 07:20 | 16:40 | 06:40 | 08:10 | 10:00 | 15:10 | 16:40 | 17:20 |
+| 21 December | 355 | 65 | 0 | 10:13 | 13:47 | 09:33 | 11:03 | 11:03 | 12:17 | 13:47 | 14:27 |
+
+In the last row `midday` has the start of `morning`, so `morning` has zero length.
+
+The game does not ask for the location. `SkyClockRules.assumedLatitudeDegrees` is 40. When the
+region of the device is in `southernRegions`, the app makes the latitude negative.
+
+### Who reads the clock
+
+- The app reads the system clock one time for each pitch, at the windup. `GameController` does it.
+- The app gives the four inputs to `SunClock` and gives the phase to the machine.
+- The machine keeps that phase until the next windup. Thus the phase cannot change during a
+  pitch, a flight or a result hold.
+- The change is a hard palette swap between two frames. Nothing fades.
+- The clouds, the birds, the flags and the crowd continue to use `secondsPlayed` (§17).
+- `Replay` records the phase. The replay screen and the clip draw that phase (§19). A replay that
+  has no phase draws `midday`.
+- The Warm Up uses the same clock (§18).
+- A Core test gives a phase to the machine directly. No test reads the system clock.
+
+DEBUG: `-phase <name>` forces a phase for screenshots. The names are the six names in the table.
+It moves scenery only and makes no career state. Thus it is on neither list, like `-skyclock`.
+
+### What the clock replaces
+
+- `Park.isNight` and `Park.Rules.nightProbability` go away. Each reader uses the phase of the
+  machine.
+- Each park gets seeded towers. The towers use their own seed stream. Thus no cloud, breeze, moon
+  or star of a park moves.
+- Draw the towers only while the lamps are on: in `twilight` and in `night`.
+- The moon stays seeded by the park. It shows only in `night`.
+- The lights-out shot (§17, step 6) can occur only while the lamps are on.
+- The fireworks take their night colours from the phase (§17).
+- `Palette.scheme(isNight:)` goes away. `Look.of(_ phase:)` replaces it.
+
+### The look, piece by piece
+
+The names in the last column are functions in `prototypes/04-golden-hour/`.
+
+| Piece | Rule | Prototype |
+|---|---|---|
+| Sky | colour stops from the top to the horizon, with an ordered-dither blend between each pair. The flight camera stretches the same stops to its ground line | `golden.sky`, `engine.bayer_gradient` |
+| Sun and moon | a disc with an ordered-dither halo. The moon has a bite. Draw them behind the hills and the stands | `golden.sun` |
+| Stars | single pixels, some with four dim neighbours. More of them near the top | `golden.stars` |
+| Clouds | `midday` and `morning`: cumulus that the light shades, with no outline. Other phases: flat streaks with dithered ends and a lit underside. The drift of §17 does not change | `golden.clouds` |
+| Horizon | two layers of round hills, then round trees with a lit rim on the side of the light. The flight camera gets this horizon along all of its ground line | `variants.hills`, `golden.leafy` |
+| Stands at bat | two wings behind the wall, one on each side of the scoreboard. They rise to the screen edges in steps. See the tier table below | `golden.wing` |
+| Stands in the flight camera | the stepped profile of §17, with a lit lip and a dark line below each lip | `side.tiers` |
+| Crowd | people in rows with aisles. A person is one head pixel above one shirt pixel. In the close framing a person is 2×4. `crowdShare` sets how many seats are full. The bounce of §17 does not change | `golden.wing`, `side.crowd_rows` |
+| Upper deck and pennants | a roof line, a row of lamps or windows, columns. The pennant posts stop at the roof | `side.upper_deck`, `side.pennant_string` |
+| Towers | a lattice pole and a lamp bank with a dithered bloom. Only while the lamps are on | `golden.towers` |
+| Wall | a lit top row, an ordered-dither face that gets darker to its foot, panel seams, and a `score` rail in place of the `chalk` cap | `golden.at_bat`, `golden.flight` |
+| Warning track | a `dirt` band in front of the wall, with the shadow of the wall on it | same |
+| Grass at bat | a checkerboard in perspective. The bands get taller to the camera. The columns meet at a point above the wall | `golden.at_bat` |
+| Grass in the flight camera | the 16 ft stripes in three depth bands. Each band starts on the other colour | `side.checker_mow` |
+| Field marks in the flight camera | the plate circle, the mound, the infield skin, second base, and a number below each 100 ft mark | `side.field_marks`, `side.lens` |
+| Low sun | `dawn` and `goldenHour` only. One stand puts a dithered shadow on the outfield grass. The sun puts a dithered wash on the other grass. Both stay above y = 132 | `golden.at_bat` |
+| Night pool | `night` only. The grass gets darker to the left and right edges, by dither | `golden.at_bat` |
+| Mist | `dawn` only. A dithered band from y = 99 to y = 120, in front of the stands and behind the pitcher | `golden.at_bat` |
+| Dirt | the mound and the plate circle are ellipses. They have a light edge on the side of the light and a dark edge on the other side | `golden.at_bat` |
+| Scoreboard | a frame with one lit edge on the side of the light, and a dark face. The text does not change | `golden.at_bat` |
+| Foul poles | two columns: lit and shaded. In the flight camera the pole has a mesh wing | `side.foul_pole` |
+| Batter at bat | a rig of capsules, ellipses and polygons with four tones from one light. Details: a number, a stripe on each leg, a buckle, a batting glove, a wrist strap, pine tar, an ear hole, a glint, a face | `golden.batter` |
+| Pitcher | 11×20 stamps, three frames. Flip the light side of the stamp when the light is on the right | `golden.pitcher`, `golden.PITCH` |
+| Batter in the flight camera | a 7×8 stamp, never smaller | `side.TINY_A` |
+| Cast shadows | project each person onto the ground, away from the light. Make each ground pixel darker one time only. Dither the far end. With the lamps on, each person has two short shadows | `golden.cast` |
+| Ball | `chalk`, the red laces, one highlight pixel and three underside pixels. In the flight camera the ball has a shadow on the ground in each framing | `golden.at_bat`, `golden.flight` |
+| Trail | `chalk` from the bat to the ball. The six newest dots are 2×2. The oldest dots are one in two. The colour never changes with age | `side.trail` |
+| Readouts | the 3×5 and 5×7 faces with a one-pixel `ink` shadow, down and right. The positions of §8 do not change | `engine.t3`, `golden.t5` |
+
+The contact freeze (§3), the miss markers (§7), the result hold (§8, §10), the fireworks and the
+bursts (§17) keep their layout, their colours by role, and their timing.
+
+**Stands at bat, by tier.** The mock shows only the `full` tier. The other three rows are Claude's
+and have no mock.
+
+| Tier (§17) | At bat |
+|---|---|
+| `fenceAndTrees` | no stand. Round trees along all of the horizon |
+| `lowBleacher` | one tier, 10 px high at the screen edges. No upper deck and no lamps |
+| `bleachers` | two tiers, 22 px high at the screen edges. No upper deck |
+| `full` | the mock: 34 px high at the screen edges, with the upper deck |
+
+The far piece and the near piece of §17 keep their shapes. Draw the far piece in the `hill`
+colours, behind the stands. Draw the near piece in the `stand` colours, with a lit edge on the
+side of the light.
+
+### Performance
+
+The sky, the grass, the wall, the stands, the mist and the night pool are the same in each frame.
+Draw them one time into the cached layers of §17. Add the phase to `BackdropKey`. Draw only the
+people, the ball, the trail, the clouds, the birds, the flags and the crowd bounce in each frame.
+Measure in a Release build (see `CLAUDE.md`).
+
+### Knobs
+
+`SkyClockRules` (Core, `SunClock.swift`):
+
+| Knob | Default | Effect |
+|---|---|---|
+| `assumedLatitudeDegrees` | 40 | the latitude when the game does not know the location |
+| `horizonDegrees` | −0.83 | the sun altitude at sunrise and at sunset |
+| `dawnLeadMinutes` | 40 | `dawn` starts this long before sunrise |
+| `dawnTailMinutes` | 50 | `morning` starts this long after sunrise |
+| `middayLeadMinutes` | 120 | `midday` starts this long before solar noon |
+| `goldenLeadMinutes` | 90 | `goldenHour` starts this long before sunset |
+| `twilightMinutes` | 40 | `night` starts this long after sunset |
+
+`LookRules` (App, `Look.swift`):
+
+| Knob | Default | Effect |
+|---|---|---|
+| `crowdShare` | 0.25, 0.5, 0.8, 0.88, 0.92, 0.92 | full seats, from `dawn` to `night` |
+| `stars` | 22 in `twilight`, 70 in `night` | at bat. The flight camera has 1.6 times as many |
+| `shadowSlope` | 0.9 at a low sun, 0.5 in `morning`, 0.1 at `midday`, 0.34 with lamps | pixels of shadow for each pixel of height |
+| `shadowRise` | 0.22 at a low sun | how far the shadow goes up the screen |
+| `shadowSoftFrom` | 62 | dither the shadow above this height |
+| `mistRows` | 99…120, thickest at 107 | the ground mist |
+| `lowSunRows` | 108…132 | the shadow of a stand and the wash of the sun |
+| `southernRegions` | AR, AU, BO, BR, CL, NZ, PE, PY, UY, ZA | regions with a negative latitude |
+
+The palette lines of each phase are in `docs/palette.md`.
+
+### Build order
+
+1. **Core.** `SunClock`, `DayPhase`, `SkyClockRules`, the phase in the machine and in `Replay`,
+   seeded towers for each park, the lights-out rule. Tests against the table above.
+2. **The looks.** `Look`, the ordered-dither and ellipse primitives in `PixelCanvas`, the phase in
+   `BackdropKey`, the clock read in `GameController`, and `-phase`.
+3. **The at-bat camera.**
+4. **The flight camera**, wide and close, and the result hold.
+5. **The other screens.** The stats board, the contract card, the Warm Up card and the replay
+   screen get the text shadow only.
+6. **Evidence.** Shots of each phase in each camera, on a phone and on an iPad mini. New README
+   shots.
+
+### Open
+
+1. **Towers by day.** The mock draws no tower until the lamps are on. A real park has dark towers
+   all day. Dwight decides.
+2. **The latitude.** 40 degrees is a guess for a player in the United States. A setting is
+   possible, and a menu is not (§1).
+3. **The crowd share.** The numbers are Claude's.
+4. **The trail on a pale sky.** `chalk` on the `dawn` and `midday` sky is the weakest contrast in
+   the set. A darker pixel below each trail dot in those phases is drawn nowhere yet. Make the
+   decision on the iPad mini.
+5. **The moon.** The moon phase from the date is possible in a pure function. It is not in this
+   spec.

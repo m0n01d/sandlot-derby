@@ -12,5 +12,12 @@ Google Fonts; everything else is inline). Open in a browser.
    slice hit test with lag forgiveness, contact freeze with swing readout, miss markers. **This is
    the reference implementation for `Core/`**: the JavaScript in its `<script>` block maps
    function-for-function onto `Flight`, `Pitching`, `Contact` and `DerbyMachine`.
+4. `04-golden-hour/` — the look and the clock (DESIGN.md §20). Python, no dependencies:
+   `python3 golden.py` draws the six phases of both cameras into `targets/`. `engine.py` is a copy
+   of `PixelCanvas` with the ordered dither and the shaded shapes added. `now.py` and `side.py`
+   port the shipped at-bat and flight frames, so each mock has an honest "before". **This is the
+   reference implementation for the §20 port**: `golden.at_bat`, `golden.flight`, `golden.batter`,
+   `golden.pitcher` and the `DAWN` … `NIGHT` tables map onto `AtBatScene`, `WideScene`, the sprites
+   and `Look`.
 
 These are reference material, not shipped code. Do not edit them; change the spec and the core.
