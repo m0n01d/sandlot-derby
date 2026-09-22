@@ -166,15 +166,6 @@ enum BatterFrame: Hashable {
         .finish(step: Int((angleDegrees / rules.swingAngleStep).rounded()))
     }
 
-    /// The quantised step's angle, back in degrees — the inverse of `contact(angleDegrees:)` /
-    /// `finish(angleDegrees:)`.
-    var angleDegrees: Double {
-        switch self {
-        case .stance, .swing: return 20
-        case .contact(let step), .finish(let step):
-            return Double(step) * PeopleRules.standard.swingAngleStep
-        }
-    }
 
     var pose: BatterPose {
         switch self {
@@ -192,8 +183,10 @@ enum BatterFrame: Hashable {
         switch self {
         case .stance: return 0
         case .swing: return 1
-        case .contact(let step): return 100 + step + 4
-        case .finish(let step): return 200 + step + 4
+        // A thousand apart, so the two families cannot meet however small `swingAngleStep` is
+        // tuned (at 1° a contact at 80° and a finish at −20° would otherwise share a key).
+        case .contact(let step): return 1_000 + step
+        case .finish(let step): return 2_000 + step
         }
     }
 }

@@ -264,18 +264,24 @@ final class AtBatScene: CanvasScene {
 
         // The distance the finger has dragged since it went down, however that drag is going to
         // resolve — the same measure `.pitch` asks for the mid-swing pose (DESIGN.md, batter
-        // rig, Dwight 2026-09-22).
+        // rig, Dwight 2026-09-22). In a replay's lead-in there is no finger: the recorded stroke
+        // grows through `replayStroke` instead, and it has to move the batter the same way, or
+        // the clip shows him frozen in his stance while his own stroke crosses the screen (§19).
         let fingerTravel: Double = {
+            if let replayStroke, let first = replayStroke.first, let last = replayStroke.last {
+                return hypot(last.x - first.x, last.y - first.y)
+            }
             guard let dragStart, let last = trail?.last?.point else { return 0 }
             return hypot(last.x - dragStart.x, last.y - dragStart.y)
         }()
+        let strokeUnderway = fingerDown || replayStroke != nil
         let batterFrame: BatterFrame
         switch machine.beat {
         case .contact:
             batterFrame = .contact(angleDegrees: contactVisual?.angle ?? 20)
         case .miss where machine.lastCall == .miss:
             batterFrame = .finish(angleDegrees: missVisual?.angle ?? 20)
-        case .pitch where fingerDown && fingerTravel >= PeopleRules.standard.swingFrameAfterPixels:
+        case .pitch where strokeUnderway && fingerTravel >= PeopleRules.standard.swingFrameAfterPixels:
             batterFrame = .swing
         default:
             batterFrame = .stance

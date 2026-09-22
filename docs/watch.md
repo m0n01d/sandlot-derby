@@ -136,9 +136,9 @@ falls inside, in watch coordinates:
 | Wall band | `y 96–104` | `y 51–59` |
 | Pitcher, foot point | `(160, 117)` | `(68, 72)`, dead centre |
 | Release point | `(166, 108)` | `(74, 63)` |
-| Strike zone | `(150, 136, 40×50)` | `(58, 91, 40×50)` |
+| Strike zone | `(140, 136, 40×50)`, centred on the plate since 2026-09-22 | `(48, 91, 40×50)` |
 | Plate | `(152, 190, 16×4)` | `(60, 145)` |
-| Batter, 32×56 on `(104, 222)` | x 88–120 | loses 4 columns left, shins under the corner |
+| Batter, the three-quarter rig with his back foot on `(106, 214)` (2026-09-22) | about x 84–124 | loses 8 columns left. Re-derive this row when the watch build starts |
 
 - The crop stops at 212, not 224, on purpose: the bottom 12 rows are the batter's feet, which the
   round corner eats anyway, and the trade buys 12 rows of sky for the HUD. It also puts the zone at
