@@ -70,7 +70,7 @@ def batter(c, bx, by, frame):
 
 
 def zone(c, colour):
-    zx, zy, zw, zh = 150, 136, 40, 50
+    zx, zy, zw, zh = 140, 136, 40, 50
     for i in range(0, zw + 1, 3):
         c.px(zx + i, zy, colour); c.px(zx + i, zy + zh, colour)
     for j in range(0, zh + 1, 3):

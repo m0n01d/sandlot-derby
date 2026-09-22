@@ -6,11 +6,11 @@ import DerbyCore
 /// (`Look.red`, `.grey`, `.skin`, `.wood`, `.glove`, `.hair`).
 struct PeopleRules {
 
-    // MARK: The batter's rig (`golden.batter`)
+    // MARK: The batter's rig (`rig34.batter34`)
 
     /// The sprite the rig is drawn into, and where his feet sit inside it. It has to hold the
-    /// contact pose's bat, whose tip reaches 63 px to the right of his feet and 91 px above
-    /// them in the stance, so the canvas is wide and the origin is low and left of centre.
+    /// bat at every cached swing angle, whose tip reaches up to about 60 px to one side of his
+    /// feet and 86 px above them, so the canvas is wide and the origin is low and left of centre.
     var batterWidth = 128
     var batterHeight = 104
     var batterOriginX = 50
@@ -26,6 +26,14 @@ struct PeopleRules {
     /// Pine tar: two dark pixels at each of these fractions along the bat from the hands. Six
     /// smudges is what reads as a taped grip at this size; more and the handle goes black.
     var pineTarAlong = [0.12, 0.16, 0.2, 0.24, 0.28, 0.32]
+
+    /// Degrees between cached contact/finish stamps: a slice angle is quantised to this before a
+    /// pose is picked, so a swing at 23° and one at 24° share a stamp instead of each building
+    /// its own (§20 "Layers and speed", `BatterFrame`).
+    var swingAngleStep = 5.0
+    /// How far the finger must have travelled from `dragStart`, in design pixels, during a pitch
+    /// before the batter's rig shows the mid-swing pose rather than his stance.
+    var swingFrameAfterPixels = 8.0
 
     // MARK: The pitcher's stamps (`golden.PITCH`)
 
@@ -51,33 +59,143 @@ struct PeopleRules {
     static let standard = PeopleRules()
 }
 
-/// One pose of the batter, in sprite-local pixels measured from his feet, y up the screen being
-/// negative (`golden.POSES`). Nine points are the whole rig: the rest is hung off them.
+/// One pose of the three-quarter rig, in sprite-local pixels measured from his feet, y up the
+/// screen being negative (`rig34.P34`). The camera sits behind and above the plate, looking at a
+/// right-handed hitter's back-right: his front foot, front knee and far arm are up and to the
+/// right, toward the pitcher, his back foot and back knee down and to the left, and his near arm
+/// — the one drawn in front, closest to the camera — is his right one.
+///
+/// R = his right = his back leg and his near arm, drawn in front. L = his left = his front leg
+/// and his far arm, drawn behind.
 struct BatterPose {
-    let kneeL: (x: Double, y: Double)
+    let ankleR: (x: Double, y: Double)
     let ankleL: (x: Double, y: Double)
     let kneeR: (x: Double, y: Double)
-    let ankleR: (x: Double, y: Double)
-    /// The near shoulder, the near elbow, and where both hands meet on the bat.
-    let shoulder: (x: Double, y: Double)
-    let elbow: (x: Double, y: Double)
+    let kneeL: (x: Double, y: Double)
+    let hipR: (x: Double, y: Double)
+    let hipL: (x: Double, y: Double)
+    let shoulderR: (x: Double, y: Double)
+    let shoulderL: (x: Double, y: Double)
+    let elbowR: (x: Double, y: Double)
+    /// Where both hands meet the bat.
     let hands: (x: Double, y: Double)
-    /// The end of the bat, and the far shoulder the far arm reaches from.
     let batTip: (x: Double, y: Double)
-    let farShoulder: (x: Double, y: Double)
+    /// The far (left) elbow. `nil` when the front arm shows only its sleeve cap at the shoulder;
+    /// a point, reached by a full sleeve and forearm, when it swings all the way across to help
+    /// grip the bat.
+    let elbowL: (x: Double, y: Double)?
+    /// Whether the bat is drawn in front of the head rather than behind it.
+    let batInFront: Bool
+    /// The back foot up on its toe and pivoting, rather than flat on the ground.
+    let heelUp: Bool
+    let torso: [(Double, Double)]
+    let number: (x: Int, y: Int)
+    let buckle: (x: Int, y: Int)
 
-    /// Stance, contact, miss — the three the at-bat camera asks for, in `AtBatScene`'s own order.
-    static let all: [BatterPose] = [
-        BatterPose(kneeL: (-8, -16), ankleL: (-9, -4), kneeR: (9, -17), ankleR: (10, -4),
-                   shoulder: (5, -51), elbow: (11, -44), hands: (14, -55),
-                   batTip: (10, -91), farShoulder: (-3, -50)),
-        BatterPose(kneeL: (-5, -16), ankleL: (-8, -4), kneeR: (11, -17), ankleR: (12, -4),
-                   shoulder: (6, -50), elbow: (14, -46), hands: (21, -43),
-                   batTip: (63, -58), farShoulder: (-2, -49)),
-        BatterPose(kneeL: (-6, -17), ankleL: (-8, -4), kneeR: (9, -17), ankleR: (10, -4),
-                   shoulder: (-3, -50), elbow: (-10, -44), hands: (-16, -40),
-                   batTip: (-41, -57), farShoulder: (4, -49))
-    ]
+    /// The stance: weight even, both heels down, waiting on the pitch (`rig34.STANCE`).
+    static let stance = BatterPose(
+        ankleR: (-8, -3), ankleL: (6, -12), kneeR: (0, -17), kneeL: (9, -24),
+        hipR: (-3, -31), hipL: (4, -34), shoulderR: (-5, -50), shoulderL: (6, -54),
+        elbowR: (-15, -50), hands: (-8, -55), batTip: (-22, -86), elbowL: nil,
+        batInFront: true, heelUp: false,
+        torso: [(-10, -51), (-4, -56), (5, -57), (10, -53), (9, -44), (7, -30), (-6, -30), (-10, -42)],
+        number: (-7, -44), buckle: (6, -32))
+
+    /// Mid-swing: the bat coming through, no particular angle settled yet — shown while a finger
+    /// is dragging across the screen but has not yet crossed the ball (`rig34.MID`).
+    static let swing = BatterPose(
+        ankleR: (-8, -3), ankleL: (6, -12), kneeR: (0, -17), kneeL: (9, -24),
+        hipR: (-2, -30), hipL: (4, -34), shoulderR: (-4, -50), shoulderL: (7, -54),
+        elbowR: (-9, -44), hands: (0, -46), batTip: (-34, -52), elbowL: nil,
+        batInFront: false, heelUp: false,
+        torso: [(-10, -51), (-4, -56), (5, -57), (10, -53), (9, -44), (7, -30), (-6, -30), (-10, -42)],
+        number: (-7, -44), buckle: (6, -32))
+
+    /// The instant of contact: the bat lies along the slice angle, the hands sliding down and in
+    /// as the swing steepens, the back heel up on its toe (`rig34.contact34`).
+    static func contact(swingAngleDegrees theta: Double) -> BatterPose {
+        let s = (theta - 20) / 50.0
+        let hands = (x: 17 + 2 * s, y: -44 + 10 * s)
+        let a = theta * Double.pi / 180
+        let batTip = (x: hands.x + 44 * cos(a), y: hands.y - 44 * sin(a))
+        let shoulderR = (x: -4.0, y: -51.0), shoulderL = (x: 8.0, y: -54.0)
+        let elbowR = (x: shoulderR.x + (hands.x - shoulderR.x) * 0.5 + 1,
+                      y: shoulderR.y + (hands.y - shoulderR.y) * 0.5 + 2)
+        let elbowL = (x: shoulderL.x + (hands.x - shoulderL.x) * 0.5,
+                      y: shoulderL.y + (hands.y - shoulderL.y) * 0.5 - 2)
+        return BatterPose(
+            ankleR: (-7, -3), ankleL: (6, -12), kneeR: (2, -18), kneeL: (8, -24),
+            hipR: (-1, -31), hipL: (5, -34), shoulderR: shoulderR, shoulderL: shoulderL,
+            elbowR: elbowR, hands: hands, batTip: batTip, elbowL: elbowL,
+            batInFront: false, heelUp: true,
+            torso: [(-9, -52), (-2, -57), (7, -57), (11, -52), (10, -44), (8, -30), (-6, -30), (-9, -42)],
+            number: (-3, -44), buckle: (8, -32))
+    }
+
+    /// The follow-through: the finish rises with the slice, the bat wrapping back round in front
+    /// of the head (`rig34.finish34`).
+    static func finish(swingAngleDegrees theta: Double) -> BatterPose {
+        let phi = (52 + (theta - 20) * 0.6) * Double.pi / 180
+        let hands = (x: -8.0, y: -56.0)
+        let batTip = (x: hands.x - 30 * cos(phi), y: hands.y - 30 * sin(phi))
+        return BatterPose(
+            ankleR: (-6, -3), ankleL: (6, -12), kneeR: (1, -18), kneeL: (7, -24),
+            hipR: (-2, -31), hipL: (5, -34), shoulderR: (8, -53), shoulderL: (-6, -52),
+            elbowR: (0, -49), hands: hands, batTip: batTip, elbowL: nil,
+            batInFront: true, heelUp: true,
+            torso: [(-9, -53), (-2, -57), (7, -57), (11, -53), (10, -44), (8, -30), (-6, -30), (-9, -42)],
+            number: (-2, -44), buckle: (9, -32))
+    }
+}
+
+/// Which frame of the batter's rig to draw: the stance, the generic mid-swing, or — quantised to
+/// `PeopleRules.swingAngleStep` so the sprite cache holds a handful of stamps rather than one per
+/// pixel of finger drift — the instant of contact or the follow-through at a given slice angle.
+enum BatterFrame: Hashable {
+    case stance
+    case swing
+    case contact(step: Int)
+    case finish(step: Int)
+
+    /// `SliceRules` clamps a slice angle to −20°…80°, so at the default 5° step this is −4…16.
+    static func contact(angleDegrees: Double, rules: PeopleRules = .standard) -> BatterFrame {
+        .contact(step: Int((angleDegrees / rules.swingAngleStep).rounded()))
+    }
+
+    static func finish(angleDegrees: Double, rules: PeopleRules = .standard) -> BatterFrame {
+        .finish(step: Int((angleDegrees / rules.swingAngleStep).rounded()))
+    }
+
+    /// The quantised step's angle, back in degrees — the inverse of `contact(angleDegrees:)` /
+    /// `finish(angleDegrees:)`.
+    var angleDegrees: Double {
+        switch self {
+        case .stance, .swing: return 20
+        case .contact(let step), .finish(let step):
+            return Double(step) * PeopleRules.standard.swingAngleStep
+        }
+    }
+
+    var pose: BatterPose {
+        switch self {
+        case .stance: return .stance
+        case .swing: return .swing
+        case .contact(let step):
+            return .contact(swingAngleDegrees: Double(step) * PeopleRules.standard.swingAngleStep)
+        case .finish(let step):
+            return .finish(swingAngleDegrees: Double(step) * PeopleRules.standard.swingAngleStep)
+        }
+    }
+
+    /// A cache key stable across the whole range a slice angle can quantise to.
+    var cacheID: Int {
+        switch self {
+        case .stance: return 0
+        case .swing: return 1
+        case .contact(let step): return 100 + step + 4
+        case .finish(let step): return 200 + step + 4
+        }
+    }
 }
 
 /// The shape of one figure's cast shadow: every ground pixel it darkens, as an offset from the
@@ -105,26 +223,35 @@ enum PeopleArt {
     /// torso and the helmet, each shaded off `look.light` into four tones and each drawing a
     /// darker contour on the part below it. No outer outline anywhere — §20 is explicit, and a
     /// figure that has one stops being lit and starts being a sticker.
-    static func batter(pose frame: Int, look: Look, rules: PeopleRules = .standard) -> ShadedSprite {
+    ///
+    /// A consistent three-quarter rear view (`rig34.batter34`): the camera behind and above the
+    /// plate sees a right-handed hitter's back-right, so his front foot, knee and far arm are up
+    /// and to the right toward the pitcher, and his near arm — his right one, drawn in front of
+    /// the torso — is the one that swings the bat home.
+    static func batter(frame: BatterFrame, look: Look, rules: PeopleRules = .standard) -> ShadedSprite {
         let s = ShadedSprite(width: rules.batterWidth, height: rules.batterHeight,
                              ox: rules.batterOriginX, oy: rules.batterOriginY,
                              light: look.light, cuts: look.cuts)
-        let p = BatterPose.all[min(max(0, frame), BatterPose.all.count - 1)]
+        let p = frame.pose
         let red = look.red, grey = look.grey, skin = look.skin
         let ink = Palette.ink
 
         // The shoes first, so everything above lands on top of them. A dark sole with one grey
-        // upper is the whole shoe at this size; the toe cap is the one pixel of light on it.
+        // upper is the whole shoe at this size, the toe cap its one pixel of light — or, up on
+        // the toe and pivoting through contact and the finish, a capsule instead.
         let shoe = [ink, ink, grey[0], grey[2]]
-        for a in [p.ankleL, p.ankleR] {
-            s.part(Mask.ellipse(cx: a.x + 1.5, cy: a.y + 2, rx: 5.8, ry: 2.5), shoe, contour: ink)
-            s.set(Int(a.x + 5), Int(a.y + 1), grey[2])
-        }
-
-        // Each leg: a red sock, the flannel over it, the thigh, a stripe down the outside and a
-        // fold behind the knee. The hips are fixed — a batter's stance is all knees and ankles.
-        let hipL = (x: -4.0, y: -31.0), hipR = (x: 4.0, y: -31.0)
-        for (hip, knee, ankle) in [(hipL, p.kneeL, p.ankleL), (hipR, p.kneeR, p.ankleR)] {
+        func leg(hip: (x: Double, y: Double), knee: (x: Double, y: Double),
+                 ankle: (x: Double, y: Double), heelUp: Bool) {
+            if heelUp {
+                s.part(Mask.capsule(x0: ankle.x + 5, y0: ankle.y + 1.5, r0: 2.0,
+                                    x1: ankle.x - 2, y1: ankle.y - 1.5, r1: 2.4), shoe, contour: ink)
+            } else {
+                s.part(Mask.ellipse(cx: ankle.x + 1.5, cy: ankle.y + 2, rx: 5.8, ry: 2.5),
+                       shoe, contour: ink)
+                s.set(Int(ankle.x + 5), Int(ankle.y + 1), grey[2])
+            }
+            // The red sock, the flannel over it, the thigh, a stripe down the outside and a fold
+            // behind the knee.
             s.part(Mask.capsule(x0: knee.x, y0: knee.y, r0: 3.6, x1: ankle.x, y1: ankle.y, r1: 2.7),
                    red, contour: red[0])
             let mid = (x: (knee.x + ankle.x) / 2, y: (knee.y + ankle.y) / 2 - 1)
@@ -140,51 +267,71 @@ enum PeopleArt {
             s.set(Int(knee.x) - 2, Int(knee.y), grey[0])
         }
 
-        // The torso, the shoulders across the top of it, the belt and its buckle, his number and
-        // the undershirt showing at the collar.
-        s.part(Mask.poly([(-8, -54), (-2, -57), (7, -55), (9, -44), (7, -30), (-7, -30), (-9, -42)]),
-               grey, contour: grey[0])
-        s.part(Mask.ellipse(cx: -0.5, cy: -53, rx: 8.6, ry: 3.6), grey)
-        s.part(Mask.poly([(-7.5, -33), (7.5, -33), (7.5, -30), (-7.5, -30)]), flat: ink)
-        s.set(5, -32, Palette.score)
-        s.set(6, -32, Palette.score)
-        s.stamp(["RRR", "..R", ".R.", ".R.", ".R."], legend: ["R": red[1]], x: -6, y: -43)
-        s.set(1, -55, red[1]); s.set(2, -54, red[1]); s.set(3, -55, red[1])
+        leg(hip: p.hipL, knee: p.kneeL, ankle: p.ankleL, heelUp: false)   // the front leg is the far one
+        leg(hip: p.hipR, knee: p.kneeR, ankle: p.ankleR, heelUp: p.heelUp)
+        // The hips: a seat across both thigh tops so the two legs read as one pelvis.
+        s.part(Mask.ellipse(cx: (p.hipL.x + p.hipR.x) / 2, cy: (p.hipL.y + p.hipR.y) / 2 + 1,
+                            rx: 8.0, ry: 3.4), grey, contour: grey[0])
 
-        // The far arm, reaching across to the bat. Three tones and no rim: it is the arm in
-        // shadow, and a highlight on it would put two lights in the park.
-        s.part(Mask.capsule(x0: p.farShoulder.x, y0: p.farShoulder.y, r0: 3.0,
-                            x1: p.hands.x, y1: p.hands.y + 3, r1: 2.2),
-               [grey[0], grey[0], grey[1]], contour: grey[0])
+        func sleeve(_ a: (x: Double, y: Double), _ b: (x: Double, y: Double),
+                    r0: Double = 3.4, r1: Double = 2.8) {
+            s.part(Mask.capsule(x0: a.x, y0: a.y, r0: r0, x1: b.x, y1: b.y, r1: r1), red, contour: red[0])
+        }
+        func forearm(_ a: (x: Double, y: Double), _ b: (x: Double, y: Double)) {
+            s.part(Mask.capsule(x0: a.x, y0: a.y, r0: 2.8, x1: b.x, y1: b.y + 1, r1: 2.3),
+                   skin, contour: skin[0])
+            let wristT = 0.72
+            let wx = a.x + (b.x - a.x) * wristT
+            let wy = a.y + (b.y + 1 - a.y) * wristT
+            s.part(Mask.ellipse(cx: wx, cy: wy, rx: 2.4, ry: 1.6), flat: red[1])
+        }
 
-        bat(on: s, from: (p.hands.x, p.hands.y + 2), to: (p.batTip.x, p.batTip.y),
-            look: look, rules: rules)
+        // The torso, the shoulders across the top of it, the belt and its buckle, and his number.
+        s.part(Mask.poly(p.torso), grey, contour: grey[0])
+        s.part(Mask.ellipse(cx: 0.5, cy: -53, rx: 9.0, ry: 3.8), grey)
+        s.part(Mask.poly([(-7.5, -33), (8.5, -33), (8.5, -30), (-7.5, -30)]), flat: ink)
+        s.set(p.buckle.x, p.buckle.y, Palette.score)
+        s.set(p.buckle.x + 1, p.buckle.y, Palette.score)
+        s.stamp(["RRR", "..R", ".R.", ".R.", ".R."], legend: ["R": red[1]], x: p.number.x, y: p.number.y)
 
-        // The neck, the head, the hair at the nape, the helmet with its ear flap and brim, the
-        // ear hole, the glint off the helmet and the face.
+        // The far arm: a full sleeve and forearm to the hands when it reaches all the way across
+        // (`elbowL` given), or just its shoulder cap peeking past the torso when it does not.
+        if let elbowL = p.elbowL {
+            sleeve(p.shoulderL, elbowL, r0: 3.2, r1: 2.7)
+            forearm(elbowL, (x: p.hands.x, y: p.hands.y - 2))
+        } else {
+            s.part(Mask.ellipse(cx: p.shoulderL.x, cy: p.shoulderL.y + 1, rx: 3.4, ry: 3.0),
+                   red, contour: red[0])
+        }
+
+        func drawBat() {
+            bat(on: s, from: (p.hands.x, p.hands.y + 2), to: (p.batTip.x, p.batTip.y),
+                look: look, rules: rules)
+        }
+        if !p.batInFront { drawBat() }
+
+        // The head from behind and to the right: the nape, the helmet with its brim toward the
+        // pitcher, his right ear and a sliver of cheek on the near side, and the glint off the
+        // dome. No face from this camera, and no ear hole — only the ear itself.
         s.part(Mask.poly([(0, -58), (5, -58), (5, -54), (0, -54)]), skin)
         s.part(Mask.ellipse(cx: 3, cy: -61.5, rx: 5.2, ry: 5.6), skin, contour: skin[0])
-        s.set(-1, -57, look.hair); s.set(0, -57, look.hair); s.set(-1, -56, look.hair)
-        s.part(Mask.ellipse(cx: 2, cy: -63, rx: 7, ry: 6).filter { $0.y < -61 },
+        s.set(0, -57, look.hair); s.set(1, -57, look.hair)
+        s.set(0, -56, look.hair); s.set(2, -57, look.hair)
+        s.part(Mask.ellipse(cx: 2, cy: -63, rx: 7, ry: 6.2).filter { $0.y < -59 },
                red, contour: red[0])
-        s.part(Mask.poly([(-4, -62), (1, -62), (1, -56), (-3, -56), (-4, -58)]), red, contour: red[0])
-        s.part(Mask.poly([(7, -63), (13, -62), (13, -61), (7, -61)]), flat: red[1])
-        s.set(-2, -60, red[0]); s.set(-1, -60, red[0])
-        s.set(-2, -59, red[0]); s.set(-1, -59, ink)
+        s.part(Mask.poly([(-4, -61), (1, -61), (1, -57), (-3, -57), (-4, -59)]), red, contour: red[0])
+        s.part(Mask.poly([(5, -61), (10, -61), (10, -57), (7, -57)]), red, contour: red[0])
+        s.part(Mask.poly([(7, -67), (14, -66), (14, -64), (8, -64)]), flat: red[1])
+        s.set(7, -59, skin[1]); s.set(8, -59, skin[0]); s.set(7, -58, skin[1])
+        s.set(9, -58, skin[2]); s.set(9, -57, skin[1])
         s.set(-2, -67, skin[3]); s.set(-3, -66, skin[3]); s.set(-1, -68, skin[3])
-        s.stamp(["DDDD", ".K..", "...L", "..D."],
-                legend: ["D": skin[0], "K": ink, "L": skin[3]], x: 5, y: -61)
+
+        if p.batInFront { drawBat() }
 
         // The near arm last, in front of everything: sleeve, forearm, a wrist strap and the
         // batting glove over the hands.
-        s.part(Mask.capsule(x0: p.shoulder.x, y0: p.shoulder.y, r0: 3.4,
-                            x1: p.elbow.x, y1: p.elbow.y, r1: 2.8), red, contour: red[0])
-        s.part(Mask.capsule(x0: p.elbow.x, y0: p.elbow.y, r0: 2.8,
-                            x1: p.hands.x, y1: p.hands.y + 1, r1: 2.3), skin, contour: skin[0])
-        let wristT = 0.72
-        let wx = p.elbow.x + (p.hands.x - p.elbow.x) * wristT
-        let wy = p.elbow.y + (p.hands.y + 1 - p.elbow.y) * wristT
-        s.part(Mask.ellipse(cx: wx, cy: wy, rx: 2.4, ry: 1.6), flat: red[1])
+        sleeve(p.shoulderR, p.elbowR)
+        forearm(p.elbowR, p.hands)
         s.part(Mask.ellipse(cx: p.hands.x, cy: p.hands.y, rx: 2.8, ry: 3.3),
                look.glove, contour: look.glove[0])
         return s
@@ -337,16 +484,35 @@ enum PeopleArt {
     /// far end dithered out above `softFrom`. The offsets are gathered into a set first, so a
     /// ground pixel two parts of the figure land on is darkened **once** — twice and an elbow
     /// would burn a hole in the grass (§20 "Cast shadows", `golden.cast`).
-    static func shadowStamp(for sprite: ShadedSprite, shadows: [Look.Shadow]) -> ShadowStamp {
+    ///
+    /// `groundRise` lets the ground itself slope under the figure. The batter's front foot is
+    /// drawn several rows higher on screen than his back one — he is not standing in the air, the
+    /// ground he stands on is drawn rising toward the pitcher — so without it every pixel above
+    /// his front foot would project as if that many rows off the ground. With it, a column's
+    /// height is measured from where the ground passes under that column instead of from the
+    /// sprite's own foot row: `t` is how far across the line a pixel's `lx` sits (0…1), `g` is
+    /// that many rows of the rise the ground has already climbed under it, and the shadow is
+    /// measured from the ground point under the column, `g` rows up the screen.
+    static func shadowStamp(for sprite: ShadedSprite, shadows: [Look.Shadow],
+                            groundRise: (x0: Double, x1: Double, rise: Double)? = nil) -> ShadowStamp {
         var hit = Set<ShadowStamp.Offset>()
         let w = sprite.canvas.width, h = sprite.canvas.height
         for shadow in shadows {
             for y in 0..<h {
                 let row = sprite.canvas.buffer + y * w
                 for x in 0..<w where row[x] != 0 {
-                    let lx = Double(x - sprite.ox), height = Double(sprite.oy - y)
+                    let lx = Double(x - sprite.ox)
+                    let g: Double
+                    if let groundRise {
+                        let span = groundRise.x1 - groundRise.x0
+                        let t = span != 0 ? max(0, min(1, (lx - groundRise.x0) / span)) : 0
+                        g = groundRise.rise * t
+                    } else {
+                        g = 0
+                    }
+                    let height = max(0, Double(sprite.oy - y) - g)
                     let sx = Int(lx - height * shadow.slope)
-                    let sy = Int(-height * shadow.rise)
+                    let sy = Int(-g - height * shadow.rise)
                     if height > shadow.softFrom && ((sx + sy) & 1) != 0 { continue }
                     hit.insert(ShadowStamp.Offset(dx: sx, dy: sy))
                 }

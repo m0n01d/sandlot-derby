@@ -39,6 +39,9 @@ final class AtBatScene: CanvasScene {
         let early: Bool
         let feetAway: Double
         let trailPoints: [Point]
+        /// The swing angle of the missed stroke — `Contact.test`'s own formula, off the finger's
+        /// drag. A called strike/ball has no finger swing to measure and defaults to 20°.
+        let angle: Double
     }
 
     private var trail: [SamplePoint]?
@@ -229,9 +232,9 @@ final class AtBatScene: CanvasScene {
         BackdropArt.scoreboardFlags(into: canvas, scenery: scenery, xOffset: xOff,
                                     frame: SkyLife.flutterFrame(at: now), look: look, layout: layout)
 
-        // The two figures, each with its cast shadow laid on the ground first. Both stand where
-        // they have always stood: the pitcher on the mound at (160, 117), the batter's feet at
-        // (104, 222).
+        // The two figures, each with its cast shadow laid on the ground first. The pitcher
+        // stands where he always has, on the mound at (160, 117); the batter's back foot — his
+        // right, the near one — is at (106, 214), inside his box (Dwight, 2026-09-22).
         let table = PeopleArt.shadowTable(look: look)
         let pitcherPose = self.pitcherPose(beat: machine.beat, elapsed: machine.elapsed)
         drawFigure(canvas: canvas, name: "pitcher", pose: pitcherPose, phase: machine.phase,
@@ -259,15 +262,32 @@ final class AtBatScene: CanvasScene {
 
         drawMinorLeagueHelp(canvas: canvas, wx: wx, machine: machine)
 
-        let batterFrame: Int
+        // The distance the finger has dragged since it went down, however that drag is going to
+        // resolve — the same measure `.pitch` asks for the mid-swing pose (DESIGN.md, batter
+        // rig, Dwight 2026-09-22).
+        let fingerTravel: Double = {
+            guard let dragStart, let last = trail?.last?.point else { return 0 }
+            return hypot(last.x - dragStart.x, last.y - dragStart.y)
+        }()
+        let batterFrame: BatterFrame
         switch machine.beat {
-        case .contact: batterFrame = 1
-        case .miss where machine.lastCall == .miss: batterFrame = 2
-        default: batterFrame = 0
+        case .contact:
+            batterFrame = .contact(angleDegrees: contactVisual?.angle ?? 20)
+        case .miss where machine.lastCall == .miss:
+            batterFrame = .finish(angleDegrees: missVisual?.angle ?? 20)
+        case .pitch where fingerDown && fingerTravel >= PeopleRules.standard.swingFrameAfterPixels:
+            batterFrame = .swing
+        default:
+            batterFrame = .stance
         }
-        drawFigure(canvas: canvas, name: "batter", pose: batterFrame, phase: machine.phase,
+        let batterPose = batterFrame.pose
+        drawFigure(canvas: canvas, name: "batter", pose: batterFrame.cacheID, phase: machine.phase,
                    look: look, x: wx(batterX), y: batterY, table: table,
-                   shadows: look.shadows) { PeopleArt.batter(pose: batterFrame, look: look) }
+                   shadows: look.shadows,
+                   groundRise: (x0: batterPose.ankleR.x, x1: batterPose.ankleL.x,
+                                rise: batterPose.ankleR.y - batterPose.ankleL.y)) {
+            PeopleArt.batter(frame: batterFrame, look: look)
+        }
 
         switch machine.beat {
         case .pitch:
@@ -366,12 +386,14 @@ final class AtBatScene: CanvasScene {
         }
     }
 
-    /// Where the two of them stand. Unchanged since the prototype and deliberately named: the
-    /// hit test, the strike zone and the pitch's own geometry are all measured against these.
+    /// Where the two of them stand, deliberately named: the hit test and the pitch's own
+    /// geometry are measured against these. The pitcher is unchanged since the prototype; the
+    /// batter moved into his box (Dwight, 2026-09-22) — `batterX`/`batterY` is now the sole of
+    /// his BACK foot (his right, the near one), not a point between his two feet.
     private let pitcherX = 160.0
     private let pitcherY = 117.0
-    private let batterX = 104.0
-    private let batterY = 222.0
+    private let batterX = 106.0
+    private let batterY = 214.0
 
     /// Three frames on the windup clock — `elapsed`/`beat`, no state of its own — set, leg
     /// kick/reach back, release (DESIGN.md §3, §9). The third, `.set`, was the one never built
@@ -391,10 +413,11 @@ final class AtBatScene: CanvasScene {
     private func drawFigure(canvas: PixelCanvas, name: String, pose: Int, phase: DayPhase,
                             look: Look, x: Double, y: Double,
                             table: [UInt32: Palette.RGBA8], shadows: [Look.Shadow],
+                            groundRise: (x0: Double, x1: Double, rise: Double)? = nil,
                             build: () -> ShadedSprite) {
         let sprite = people.sprite(name, pose: pose, phase: phase, build: build)
         let stamp = shadows.isEmpty ? nil : self.shadows.stamp(name, pose: pose, phase: phase) {
-            PeopleArt.shadowStamp(for: sprite, shadows: shadows)
+            PeopleArt.shadowStamp(for: sprite, shadows: shadows, groundRise: groundRise)
         }
         if let stamp {
             PeopleArt.cast(stamp, into: canvas, footX: x, footY: y, table: table)
@@ -583,6 +606,20 @@ final class AtBatScene: CanvasScene {
         }
     }
 
+    /// The swing angle of a missed stroke: `Contact.test`'s own formula, from `dragStart` to the
+    /// finger's last sample, falling back to the last segment when that drag is shorter than
+    /// `rules.minAngleLength`. A called strike/ball has no finger to measure and is never asked.
+    private func missSwingAngleDegrees(rules: SliceRules) -> Double {
+        guard let dragStart, let trail, let last = trail.last?.point else { return 20 }
+        var dx = last.x - dragStart.x, dy = last.y - dragStart.y
+        if (dx * dx + dy * dy).squareRoot() < rules.minAngleLength, trail.count > 1 {
+            let prev = trail[trail.count - 2].point
+            dx = last.x - prev.x; dy = last.y - prev.y
+        }
+        let rawAngle = atan2(-dy, abs(dx)) * 180 / .pi
+        return min(rules.maxSwingAngle, max(rules.minSwingAngle, rawAngle))
+    }
+
     // MARK: - Beat transitions
 
     private func handleBeatChange(to beat: Beat, controller: GameController) {
@@ -598,7 +635,7 @@ final class AtBatScene: CanvasScene {
             if controller.machine.lastCall != .miss {
                 let ball = controller.ballAt(1.0)
                 missVisual = MissVisual(pressPoint: nil, ball: ball.position, radius: ball.radius,
-                                         early: false, feetAway: 0, trailPoints: [])
+                                         early: false, feetAway: 0, trailPoints: [], angle: 20)
             } else if missVisual == nil {
                 // A swing-miss `DerbyMachine` resolved on its own: the pitch timed out with a
                 // slice still in progress, i.e. the finger held through it (DESIGN.md §3, issue
@@ -622,7 +659,8 @@ final class AtBatScene: CanvasScene {
                 let feetAway = max(0, (1 - progress) * machine.pitchingRules.moundDistanceFeet)
                 missVisual = MissVisual(pressPoint: c?.fingerPoint, ball: ball.position, radius: ball.radius,
                                         early: early, feetAway: feetAway,
-                                        trailPoints: (trail ?? []).suffix(24).map { $0.point })
+                                        trailPoints: (trail ?? []).suffix(24).map { $0.point },
+                                        angle: missSwingAngleDegrees(rules: machine.sliceRules))
             }
         default:
             break
@@ -826,7 +864,8 @@ final class AtBatScene: CanvasScene {
             radius: ball.radius,
             early: early,
             feetAway: feetAway,
-            trailPoints: (trail ?? []).suffix(24).map { $0.point }
+            trailPoints: (trail ?? []).suffix(24).map { $0.point },
+            angle: missSwingAngleDegrees(rules: machine.sliceRules)
         )
         controller.recordMissedSlice()
     }

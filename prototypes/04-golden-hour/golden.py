@@ -111,62 +111,135 @@ DAY = L(name='day',
 # The people, with the detail squeezed out
 # ======================================================================================
 
-POSES = {
-    0: dict(kl=(-8, -16), al=(-9, -4), kr=(9, -17), ar=(10, -4), sh=(5, -51), el=(11, -44), hd=(14, -55),
-            tip=(10, -91), far=(-3, -50)),
-    1: dict(kl=(-5, -16), al=(-8, -4), kr=(11, -17), ar=(12, -4), sh=(6, -50), el=(14, -46), hd=(21, -43),
-            tip=(63, -58), far=(-2, -49)),
-    2: dict(kl=(-6, -17), al=(-8, -4), kr=(9, -17), ar=(10, -4), sh=(-3, -50), el=(-10, -44), hd=(-16, -40),
-            tip=(-41, -57), far=(4, -49)),
-}
+def POSE(**kw):
+    """One pose of the three-quarter rig. R = his right = back = near (drawn in front)."""
+    d = dict(aR=(-8, -3), aL=(6, -12), kR=(0, -17), kL=(9, -24), hipR=(-3, -31), hipL=(4, -34),
+             shR=(-5, -50), shL=(6, -54), elR=(-15, -50), elL=None, hd=(-8, -55), tip=(-22, -86),
+             bat_front=True, bat_over_arms=False, heelR=False, opened=0.0, far_arm='cap',
+             torso=[(-10, -51), (-4, -56), (5, -57), (10, -53), (9, -44), (7, -30), (-6, -30), (-10, -42)],
+             number=(-7, -44), buckle=(6, -32), head='back')
+    d.update(kw)
+    return d
 
 
-def batter(frame, look):
+STANCE = POSE()
+SWING = POSE(kR=(0, -17), hipR=(-2, -30), shR=(-4, -50), shL=(7, -54), elR=(-9, -44), hd=(0, -46),
+             tip=(-34, -52), bat_front=False, heelR=False)
+
+
+def contact_pose(degrees):
+    """The bat lies along the slice at contact; the hands slide out and down as the swing steepens."""
+    s = (degrees - 20) / 50.0
+    hd = (17 + 2 * s, -44 + 10 * s)
+    a = math.radians(degrees)
+    tip = (hd[0] + 44 * math.cos(a), hd[1] - 44 * math.sin(a))
+    shR, shL = (-4, -51), (8, -54)
+    elR = (shR[0] + (hd[0] - shR[0]) * 0.5 + 1, shR[1] + (hd[1] - shR[1]) * 0.5 + 2)
+    elL = (shL[0] + (hd[0] - shL[0]) * 0.5, shL[1] + (hd[1] - shL[1]) * 0.5 - 2)
+    return POSE(aR=(-7, -3), aL=(6, -12), kR=(2, -18), kL=(8, -24), hipR=(-1, -31), hipL=(5, -34),
+                shR=shR, shL=shL, elR=elR, elL=elL, hd=hd, tip=tip, bat_front=False, heelR=True, opened=1,
+                far_arm='full',
+                torso=[(-9, -52), (-2, -57), (7, -57), (11, -52), (10, -44), (8, -30), (-6, -30), (-9, -42)],
+                number=(-3, -44), buckle=(8, -32))
+
+
+def finish_pose(degrees):
+    """The follow-through: the bat's finish angle rises with the slice."""
+    phi = math.radians(52 + (degrees - 20) * 0.6)
+    hd = (-8, -56)
+    tip = (hd[0] - 30 * math.cos(phi), hd[1] - 30 * math.sin(phi))
+    return POSE(aR=(-6, -3), aL=(6, -12), kR=(1, -18), kL=(7, -24), hipR=(-2, -31), hipL=(5, -34),
+                shR=(8, -53), shL=(-6, -52), elR=(0, -49), elL=None, hd=hd, tip=tip, bat_front=True, heelR=True,
+                opened=1, far_arm='cap',
+                torso=[(-9, -53), (-2, -57), (7, -57), (11, -53), (10, -44), (8, -30), (-6, -30), (-9, -42)],
+                number=(-2, -44), buckle=(9, -32), head='back')
+
+
+def pose_for(frame, degrees=20):
+    """stance, contact, finish, swing — the frame numbers `at_bat` and the Swift port use."""
+    return {0: STANCE, 1: contact_pose(degrees), 2: finish_pose(degrees), 3: SWING}[frame]
+
+
+def batter_ground(frame, degrees=20):
+    """The ground line under a pose for `cast`: from the back foot up to the front foot."""
+    p = pose_for(frame, degrees)
+    return (p['aR'][0], p['aL'][0], p['aR'][1] - p['aL'][1])
+
+
+def batter(frame, look, degrees=20):
+    p = pose_for(frame, degrees)
     s = Sprite(128, 104, 50, 100, look['light'], look['cuts'], inner=True)
-    p = POSES[frame]
     red, grey, skin, wood = look['red'], look['grey'], look['skin'], look['wood']
     shoe = [INK, INK, grey[0], grey[2]]
-    hl, hr = (-4, -31), (4, -31)
-    for ax, ay in (p['al'], p['ar']):
-        s.part(m_ellipse(ax + 1.5, ay + 2, 5.8, 2.5), shoe, INK)
-        s.lset(ax + 5, ay + 1, grey[2])                                   # a toe cap catching the light
-    for hip, knee, ank in ((hl, p['kl'], p['al']), (hr, p['kr'], p['ar'])):
-        s.part(m_capsule(knee[0], knee[1], 3.6, ank[0], ank[1], 2.7), red, red[0])
-        mid = ((knee[0] + ank[0]) / 2, (knee[1] + ank[1]) / 2 - 1)
+
+    def leg(hip, knee, ank, heel):
+        ax, ay = ank
+        if heel:                                                   # up on the toe, pivoting
+            s.part(m_capsule(ax + 5, ay + 1.5, 2.0, ax - 2, ay - 1.5, 2.4), shoe, INK)
+        else:
+            s.part(m_ellipse(ax + 1.5, ay + 2, 5.8, 2.5), shoe, INK)
+            s.lset(ax + 5, ay + 1, grey[2])
+        s.part(m_capsule(knee[0], knee[1], 3.6, ax, ay, 2.7), red, red[0])
+        mid = ((knee[0] + ax) / 2, (knee[1] + ay) / 2 - 1)
         s.part(m_capsule(knee[0], knee[1], 4.0, mid[0], mid[1], 3.3), grey, grey[0])
         s.part(m_capsule(hip[0], hip[1], 5.3, knee[0], knee[1], 4.1), grey, grey[0])
-        s.line(hip[0] + s.ox, hip[1] + s.oy + 2, knee[0] + s.ox, knee[1] + s.oy, red[1])       # the pants stripe
+        s.line(hip[0] + s.ox, hip[1] + s.oy + 2, knee[0] + s.ox, knee[1] + s.oy, red[1])
         s.line(knee[0] + s.ox, knee[1] + s.oy, mid[0] + s.ox, mid[1] + s.oy, red[1])
-        s.lset(knee[0] - 3, knee[1] - 1, grey[0]); s.lset(knee[0] - 2, knee[1], grey[0])       # a fold behind the knee
-    s.part(m_poly([(-8, -54), (-2, -57), (7, -55), (9, -44), (7, -30), (-7, -30), (-9, -42)]), grey, grey[0])
-    s.part(m_ellipse(-0.5, -53, 8.6, 3.6), grey, None)
-    s.part(m_poly([(-7.5, -33), (7.5, -33), (7.5, -30), (-7.5, -30)]), INK, None)
-    s.lset(5, -32, P['score']); s.lset(6, -32, P['score'])                 # the buckle
-    s.lstamp(["RRR", "..R", ".R.", ".R.", ".R."], {'R': red[1]}, -6, -43)   # his number
-    s.lset(1, -55, red[1]); s.lset(2, -54, red[1]); s.lset(3, -55, red[1])  # the undershirt at the collar
-    far = m_capsule(p['far'][0], p['far'][1], 3.0, p['hd'][0], p['hd'][1] + 3, 2.2)
-    s.part(far, [grey[0], grey[0], grey[1]], grey[0])
-    # the bat: knob, pine tar up the handle, a lit barrel
+        s.lset(knee[0] - 3, knee[1] - 1, grey[0]); s.lset(knee[0] - 2, knee[1], grey[0])
+
+    leg(p['hipL'], p['kL'], p['aL'], False)                        # the front leg is the far one
+    leg(p['hipR'], p['kR'], p['aR'], p['heelR'])
+    # the hips: a seat across both thigh tops so the two legs read as one pelvis
+    s.part(m_ellipse((p['hipL'][0] + p['hipR'][0]) / 2, (p['hipL'][1] + p['hipR'][1]) / 2 + 1, 8.0, 3.4), grey, grey[0])
+
+    def sleeve(a, b, r0=3.4, r1=2.8):
+        s.part(m_capsule(a[0], a[1], r0, b[0], b[1], r1), red, red[0])
+
+    def forearm(a, b):
+        s.part(m_capsule(a[0], a[1], 2.8, b[0], b[1] + 1, 2.3), skin, skin[0])
+        wx, wy = a[0] + (b[0] - a[0]) * 0.72, a[1] + (b[1] + 1 - a[1]) * 0.72
+        s.part(m_ellipse(wx, wy, 2.4, 1.6), red[1], None)
+
+    if p['far_arm'] == 'hidden_reach':                              # behind the torso, only the tip shows
+        sleeve(p['shL'], p['hd'])
+    s.part(m_poly(p['torso']), grey, grey[0])
+    s.part(m_ellipse(0.5, -53, 9.0, 3.8), grey, None)
+    s.part(m_poly([(-7.5, -33), (8.5, -33), (8.5, -30), (-7.5, -30)]), INK, None)
+    s.lset(p['buckle'][0], p['buckle'][1], P['score']); s.lset(p['buckle'][0] + 1, p['buckle'][1], P['score'])
+    s.lstamp(["RRR", "..R", ".R.", ".R.", ".R."], {'R': red[1]}, p['number'][0], p['number'][1])
+    if p['far_arm'] == 'full' and p['elL']:
+        sleeve(p['shL'], p['elL'], 3.2, 2.7); forearm(p['elL'], (p['hd'][0], p['hd'][1] - 2))
+    else:                                                          # just the shoulder cap of the front arm
+        s.part(m_ellipse(p['shL'][0], p['shL'][1] + 1, 3.4, 3.0), red, red[0])
+
     hx, hy, tx, ty = p['hd'][0], p['hd'][1] + 2, p['tip'][0], p['tip'][1]
-    V.bat_part(s, hx, hy, tx, ty, dict(bat=wood, line_bat=wood[0]), 1.0, 2.6)
-    for u in (0.12, 0.16, 0.2, 0.24, 0.28, 0.32):
-        bx_, by_ = hx + (tx - hx) * u, hy + (ty - hy) * u
-        s.lset(round(bx_ - .5), round(by_ - .5), wood[0]); s.lset(round(bx_ + .5), round(by_ - .5), wood[0])
+
+    def bat():
+        V.bat_part(s, hx, hy, tx, ty, dict(bat=wood, line_bat=wood[0]), 1.0, 2.6)
+        for u in (0.12, 0.16, 0.2, 0.24, 0.28, 0.32):
+            bx_, by_ = hx + (tx - hx) * u, hy + (ty - hy) * u
+            s.lset(round(bx_ - .5), round(by_ - .5), wood[0]); s.lset(round(bx_ + .5), round(by_ - .5), wood[0])
+
+    if not p['bat_front']:
+        bat()
+
+    # the head from behind and to the right: the nape, the helmet with its brim toward the
+    # pitcher (up and right), his right ear and a sliver of cheek on the near side
     s.part(m_poly([(0, -58), (5, -58), (5, -54), (0, -54)]), skin, None)
     s.part(m_ellipse(3, -61.5, 5.2, 5.6), skin, skin[0])
-    s.lset(-1, -57, look['hair']); s.lset(0, -57, look['hair']); s.lset(-1, -56, look['hair'])
-    helmet = [q for q in m_ellipse(2, -63, 7, 6) if q[1] < -61]
-    s.part(helmet, red, red[0])
-    s.part(m_poly([(-4, -62), (1, -62), (1, -56), (-3, -56), (-4, -58)]), red, red[0])
-    s.part(m_poly([(7, -63), (13, -62), (13, -61), (7, -61)]), red[1], None)
-    s.lset(-2, -60, red[0]); s.lset(-1, -60, red[0]); s.lset(-2, -59, red[0]); s.lset(-1, -59, INK)   # the ear hole
-    s.lset(-2, -67, look['skin'][3]); s.lset(-3, -66, look['skin'][3]); s.lset(-1, -68, look['skin'][3])  # the glint
-    s.lstamp(["DDDD", ".K..", "...L", "..D."], {'D': skin[0], 'K': INK, 'L': skin[3]}, 5, -61)
-    # the near arm: sleeve, a cuff, forearm, a wrist strap and the batting glove
-    s.part(m_capsule(p['sh'][0], p['sh'][1], 3.4, p['el'][0], p['el'][1], 2.8), red, red[0])
-    s.part(m_capsule(p['el'][0], p['el'][1], 2.8, p['hd'][0], p['hd'][1] + 1, 2.3), skin, skin[0])
-    wx, wy = p['el'][0] + (p['hd'][0] - p['el'][0]) * 0.72, p['el'][1] + (p['hd'][1] + 1 - p['el'][1]) * 0.72
-    s.part(m_ellipse(wx, wy, 2.4, 1.6), red[1], None)
+    s.lset(0, -57, look['hair']); s.lset(1, -57, look['hair']); s.lset(0, -56, look['hair']); s.lset(2, -57, look['hair'])
+    s.part([q for q in m_ellipse(2, -63, 7, 6.2) if q[1] < -59], red, red[0])
+    s.part(m_poly([(-4, -61), (1, -61), (1, -57), (-3, -57), (-4, -59)]), red, red[0])   # the helmet's back-left edge
+    s.part(m_poly([(5, -61), (10, -61), (10, -57), (7, -57)]), red, red[0])            # ...and its right side, over the ear
+    s.part(m_poly([(7, -67), (14, -66), (14, -64), (8, -64)]), red[1], None)             # the brim, toward the pitcher
+    s.lset(7, -59, skin[1]); s.lset(8, -59, skin[0]); s.lset(7, -58, skin[1])             # his right ear, and the cheek below it
+    s.lset(9, -58, skin[2]); s.lset(9, -57, skin[1])
+    s.lset(-2, -67, skin[3]); s.lset(-3, -66, skin[3]); s.lset(-1, -68, skin[3])           # the glint
+    if p['bat_front']:
+        bat()
+
+    sleeve(p['shR'], p['elR'])
+    forearm(p['elR'], p['hd'])
     s.part(m_ellipse(p['hd'][0], p['hd'][1], 2.8, 3.3), look['glove'], look['glove'][0])
     return s
 
@@ -396,7 +469,9 @@ def towers(c, look, slots=(62, 96, 224, 258), foot=96, height=34):
                     c.px(bx + i * 4 + 1, by + j * 4 + 1, P['chalk'])
 
 
-def cast(c, sp, fx, fy, look, table):
+def cast(c, sp, fx, fy, look, table, ground=None):
+    """`ground` = (x0, x1, rise): the ground under the figure rises `rise` rows from column x0 to
+    column x1, so a front foot drawn higher on the screen is read as deeper, not as in the air."""
     hit = set()
     for k, rise, soft in look['shadows']:
         for y in range(sp.h):
@@ -404,7 +479,12 @@ def cast(c, sp, fx, fy, look, table):
                 if sp.p[y][x] is None:
                     continue
                 lx, hgt = x - sp.ox, sp.oy - y
-                sx, sy = int(fx + lx - hgt * k), int(fy - hgt * rise)
+                g = 0
+                if ground:
+                    x0, x1, gr = ground
+                    g = gr * max(0, min(1, (lx - x0) / (x1 - x0)))
+                    hgt = max(0, hgt - g)
+                sx, sy = int(fx + lx - hgt * k), int(fy - g - hgt * rise)
                 if hgt > soft and ((sx + sy) & 1):
                     continue
                 hit.add((sx, sy))
@@ -520,10 +600,10 @@ def at_bat(look, beat='pitch'):
     table = {P['grassA']: P['shade'], P['grassB']: P['shade'], d_m: d_d, d_d: d_dd, d_l: d_d}
     ps, bs = pitcher(2, look), batter(1 if beat == 'contact' else 0, look)
     cast(c, ps, 160, 117, dict(look, shadows=[(k, r_, 14) for k, r_, _ in look['shadows']]), table)
-    cast(c, bs, 104, 222, look, table)
+    cast(c, bs, 106, 214, look, table, ground=batter_ground(1 if beat == 'contact' else 0))
     c.blit(ps, 160 - ps.ox, 117 - ps.oy)
     NOW.zone(c, P['chalk'])
-    c.blit(bs, 104 - bs.ox, 222 - bs.oy)
+    c.blit(bs, 106 - bs.ox, 214 - bs.oy)
     if beat == 'contact':
         contact_fx(c, look)
     else:
@@ -918,10 +998,10 @@ def at_bat(look, beat='pitch', tier='full', park=None, feet=None, pole=28, near=
     table = {P['grassA']: P['shade'], P['grassB']: P['shade'], d_m: d_d, d_d: d_dd, d_l: d_d}
     ps, bs = pitcher(2, look), batter(1 if beat == 'contact' else 0, look)
     cast(c, ps, 160, 117, dict(look, shadows=[(k, r_, 14) for k, r_, _ in look['shadows']]), table)
-    cast(c, bs, 104, 222, look, table)
+    cast(c, bs, 106, 214, look, table, ground=batter_ground(1 if beat == 'contact' else 0))
     c.blit(ps, 160 - ps.ox, 117 - ps.oy)
     NOW.zone(c, P['chalk'])
-    c.blit(bs, 104 - bs.ox, 222 - bs.oy)
+    c.blit(bs, 106 - bs.ox, 214 - bs.oy)
     if beat == 'contact':
         contact_fx(c, look)
     else:
