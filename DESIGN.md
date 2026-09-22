@@ -61,7 +61,7 @@ games) were bolt-ons inside full sims. The bare loop is open.
 |---|---|---|---|---|
 | 1 | **windup** | at-bat | 0.50 s, held for the organ if one is playing (`Timings.maxMusicHold`, ≤ 2.5 s more, §11, #46) | pitcher's three frames. A slice made now is ignored, not punished. |
 | 2 | **pitch** | at-bat | `0.60 × 90/speed` s (0.55 – 0.73) | ball travels release → plate, radius 1 → 4 px. Player slices. |
-| 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
+| 3 | **contact** | at-bat | `contactHoldWeak` (0.22 s) … `contactHoldBarrel` (0.50 s), linear on the swing's `SliceCrossing.quality` (`DerbyMachine.contactHoldNow`) | ball frozen at the crossing, slash through it along the swing, the batter's contact frame lies along the swing too (Dwight, 2026-09-22), speed lines, `SWING 30  POWER 84`. On a barrel (`StatRules.isBarrel`, `DerbyMachine.isBarrelNow`) `BARREL` is called in the 5×7 face next to the readout, static (no blink — the freeze is too short). No screen shake, no camera move. One white frame at start. |
 | — | cut | | 1 frame | white frame, hard cut. |
 | 4 | **flight** | wide, then close | flight ÷ 2 (≈ 2–3 s) | ball plays back at 2×. Readouts: exit velo, angle, pitch type, power. Distance ticks under the ball. A ball that will get within `closeReachFeet` (60) of the wall cuts to the close camera when it is `closeLeadFeet` (100) short of it and stays there until it lands; anything else is wide throughout. `DerbyMachine.flightCamera`, a pure function of the flight and the playback index. |
 | 5 | **result** | wide | 1.30 s | landing number big (5×7 face). `HR` flashes on a home run. `OFF THE WALL` on a wall hit. On a home run, which one of the park's count it was: `HR 2 OF 3`, or `PARK CLEARED` on the one that makes it (§10, #40). `NEW RECORD` and the record's name when a career best just fell, with the landing number flashing `score`/`chalk` (§10, #41). The park changes at the **end** of this hold, and only after the clearing home run. Then hard cut back to 1. |
@@ -104,8 +104,9 @@ Three pitch types, one table row each. No art cost.
 
 - **Strike probability 0.65.** Strikes land 4 px inside the zone; balls land 6–16 px outside one
   of its four sides.
-- **Zone** (at-bat design units): `x 150, y 136, w 40, h 50`. Oversized for thumbs; a true zone
-  at this scale is ~24×32. Drawn as a dotted chalk rectangle.
+- **Zone** (at-bat design units): `x 140, y 136, w 40, h 50`. Oversized for thumbs; a true zone
+  at this scale is ~24×32. Drawn as a dotted chalk rectangle. It is centred on the plate (moved
+  from x 150 on 2026-09-22, Dwight, so the box and the pitcher read as one column).
 - **Release point** `(166, 108)`. Ball path at progress `p` (0 release, 1 plate, runs to 1.15):
 
   ```
@@ -178,8 +179,9 @@ This is Fruit Ninja's lesson: a miss has to be legible on the object, not on a m
 wall band `96–104` with the scoreboard `(128, 80, 64×16)` showing wall distance and park number;
 grass from 104 with 6-row stripes every 12; foul lines from `(160,196)` to `(40,104)` and
 `(280,104)`; mound dirt `(148,116, 24×5)`; plate dirt `(120,184, 80×14)`, plate `(152,190, 16×4)`.
-Pitcher at `(160,117)` foot point, 12×24. Batter foot point `(104,222)`, rear three-quarter,
-32×56. Zone and release point per §4. `PARK n` top-left, pitch speed bottom-left.
+Pitcher at `(160,117)` foot point, 12×24. Batter foot point `(106,214)`, his back foot's sole,
+standing inside his box. The rig is a three-quarter rear view, from a 128×104 sprite. Zone and
+release point per §4. `PARK n` top-left, pitch speed bottom-left.
 
 **Wide view (320×224).** Side view, batter at x = 0 ft, wall to the right. The field gets the
 screen: each park is framed so its wall sits two thirds of the way across, and what is behind the
@@ -215,7 +217,7 @@ The batter is a stamp, not scaled art, and is off screen here.
   | Asset | View | Size | Frames |
   |---|---|---|---|
   | Pitcher | at-bat | 12×24 | set, leg kick, release |
-  | Batter, rear ¾ | at-bat | 32×56 | stance, contact, follow-through |
+  | Batter, rear ¾ | at-bat | 128×104 sprite, about 34×92 painted | stance, swing, contact by slice, finish by slice |
   | Batter, side | wide / close | to the field's scale: 6.5 ft, never under 6 px | stance, contact, follow-through. He is the yardstick for the wall (most real walls are a man tall or more); a 42 px batter was 57 ft at the wide scale and made every fence look knee-high (2026-09-19) |
   | Ball | both | 2, 4, 6, 8 px | red laces (`cap`, borrowed by role) from 4 px up: one pixel, then a three-pixel and a five-pixel ")" seam. One highlight pixel at 6 px and up. No rotation (2026-09-19, `PixelCanvas.baseball`) |
   | Zone, plate, mound, wall, scoreboard | — | rects | static |
@@ -472,6 +474,8 @@ gameplay effect, living beside the scene that draws them. Defaults are the proto
 | `wordY` / `wordScale` / `inset` / `pad` / `tapSlack` | `ReplayScreenLayout` (App) | 8 / 1 / 8 / 12 / 8 | where `SHARE` sits on the replay screen and its grown tap target (§19, #42) |
 | `canvasWidth`×`canvasHeight` / `scale` / `framesPerSecond` / `framesPerYield` | `ReplayClipRules` (App) | 320×224 / 4× (→ 1280×896) / 60 / 1 | the clip's fixed frame whatever the phone is, its whole-number upscale, and the encoder's frame rate and yield cadence — the export measurement vindicates `framesPerYield` at 1 (§19, #42) |
 | `bitrate` / `maxSeconds` / `crop` | `ReplayClipRules` (App) | 12 Mbit/s / 20 s / `.landscape` | encoder quality, a stop rather than a length, and v1's only crop (§19) |
+| `swingAngleStep` | `PeopleRules` (App) | 5° | one cached contact and finish stamp per step of slice angle, per phase |
+| `swingFrameAfterPixels` | `PeopleRules` (App) | 8 px | how far the finger moves in a pitch before the swing frame shows |
 
 The prototype measured ~60 % of taps as hits with a mouse. Expect thumbs to be lower. If it feels
 like a cheat on device, the levers are the miss margin and fastball speed, not the zone.
@@ -1606,10 +1610,10 @@ The names in the last column are functions in `prototypes/04-golden-hour/`.
 | Dirt | ellipses with a light edge on the side of the light and a dark edge on the other side | `golden.at_bat` |
 | Scoreboard, its flags, the progress lamps | a frame with one lit edge on the side of the light, and a dark face. The text, the flags and the lamps of §10 do not change | `golden.at_bat` |
 | Foul poles | two columns: lit and shaded. In the flight camera the pole has a mesh wing | `side.foul_pole` |
-| Batter at bat | a rig of capsules, ellipses and polygons with four tones from one light. Details: a number, a stripe on each leg, a buckle, a batting glove, a wrist strap, pine tar, an ear hole, a glint, a face | `golden.batter` |
+| Batter at bat | a rig of capsules, ellipses and polygons with four tones from one light. Details: a number, a stripe on each leg, a buckle, a batting glove, a wrist strap, pine tar, a glint, his right ear — no ear hole, no face. Three-quarter rear view from 2026-09-22 (Dwight) | `golden.batter` |
 | Pitcher | 11×20 stamps, three frames. Flip the light side of the stamp when the light is on the right | `golden.pitcher`, `golden.PITCH` |
 | Batter in the flight camera | a 7×8 stamp, never smaller | `side.TINY_A` |
-| Cast shadows | project each person onto the ground, away from the light. Make each ground pixel darker one time only. Dither the far end. With the lamps on, each person has two short shadows | `golden.cast` |
+| Cast shadows | project each person onto the ground, away from the light. Make each ground pixel darker one time only. Dither the far end. With the lamps on, each person has two short shadows. The batter's shadow uses a ground line that rises from his back foot to his front foot: the front foot is deeper, not higher | `golden.cast` |
 | Ball | `chalk`, the red laces, one highlight pixel and three underside pixels. In the flight camera the ball has a shadow on the ground in each framing | `golden.at_bat`, `golden.flight` |
 | Trail | `chalk` from the bat to the ball. The six newest dots are 2×2. The oldest dots are one in two. The colour never changes with age | `side.trail` |
 | Readouts | the 3×5 and 5×7 faces with a one-pixel `ink` shadow, down and right. The positions of §8 do not change | `engine.t3`, `golden.t5` |

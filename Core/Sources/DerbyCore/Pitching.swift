@@ -59,8 +59,9 @@ public struct BallSample: Equatable {
 }
 
 public struct PitchingRules: Equatable {
-    /// Oversized for thumbs. The real zone would be about 24×32 at this scale.
-    public var strikeZone = Rect(x: 150, y: 136, width: 40, height: 50)
+    /// Oversized for thumbs — the real zone would still be about 24×32 at this scale — and
+    /// centred on the plate, x 140–180 (Dwight, 2026-09-22).
+    public var strikeZone = Rect(x: 140, y: 136, width: 40, height: 50)
     public var releasePoint = Point(x: 166, y: 108)
     /// The pitch table. The minors throw a shorter, slower one (`Ladder`).
     public var types: [PitchType] = PitchType.all

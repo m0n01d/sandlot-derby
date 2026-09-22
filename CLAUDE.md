@@ -76,7 +76,9 @@ routing, PR screenshot and grooming rules do.
   checkerboard grass, the low sun/night pool/mist, the dirt's ellipses and specks, and the
   scoreboard frame; `AtBatArt`, the static functions that paint them off `Look` and `Scenery`
   into the cached `behind`/`front` layers, replacing §17's low horizon band) and `PeopleArt.swift`
-  (`PeopleRules`, `BatterPose` — nine points with the rest hung off them; `PeopleArt`, the
+  (`PeopleRules`, `BatterPose` — feet, knees, hips, shoulders, elbows, hands and bat tip of a
+  three-quarter rear view, with `BatterFrame` picking stance, swing, or a contact or finish
+  quantised to the slice angle; `PeopleArt`, the
   batter's rig and the pitcher's three stamps, mirrored rather than re-posed when the light is on
   the right, plus the cast-shadow shape worked out once per pose and phase into a `ShadowStamp`
   and kept in `ShadowStampCache` beside `ShadedSpriteCache`'s own). `Backdrop.swift`'s
