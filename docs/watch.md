@@ -17,15 +17,17 @@ a fourth framing, not a second game.
 **Survives unchanged:** all of `DerbyCore`. The five beats and a miss, pitch types, flight physics,
 seeded parks, the ladder and the minors, the tally, the streak, miss markers, swing guide and
 timing ring, night parks, the three cameras and the hard cuts between them. The laced ball, the
-streak's fireworks, the stands that swallow a home run and the rest of §17 as it gets built: all
-of it arrives through the same painters. The one purchase and its ceiling (§16) apply on the wrist
-exactly as on the phone (§7 below).
+streak's fireworks, the stands that swallow a home run and the rest of §17 as it gets built: ~~all
+of it arrives through the same painters.~~ All of it arrives in the blocky art of 2026-09-21,
+through the watch's own painters (§2, "The art"). Dwight decided that on 2026-09-25. The one
+purchase and its ceiling (§16) apply on the wrist exactly as on the phone (§7 below).
 
 **Cut or shrunk:**
 
 | Phone | Watch |
 | --- | --- |
 | Full 320-wide at-bat frame | The centre column of it, 1:1 (§3 below) |
+| The §20 look: six skies by the clock, a four-tone ramp on every person, the three-quarter batter (#62), the mown field | The blocky art from before §20, frozen at `4a6d581` (§2, "The art"). Day or night by the lamps, and nothing between |
 | Pitch speed readout in the at-bat view | Gone; it is already on the wide view |
 | `t3` 3×5 face | Not used. `t5` 5×7 is the smallest face (a `t3` glyph would be 1.1 mm tall) |
 | Stats board, dozens of lines | Same stats, eight to a page, Crown flips pages by hard cut |
@@ -86,6 +88,47 @@ pixels, a phone-only refactor:
 - Bonus: painters that run headless mean `swift test` can write golden-frame PNGs. That is the
   cheap way to satisfy the PR screenshot rule for the watch, and for the phone.
 
+### The art: the blocky set, frozen at `4a6d581`
+
+The phone's art grew after this spec was written. §20 (2026-09-21) gave it six skies from the
+clock, a four-tone ramp on every person, hills and trees on the horizon, a checkerboard field and
+a dithered mist. PR #62 (2026-09-22) replaced the flat batter with a three-quarter rig that swings
+along the slice. On 2026-09-25 Dwight decided that the watch takes none of it. The watch draws the
+earlier blocky art.
+
+The reason is the glass. A unit is about 0.225 mm on the Ultra (§3). A four-tone ramp across a
+2.7 mm pitcher is noise, and a Bayer dither on the sky is a moiré at that pitch. The blocky art is
+flat fills and one outline, and it reads at that size. It is also the cheaper frame. The phone's
+at-bat `front` layer cost 12 ms a frame in Debug before its fast path. The watch has a smaller
+budget than the phone.
+
+Where the art lives: commit `4a6d581`, the merge of PR #54 on 2026-09-21. It is the last commit
+of `main` before `Look.swift` and `ShadedSprite.swift` landed in PR #55. It has the phase clock in
+`DerbyCore` (§20 step 1) and none of the shaded art. The drawing is in
+`App/Sources/AtBatScene.swift`, `WideScene.swift`, `Backdrop.swift`, `Clouds.swift`,
+`SkyArt.swift` and `PixelCanvas.swift` at that commit. Colours come from
+`Palette.scheme(lampsOn:)`, a two-way switch. The shots in `docs/shots/clock/` at the same commit
+show the art by day and at night:
+
+```sh
+git show 4a6d581:docs/shots/clock/atbat-midday.png > /tmp/old-atbat.png
+```
+
+What this changes in the plan:
+
+- The watch's painters are a port from that commit, not the phone's painters moved. They live in
+  `Watch/`, or in `DerbyStage` under their own names, and they never call `Look`, `ShadedSprite`,
+  `AtBatArt`, `PeopleArt` or `FlightArt`.
+- Shared as before: `DerbyCore`, `PixelCanvas` and its `origin`, the sixteen colours of `Palette`,
+  the `t5` face, `Synth`, `SliceTracker`, `GameDirector`, `Fireworks`, `SkyLife`, `Scenery` and
+  `RareEvents`.
+- The clock still runs. `SunClock` gives the phase, and the watch reads only `lampsOn` from it,
+  the way `4a6d581` does. The six looks are phone only.
+- W1 shrinks (§9). The watch needs `SliceTracker`, `GameDirector` and `PixelCanvas.origin` out of
+  the scenes. Moving the phone's painters buys golden frames for the phone and can wait.
+- A port is a copy. When the phone's art changes again, the watch does not follow, and nothing in
+  `Look`, `PeopleArt` or `FlightArt` changes for the watch.
+
 ### Changes to `DerbyCore`
 
 1. `Package.swift`: add `.watchOS(.v10)` to `platforms`.
@@ -140,6 +183,9 @@ falls inside, in watch coordinates:
 | Plate | `(152, 190, 16×4)` | `(60, 145)` |
 | Batter, the three-quarter rig with his back foot on `(106, 214)` (2026-09-22) | about x 84–124 | loses 8 columns left. Re-derive this row when the watch build starts |
 
+- With the blocky art (§2), the batter is the 32×56 sprite on `(104, 222)` again, x 88–120: 4
+  columns lost on the left and the shins under the corner, as the row read before 2026-09-22. The
+  three-quarter row above is the phone's. Where the zone goes is open question 6.
 - The crop stops at 212, not 224, on purpose: the bottom 12 rows are the batter's feet, which the
   round corner eats anyway, and the trade buys 12 rows of sky for the HUD. It also puts the zone at
   70 % of the way down the glass, where the slicing hand is already, so the hand covers less of
@@ -302,6 +348,9 @@ framesPerSecond) · `WatchHaptics` (pitchTick, the cue table).
   **Output: the guessed numbers in this file replaced with measured ones.**
 - **W1 — painters out of scenes.** Phone only, no behaviour change. Proof: before/after
   screenshots of both cameras are pixel-identical, `swift test` green in `Core/` and `Stage/`.
+  Since the art decision of 2026-09-25 (§2, "The art"), W1 must move `SliceTracker`,
+  `GameDirector` and `PixelCanvas.origin`. The painters can stay in the scenes until the phone
+  wants golden frames.
 - **W2 — at-bat on the wrist.** Crop, slice, pitch tick, contact haptic, miss markers.
   **Go/no-go:** twenty pitches on the wrist. If the slice is not fun, stop here or take the tap
   fallback.
@@ -331,6 +380,11 @@ unchanged** (520 px/s, 9 px), so that gate is met: W2 now waits only on W1 and t
 5. **Swing the arm?** CoreMotion could read a real swing. You cannot watch a pitch on a wrist you
    are swinging, and it breaks pillar 1. Parked, not rejected: it is the only thing a watch can do
    that a phone cannot.
+6. **The 2026-09-22 layout with the 2026-09-21 art.** PR #62 moved the zone onto the plate, from
+   x 150 to 140, and put the batter in his box, both for the new rig. The watch takes the old
+   sprite (§2, "The art"). The zone on the plate is a gameplay fix, not art, so the default is the
+   new zone with the old batter. At W2, make sure that the old sprite's bat still meets the zone
+   on the glass.
 
 ## 11. Non-goals (watch)
 
