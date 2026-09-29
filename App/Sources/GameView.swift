@@ -2,7 +2,7 @@ import SwiftUI
 import SpriteKit
 import UIKit
 
-/// Wraps a plain `SKView`, not SwiftUI's `SpriteView` — `GameController` needs to call
+/// Wraps a plain `SKView`, not SwiftUI's `SpriteView` — `SpriteKitHost` needs to call
 /// `presentScene(_:)` directly so the camera cut is a genuine hard cut with no transition,
 /// which `SpriteView` does not expose.
 struct GameView: UIViewRepresentable {
@@ -17,7 +17,7 @@ struct GameView: UIViewRepresentable {
         view.showsNodeCount = true
         #endif
         view.backgroundColor = .black
-        controller.attach(to: view)
+        controller.attach(to: SpriteKitHost(view: view, painters: controller.painters), in: view)
         return view
     }
 

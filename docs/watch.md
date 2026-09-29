@@ -63,9 +63,11 @@ an always-on idle frame, optionally a complication.
 
 ### Code layout: painters out of scenes
 
-Today drawing and touch handling live inside `AtBatScene`/`WideScene`, which are `SKScene`
-subclasses that import UIKit. The watch needs the drawing and none of the rest. So before any watch
-pixels, a phone-only refactor:
+Drawing and touch handling used to live inside `AtBatScene`/`WideScene` as `SKScene` subclasses
+that imported UIKit. #35 made them `Painter`s — `render(into:)` plus touches in design pixels, no
+SpriteKit — with the texture, the frame clock and the touches behind a `DerbyHost` protocol whose
+one implementation is `SpriteKitHost`. The watch needs the drawing and none of the rest. So before
+any watch pixels, the rest of a phone-only refactor:
 
 - New package **`Stage/` → `DerbyStage`**, depends on `DerbyCore`, Foundation only, builds on
   Linux. It takes `PixelCanvas`, `Palette`, the fonts and sprites, `Synth`, `SaveState`, and:

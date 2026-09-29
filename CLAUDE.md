@@ -44,8 +44,14 @@ routing, PR screenshot and grooming rules do.
   `RareEvents.detect`/`FireworksShow` take `lampsOn`.
 - `App/` — the iOS app. The Xcode project is generated and git-ignored:
   `cd App && xcodegen generate && open SandlotDerby.xcodeproj`. SwiftUI `ContentView` → `SKView` →
-  scenes (`AtBatScene`, `WideScene`, `ContractScene`, `WarmUpCardScene`) driven by `DerbyMachine`
-  through `GameController`. Scenes are renderers and gesture sources only; they own no game state.
+  `SpriteKitHost` → painters (`AtBatScene`, `WideScene`, `ContractScene`, `WarmUpCardScene`, …)
+  driven by `DerbyMachine` through `GameController`. The painters keep their `…Scene` names but
+  are plain `Painter` subclasses with no SpriteKit in them (#35): `render(into: PixelCanvas)` and
+  `touchBegan/Moved/Ended/Cancelled` in design pixels, y down. The texture, the blit, the frame
+  clock (`update(_:)` → `GameController.tick`) and the touches live behind the `DerbyHost`
+  protocol in `SpriteKitHost.swift`, one `SKScene` per painter so a cut is still
+  `presentScene(_:)` with no transition. Painters are renderers and gesture sources only; they
+  own no game state.
   Both play/at-bat scenes draw a whole frame into a software `PixelCanvas` (the prototype's
   `px/rect/line/disc/t3/t5`) shown through one nearest-filtered `SKMutableTexture`. DEBUG only:
   space bar is the dev slice; see "DEBUG launch arguments" below for the full set. Wave 1 also

@@ -1,4 +1,5 @@
-import SpriteKit
+import CoreGraphics
+import Foundation
 
 /// Where the contract card's lines sit, in design units measured from the centre of the canvas
 /// (DESIGN.md §8, §16). The canvas is at least 320 wide, so the card is centred rather than
@@ -62,7 +63,7 @@ struct ContractCardLayout {
 ///
 /// Not a menu: there is nothing to scroll, nothing to choose and no timer. The game stands still
 /// behind it, exactly as it does behind the stats board.
-final class ContractScene: CanvasScene {
+final class ContractScene: Painter {
     override var ticksMachine: Bool { false }
 
     var layout = ContractCardLayout.standard
@@ -189,21 +190,15 @@ final class ContractScene: CanvasScene {
 
     // MARK: - Input: one slice signs, one tap declines
 
-    private func designPoint(for touch: UITouch) -> CGPoint {
-        let p = touch.location(in: self)
-        return CGPoint(x: p.x, y: size.height - p.y)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragStart = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        dragStart = point
         dragLast = dragStart
         signedThisDrag = false
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let start = dragStart, let last = dragLast else { return }
-        let p = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        guard let start = dragStart, let last = dragLast else { return }
+        let p = point
         dragLast = p
         guard !signedThisDrag, controller?.store.phase != .purchasing else { return }
         guard hypot(p.x - start.x, p.y - start.y) >= layout.minimumSliceLength else { return }
@@ -212,7 +207,7 @@ final class ContractScene: CanvasScene {
         controller?.signContract()
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         defer { dragStart = nil; dragLast = nil }
         guard let start = dragStart, !signedThisDrag else { return }
         let end = dragLast ?? start
@@ -228,7 +223,7 @@ final class ContractScene: CanvasScene {
         controller?.declineContract()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         dragStart = nil
         dragLast = nil
     }

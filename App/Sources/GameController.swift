@@ -1,8 +1,8 @@
-import SpriteKit
+import UIKit
 import DerbyCore
 
-/// Owns the one `DerbyMachine` and both scenes. Ticks the machine once per frame and turns its
-/// `Transition`s into `SKView.presentScene(_:)` calls — the hard camera cut. Scenes are pure
+/// Owns the one `DerbyMachine` and every painter. Ticks the machine once per frame and turns its
+/// `Transition`s into `DerbyHost.present(_:)` calls — the hard camera cut. Painters are pure
 /// renderers and gesture sources; all game state lives here, in `machine`.
 @MainActor
 final class GameController {
@@ -15,7 +15,10 @@ final class GameController {
     let replayScene: ReplayScene
     /// The one purchase (DESIGN.md §16). Read by the card and the stats board for the price.
     let store = Store()
-    private weak var view: SKView?
+    /// What puts the painters on the glass (#35). Nil until `attach(to:in:)`.
+    private var host: DerbyHost?
+    /// The view the share sheets hang from. UIKit's, not the host's: a sheet is not a frame.
+    private weak var view: UIView?
 
     /// The card is offered automatically exactly once per career; after that it is a row on the
     /// stats board and nothing else. Persisted, so declining survives a relaunch.
@@ -182,14 +185,14 @@ final class GameController {
     private func entitlementChanged() {
         applyCeiling()
         persist()
-        if isEntitled, view?.scene === contractScene { leaveContract(flash: true) }
+        if isEntitled, host?.presented === contractScene { leaveContract(flash: true) }
     }
 
     /// Hard cut to the card. The machine stands still behind it (`ContractScene.ticksMachine`).
     func showContract() {
-        guard let view, view.scene !== contractScene else { return }
+        guard let host, host.presented !== contractScene else { return }
         contractScene.reset()
-        view.presentScene(contractScene)
+        host.present(contractScene)
     }
 
     /// The home run that cleared Triple-A, for a player who has not bought it. Offered once per
@@ -217,9 +220,9 @@ final class GameController {
 
     /// `flash` is the one white frame that a signature earns (§16); a decline is a plain cut.
     private func leaveContract(flash: Bool) {
-        guard let view, view.scene === contractScene else { return }
+        guard let host, host.presented === contractScene else { return }
         atBatScene.flashNextFrame = flash
-        view.presentScene(atBatScene)
+        host.present(atBatScene)
     }
 
     #if DEBUG
@@ -294,14 +297,14 @@ final class GameController {
     }
 
     func showWarmUpCard() {
-        guard let view, view.scene !== warmUpCardScene, finishedWarmUp != nil else { return }
-        view.presentScene(warmUpCardScene)
+        guard let host, host.presented !== warmUpCardScene, finishedWarmUp != nil else { return }
+        host.present(warmUpCardScene)
     }
 
     /// Any slice or tap leaves, by hard cut to the career windup the machine is already in.
     func leaveWarmUpCard() {
-        guard let view, view.scene === warmUpCardScene else { return }
-        view.presentScene(atBatScene)
+        guard let host, host.presented === warmUpCardScene else { return }
+        host.present(atBatScene)
     }
 
     /// `SHARE`: the system sheet with §18's text. The string itself is built in Core, so what
@@ -328,31 +331,38 @@ final class GameController {
     /// than a no-op: nothing would tick it down while the board is open, so the very next windup
     /// after `hideStats()` cuts the organ dead would sit through a silent hold before throwing.
     func showStats() {
-        guard let view, view.scene !== statsScene else { return }
-        view.presentScene(statsScene)
+        guard let host, host.presented !== statsScene else { return }
+        host.present(statsScene)
         if machine.hasOrgan { sound.startStatsOrgan() }
     }
 
     /// The board is only ever opened from the at-bat view, so that is where it returns. The
     /// organ, if it was playing, stops dead — same as when the pitch is thrown.
     func hideStats() {
-        guard let view, view.scene === statsScene else { return }
-        view.presentScene(atBatScene)
+        guard let host, host.presented === statsScene else { return }
+        host.present(atBatScene)
         sound.stopOrgan()
     }
 
-    /// Called once, from `GameView.makeUIView`. Presents the initial (at-bat) scene.
-    func attach(to view: SKView) {
+    /// Every painter, for a host to build its frames for (#35).
+    var painters: [Painter] {
+        [atBatScene, wideScene, statsScene, contractScene, warmUpCardScene, replayScene]
+    }
+
+    /// Called once, from `GameView.makeUIView`. Presents the initial (at-bat) painter. `view` is
+    /// the one the host draws into, for its size and for the share sheets to hang from.
+    func attach(to host: DerbyHost, in view: UIView) {
+        self.host = host
         self.view = view
-        guard view.scene == nil else { return }
+        guard host.presented == nil else { return }
         updateLayout(viewSize: view.bounds.size)
         #if DEBUG
         if Self.showWarmUpCardForScreenshots {
-            view.presentScene(warmUpCardScene)
+            host.present(warmUpCardScene)
             return
         }
         #endif
-        view.presentScene(atBatScene)
+        host.present(atBatScene)
     }
 
     /// Scene size = (max(320, round(224 × aspect)), 224), `.aspectFit`. Called on every layout
@@ -363,12 +373,10 @@ final class GameController {
         let width = max(320, (224 * aspect).rounded())
         let size = CGSize(width: width, height: 224)
         let designPerPoint = 224 / Double(viewSize.height)
-        for scene in [atBatScene, wideScene, statsScene, contractScene, warmUpCardScene,
-                      replayScene] as [CanvasScene] {
-            scene.size = size
-            scene.scaleMode = .aspectFit
-            scene.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
-            scene.safeRight = (Double(safeArea.right) * designPerPoint).rounded()
+        host?.layout(size: size)
+        for painter in painters {
+            painter.safeLeft = (Double(safeArea.left) * designPerPoint).rounded()
+            painter.safeRight = (Double(safeArea.right) * designPerPoint).rounded()
         }
     }
 
@@ -405,10 +413,10 @@ final class GameController {
             switch transition {
             case .cutToWide:
                 if flash { wideScene.flashNextFrame = true }
-                view?.presentScene(wideScene)
+                host?.present(wideScene)
             case .cutToAtBat:
                 if flash { atBatScene.flashNextFrame = true }
-                view?.presentScene(atBatScene)
+                host?.present(atBatScene)
             case .pitchThrown:
                 streakAtThePitch = machine.streakNow
                 haptics.prepare()
@@ -498,7 +506,7 @@ final class GameController {
     /// hold, the next windup, the next pitch and a miss's hold. Never over a ball in the air —
     /// there is a new swing to watch — and never while the replay itself is up.
     var showsReplayIcon: Bool {
-        guard offeredReplay != nil, !isExportingReplay, view?.scene !== replayScene else { return false }
+        guard offeredReplay != nil, !isExportingReplay, host?.presented !== replayScene else { return false }
         switch machine.beat {
         case .result, .windup, .pitch, .miss: return true
         case .contact, .flight: return false
@@ -510,9 +518,9 @@ final class GameController {
     /// one: `ReplayPlayback` ticks a private rebuilt machine and draws it through the same two
     /// scenes, which costs what a frame of the game costs.
     func showReplay() {
-        guard let view, let replay = offeredReplay, view.scene !== replayScene else { return }
+        guard let host, let replay = offeredReplay, host.presented !== replayScene else { return }
         replayScene.begin(replay, rules: replayRules)
-        view.presentScene(replayScene)
+        host.present(replayScene)
         #if DEBUG
         writeDebugReplayIfAsked(replay)
         #endif
@@ -522,10 +530,10 @@ final class GameController {
     /// was paused on — the landing number if one is still up, the plate otherwise — and the
     /// machine picks its own clock up where it left it, exactly as it does leaving the board.
     func leaveReplay() {
-        guard let view, view.scene === replayScene, !isExportingReplay else { return }
-        let paused: CanvasScene = (machine.beat == .flight || machine.beat == .result)
+        guard let host, host.presented === replayScene, !isExportingReplay else { return }
+        let paused: Painter = (machine.beat == .flight || machine.beat == .result)
             ? wideScene : atBatScene
-        view.presentScene(paused)
+        host.present(paused)
     }
 
     /// `SHARE`. The only place in the game a clip is ever written, and only when it is asked for:
@@ -543,7 +551,8 @@ final class GameController {
             try? await Task.sleep(for: .milliseconds(50))
             do {
                 let clip = try await ReplayRenderer.write(replay, to: url, replayRules: replayRules)
-                ReplayShare.present(clip.url, from: view, anchor: replayScene.wordAnchorInView)
+                ReplayShare.present(clip.url, from: view,
+                                    anchor: host?.viewRect(of: replayScene.wordRect, in: replayScene))
             } catch {
                 // A clip that could not be made says nothing: there are no toasts in this game.
                 print("replay clip failed: \(error)")

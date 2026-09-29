@@ -39,8 +39,9 @@ games) were bolt-ons inside full sims. The bare loop is open.
 ## 2. Platform and stack
 
 - iPhone first, landscape. iPad works by letterbox. No Android, no web.
-- SwiftUI shell → `SpriteView` → two `SKScene`s (`AtBatScene`, `WideScene`), or one scene with two
-  root nodes; either way, `SKView.presentScene(_:)` with **no transition**.
+- SwiftUI shell → `SKView` → one `SKScene` per painter (`AtBatScene`, `WideScene` and the cards),
+  cut with `SKView.presentScene(_:)` and **no transition**. The painters themselves hold no
+  SpriteKit; `SpriteKitHost` owns the scenes, the texture, the frame clock and the touches (#35).
 - `DerbyCore` (Swift package, pure): flight physics, pitching, slice contact, parks, the state
   machine. No UIKit, no SpriteKit. `swift test` on Linux must pass.
 - No physics engine. The flight is integrated once on contact and played back. SpriteKit's

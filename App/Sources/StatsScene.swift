@@ -1,10 +1,11 @@
-import SpriteKit
+import CoreGraphics
 import DerbyCore
+import Foundation
 
 /// The scoreboard, up close: every career number `DerbyMachine` counts. Reached by tapping the
 /// outfield scoreboard in the at-bat view, left by tapping anywhere. Not a menu: nothing here
 /// can be chosen or changed, and the game stands still behind it.
-final class StatsScene: CanvasScene {
+final class StatsScene: Painter {
     override var ticksMachine: Bool { false }
 
     private struct Section {
@@ -85,21 +86,15 @@ final class StatsScene: CanvasScene {
     /// One slice does one thing, however far the finger carries on afterwards.
     private var actedOnARow = false
 
-    private func designPoint(for touch: UITouch) -> CGPoint {
-        let p = touch.location(in: self)
-        return CGPoint(x: p.x, y: size.height - p.y)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragStart = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        dragStart = point
         dragLast = dragStart
         actedOnARow = false
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let start = dragStart, let last = dragLast else { return }
-        let p = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        guard let start = dragStart, let last = dragLast else { return }
+        let p = point
         dragLast = p
         guard !actedOnARow else { return }
         guard hypot(p.x - start.x, p.y - start.y) >= Self.contractMinimumSliceLength else { return }
@@ -123,13 +118,13 @@ final class StatsScene: CanvasScene {
         return straddled && max(last.x, p.x) >= row.x && min(last.x, p.x) <= row.x + row.width
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         defer { dragStart = nil; dragLast = nil }
         guard !actedOnARow else { return }
         controller?.hideStats()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         dragStart = nil
         dragLast = nil
     }

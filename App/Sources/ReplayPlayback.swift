@@ -1,5 +1,5 @@
+import CoreGraphics
 import DerbyCore
-import SpriteKit
 
 /// One recorded swing, played: the lead-in, the contact freeze, the one white frame, the flight
 /// across both cameras, the landing number (#42, DESIGN.md §19).
@@ -25,7 +25,7 @@ final class ReplayPlayback {
     private let wide = WideScene()
 
     private var machine: DerbyMachine
-    private var current: CanvasScene
+    private var current: Painter
     /// How much pitch is left before the slash. Zero once the hand-over has happened.
     private var leadInRemaining: Double
     /// The next frame is the white one of the hard cut (DESIGN.md §3).
@@ -37,9 +37,8 @@ final class ReplayPlayback {
     init(_ replay: Replay, rules: ReplayRules = .standard) {
         self.replay = replay
         self.rules = rules
-        for scene in [atBat, wide] as [CanvasScene] {
-            scene.isOffScreen = true
-            scene.scaleMode = .aspectFit
+        for painter in [atBat, wide] as [Painter] {
+            painter.isOffScreen = true
         }
         leadInRemaining = replay.leadInSeconds(rules: rules)
         machine = leadInRemaining > 0
@@ -57,10 +56,10 @@ final class ReplayPlayback {
     /// (`ReplayClipRules`); the screen is whatever the phone is, because a replay watched on the
     /// glass is the game again and the game is that wide.
     func resize(width: Int, height: Int, safeLeft: Double, safeRight: Double) {
-        for scene in [atBat, wide] as [CanvasScene] {
-            scene.size = CGSize(width: width, height: height)
-            scene.safeLeft = safeLeft
-            scene.safeRight = safeRight
+        for painter in [atBat, wide] as [Painter] {
+            painter.size = CGSize(width: width, height: height)
+            painter.safeLeft = safeLeft
+            painter.safeRight = safeRight
         }
     }
 
@@ -81,7 +80,7 @@ final class ReplayPlayback {
         }
     }
 
-    /// One frame of clock. Tick first, then draw — the order `CanvasScene.update(_:)` uses, so a
+    /// One frame of clock. Tick first, then draw — the order `SpriteKitHost` uses, so a
     /// replay lands on the same frames the player saw.
     func advance(_ dt: Double) {
         guard !isFinished else { return }

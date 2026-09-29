@@ -1,5 +1,6 @@
-import SpriteKit
+import CoreGraphics
 import DerbyCore
+import Foundation
 
 /// Where the Warm Up card's lines sit, in design units (DESIGN.md §8, §18). Centred rather than
 /// pinned, exactly as the contract card is: on a wide phone the panel sits in the middle and the
@@ -61,7 +62,7 @@ struct WarmUpCardLayout {
 ///
 /// Not a menu: nothing to scroll, nothing to choose, no timer. `SHARE` is the one word that does
 /// something other than leave, and it opens the system sheet rather than anything of our own.
-final class WarmUpCardScene: CanvasScene {
+final class WarmUpCardScene: Painter {
     override var ticksMachine: Bool { false }
 
     var layout = WarmUpCardLayout.standard
@@ -170,30 +171,24 @@ final class WarmUpCardScene: CanvasScene {
     private var dragLast: CGPoint?
     private var left = false
 
-    private func designPoint(for touch: UITouch) -> CGPoint {
-        let p = touch.location(in: self)
-        return CGPoint(x: p.x, y: size.height - p.y)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragStart = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        dragStart = point
         dragLast = dragStart
         left = false
     }
 
     /// A slice leaves the moment it is long enough to be one: this card is not something to be
     /// held down on.
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let start = dragStart, !left else { return }
-        let p = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        guard let start = dragStart, !left else { return }
+        let p = point
         dragLast = p
         guard hypot(p.x - start.x, p.y - start.y) >= layout.minimumSliceLength else { return }
         left = true
         controller?.leaveWarmUpCard()
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         defer { dragStart = nil; dragLast = nil }
         guard let start = dragStart, !left else { return }
         let end = dragLast ?? start
@@ -204,7 +199,7 @@ final class WarmUpCardScene: CanvasScene {
         controller?.leaveWarmUpCard()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         dragStart = nil
         dragLast = nil
     }
