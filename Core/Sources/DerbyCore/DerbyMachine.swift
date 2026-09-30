@@ -640,6 +640,20 @@ public struct DerbyMachine: Equatable {
         enter(.miss)
     }
 
+    /// The player looked away: back to the top of the windup with the same pitch, as though it
+    /// had never been thrown (docs/watch.md §5). A lowered wrist must never cost a called strike.
+    /// Only from `.windup` or `.pitch`; a ball already hit plays out, and a call already made
+    /// stands. Counts nothing, emits nothing, and leaves every streak where it was.
+    ///
+    /// Inside a Warm Up the pitch in the air has already been written down as `.taken` (§18); that
+    /// placeholder comes off again, since the same pitch is about to be thrown a second time.
+    public mutating func abandonPitch() {
+        guard beat == .windup || beat == .pitch else { return }
+        if beat == .pitch, warmUp?.pitches.isEmpty == false { warmUp?.pitches.removeLast() }
+        sliceInProgress = false
+        enter(.windup)
+    }
+
     // MARK: - Counting
 
     /// A warm-up swing counts toward everything except **the cost** (DESIGN.md §18): the ten are
