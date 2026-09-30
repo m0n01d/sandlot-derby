@@ -108,6 +108,11 @@ routing, PR screenshot and grooming rules do.
   through `FlightArt`/`FlightBackdropCache` in place of its own code, and `Backdrop.swift` lost
   the side view's drawing to it, keeping only the at-bat camera's pieces, the shared far/near
   kit, the stands' flags and the board's damage.
+- `Watch/` — the Apple Watch work (`docs/watch.md`). For now only W0, the `DerbyWatchSpike`
+  target: a watch-only measuring app (test pattern through both blit paths, drag sample rate,
+  haptics, sound, battery) with its own bundle id, never embedded in the phone app.
+  `Watch/README.md` is the checklist and the results table. `WatchCanvas.fit` is §3's integer
+  scale rule.
 - `docs/` — physics calibration table (the test oracle), palette, anything durable.
   `docs/shots/looks/` is the six skies in both cameras. `docs/shots/flight/` is the flight
   camera in six skies, both framings, three stand tiers and an iPad mini.
@@ -254,5 +259,6 @@ stand tiers below `full`, which are merged but judged only on the device. Next: 
 issue is
 closed; what remains is Dwight's — #11 (pricing, §16) needs the purchase, pending, refund and
 restore paths run from Xcode, and the review of every decision still marked unreviewed; then the
-rest of M5 (the app icon, Game Center, TestFlight, the store listing). `docs/watch.md` is a
-proposal for an Apple Watch version and waits on hardware.
+rest of M5 (the app icon, Game Center, TestFlight, the store listing). `docs/watch.md` is the
+Apple Watch plan. The watch arrived 2026-09-30: `DerbyCore` has `.watchOS(.v10)` and
+`abandonPitch()`, and W0's spike is built and waits to be run on the device.

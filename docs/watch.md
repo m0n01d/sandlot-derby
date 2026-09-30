@@ -133,10 +133,14 @@ What this changes in the plan:
 
 ### Changes to `DerbyCore`
 
+Both done on 2026-09-30, the day the watch arrived.
+
 1. `Package.swift`: add `.watchOS(.v10)` to `platforms`.
-2. `DerbyMachine.abandonPitch()`: from `windup` or `pitch`, back to the top of `windup`. Counts
-   nothing, emits nothing, streak untouched. Tested: tally identical before and after. Needed
-   because a lowered wrist must never cost a called strike (§5).
+2. `DerbyMachine.abandonPitch()`: from `windup` or `pitch`, back to the top of `windup` with the
+   same pitch. Counts nothing, emits nothing, streak untouched. Tested in `AbandonPitchTests`:
+   tally identical before and after. Needed because a lowered wrist must never cost a called
+   strike (§5). Inside a Warm Up the `.taken` placeholder of the pitch in the air comes off
+   again, so the re-thrown pitch is not spent twice (§18).
 
 Nothing else. `majorsSliceRules`, `majorsPitchingRules` and `cameraRules` are already settable on
 the machine; the watch passes its own.
@@ -193,7 +197,10 @@ falls inside, in watch coordinates:
   70 % of the way down the glass, where the slicing hand is already, so the hand covers less of
   the pitch's runway. The ball comes from above; the finger comes from below.
 - HUD: `PARK n · PITCHES` at `(safeLeft, hudTop)`, streak on the line under it, both `t5` at 1×,
-  left-aligned, over sky. Nothing else. Top-right belongs to the clock.
+  left-aligned, over sky. Nothing else. Top-right belongs to the clock. **`t5` cannot spell this
+  yet:** it has digits, `A B E F H L R T` and the currency signs, and no `P K I C S ·`. Either it
+  gets the rest of the alphabet before W2, or the watch writes words in `t3` at 2× (found
+  2026-09-30, `Watch/README.md`).
 - The ball is drawn at `sample.radius + ballRadiusBonus`. Drawing only; the hit test is unchanged.
   `PixelCanvas.baseball` picks its laces from the radius it is given, so a radius-5 ball gets the
   five-pixel seam with no new art.
@@ -343,7 +350,9 @@ framesPerSecond) · `WatchHaptics` (pitchTick, the cue table).
 
 ## 9. Milestones
 
-- **W0 — spike, half a day, the day the watch arrives.** Target builds from XcodeGen. A 136×167
+- **W0 — spike, half a day, the day the watch arrives.** Built 2026-09-30 as the watch-only
+  `DerbyWatchSpike` target; [`Watch/README.md`](../Watch/README.md) is the checklist and the
+  results table. Target builds from XcodeGen. A 136×167
   test pattern on the glass at exactly 3 px per unit (screenshot, zoom, count). `DragGesture`
   sample rate logged. `SKMutableTexture` on device. One `crack` through the speaker. Every
   `WKHapticType` felt, tones noted. Corner and clock measured. Battery over five minutes at 60 fps.
