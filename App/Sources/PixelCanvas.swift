@@ -2,7 +2,7 @@ import Foundation
 
 /// A software framebuffer in design units: always 224 tall, at least 320 wide, y-down
 /// (row 0 is the TOP of the screen — the opposite of SpriteKit's own coordinate space, see
-/// `CanvasScene.blit`). Primitives are a 1:1 port of the prototype's `px/rect/line/disc/
+/// `SpriteKitHost`'s blit). Primitives are a 1:1 port of the prototype's `px/rect/line/disc/
 /// dither/dashed/t3/t5` (prototypes/03-camera-cut-and-slice.html, roughly lines 219-227).
 final class PixelCanvas {
     let width: Int

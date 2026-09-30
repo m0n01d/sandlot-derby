@@ -1,6 +1,6 @@
+import CoreGraphics
 import DerbyCore
-import SpriteKit
-import UIKit
+import Foundation
 
 /// Where the replay screen's one word sits (#42, DESIGN.md §19). Top right, on an ink plate,
 /// which is the corner the camera that opened it was in — the thing you tapped becomes the thing
@@ -30,7 +30,7 @@ struct ReplayScreenLayout {
 ///
 /// It loops, resting `ReplayRules.loopHoldSeconds` on the landing number. One word, `SHARE`, in
 /// the corner; a tap anywhere else is a hard cut back to the game, which resumes where it paused.
-final class ReplayScene: CanvasScene {
+final class ReplayScene: Painter {
     /// The game stands still behind this, like the board and the cards.
     override var ticksMachine: Bool { false }
 
@@ -38,25 +38,22 @@ final class ReplayScene: CanvasScene {
     private(set) var replay: Replay?
     private var playback: ReplayPlayback?
     private var holdRemaining = 0.0
-    private var lastUpdate: TimeInterval?
 
     /// Starts a record playing from its first frame. Called by `GameController` on the way in.
     func begin(_ replay: Replay, rules: ReplayRules) {
         self.replay = replay
         playback = ReplayPlayback(replay, rules: rules)
         holdRemaining = rules.loopHoldSeconds
-        lastUpdate = nil
         applySize()
     }
 
-    override func didMove(to view: SKView) {
-        super.didMove(to: view)
-        lastUpdate = nil            // time spent off screen is not replay time
+    /// Time spent off screen is not replay time: the host's `dt` is zero on the first frame
+    /// after the cut in.
+    override func didAppear() {
         applySize()
     }
 
-    override func didChangeSize(_ oldSize: CGSize) {
-        super.didChangeSize(oldSize)
+    override func sizeDidChange() {
         applySize()
     }
 
@@ -68,9 +65,8 @@ final class ReplayScene: CanvasScene {
 
     /// The replay's own clock: real seconds, clamped the way `GameController.tick` clamps the
     /// game's, so a stall between frames does not skip half the flight.
-    override func update(_ currentTime: TimeInterval) {
-        let dt = min(lastUpdate.map { currentTime - $0 } ?? 0, 1.0 / 20.0)
-        lastUpdate = currentTime
+    override func advance(_ realDt: Double) {
+        let dt = min(realDt, 1.0 / 20.0)
         // The loop stops dead while a clip is being written: the frame the player was looking at
         // when they asked stays up under `SAVING`, and the export gets the whole machine instead
         // of sharing it with a replay nobody is watching.
@@ -85,7 +81,6 @@ final class ReplayScene: CanvasScene {
                 playback.advance(dt)
             }
         }
-        super.update(currentTime)   // draws this frame and blits it
     }
 
     override func render(into canvas: PixelCanvas) {
@@ -110,23 +105,16 @@ final class ReplayScene: CanvasScene {
     private var dragStart: CGPoint?
     private var dragLast: CGPoint?
 
-    private func designPoint(for touch: UITouch) -> CGPoint {
-        let p = touch.location(in: self)
-        return CGPoint(x: p.x, y: size.height - p.y)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragStart = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        dragStart = point
         dragLast = dragStart
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragLast = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        dragLast = point
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         defer { dragStart = nil; dragLast = nil }
         guard let start = dragStart, controller?.isExportingReplay != true else { return }
         let end = dragLast ?? start
@@ -137,26 +125,19 @@ final class ReplayScene: CanvasScene {
         controller?.leaveReplay()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         dragStart = nil
         dragLast = nil
     }
 
-    /// The word's rectangle in the view's own points, so an iPad's share popover points at the
-    /// thing that was tapped instead of hanging off the middle of the screen. Nil before the
-    /// scene is presented.
-    var wordAnchorInView: CGRect? {
-        guard let view else { return nil }
+    /// The word's rectangle in design pixels, y down, for the host to turn into the view's own
+    /// points, so an iPad's share popover points at the thing that was tapped instead of hanging
+    /// off the middle of the screen (`DerbyHost.viewRect(of:in:)`).
+    var wordRect: CGRect {
         let text = controller?.isExportingReplay == true ? "SAVING" : "SHARE"
         let width = Double(text.count * 4 * layout.wordScale)
         let x = Double(size.width) - safeRight - layout.inset - width
-        // Design space is y down; the scene's own is y up.
-        let a = view.convert(CGPoint(x: x, y: size.height - layout.wordY), from: self)
-        let b = view.convert(CGPoint(x: x + width,
-                                     y: size.height - layout.wordY - Double(5 * layout.wordScale)),
-                             from: self)
-        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
-                      width: max(1, abs(b.x - a.x)), height: max(1, abs(b.y - a.y)))
+        return CGRect(x: x, y: layout.wordY, width: width, height: Double(5 * layout.wordScale))
     }
 
     private func isWordTap(_ p: CGPoint) -> Bool {

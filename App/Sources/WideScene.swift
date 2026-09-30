@@ -1,6 +1,6 @@
-import SpriteKit
+import CoreGraphics
 import DerbyCore
-import UIKit
+import Foundation
 
 /// The two flight cameras, side on: the batted ball travelling with real drag, and the landing
 /// number. `DerbyMachine.flightCamera` says which framing is up; this scene only draws it, and
@@ -8,7 +8,7 @@ import UIKit
 ///
 /// The wide framing is a port of the prototype's `drawWide` (prototypes/03-camera-cut-and-
 /// slice.html ~L426-455), minus its "wide only" debug drawing of the pitch and the miss.
-final class WideScene: CanvasScene {
+final class WideScene: Painter {
     /// How the two framings are built lives in Core (`SideViewRules`): a rare event is judged
     /// against where the ball is *drawn*, so the framing had to become something Core can work
     /// out and a test can check (#5). The scene still owns every other number it draws with.
@@ -484,26 +484,19 @@ final class WideScene: CanvasScene {
     private var dragStart: CGPoint?
     private var dragLast: CGPoint?
 
-    private func designPoint(for touch: UITouch) -> CGPoint {
-        let p = touch.location(in: self)
-        return CGPoint(x: p.x, y: size.height - p.y)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragStart = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        dragStart = point
         dragLast = dragStart
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        dragLast = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        dragLast = point
     }
 
     /// A tap on the camera and nothing else. There is nothing to swing at from this camera, so a
     /// touch that misses it does nothing at all — the same as it did before #42, when the only
     /// thing this scene listened for was a long press.
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         defer { dragStart = nil; dragLast = nil }
         guard controller?.showsReplayIcon == true, let start = dragStart else { return }
         let end = dragLast ?? start
@@ -513,7 +506,7 @@ final class WideScene: CanvasScene {
         controller?.showReplay()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         dragStart = nil
         dragLast = nil
     }

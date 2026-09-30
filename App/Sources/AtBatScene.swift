@@ -1,7 +1,7 @@
-import SpriteKit
+import CoreGraphics
 import DerbyCore
 import Foundation
-import UIKit
+import QuartzCore
 
 /// The pitch camera: pitcher, batter, the ball coming at you, and the slice gesture. A port of
 /// the prototype's `drawAtBat` + `drawLiveTrail` + `drawContact` + `drawMiss` plus its
@@ -10,7 +10,7 @@ import UIKit
 /// below are draw-only caches of the last slice, exactly like the prototype's own `contact` /
 /// `missInfo` / `trail` locals; every beat, timing and outcome decision comes from
 /// `controller.machine`.
-final class AtBatScene: CanvasScene {
+final class AtBatScene: Painter {
     private struct SamplePoint { let point: Point; let time: CFTimeInterval }
 
     private struct ClosestMiss {
@@ -636,7 +636,7 @@ final class AtBatScene: CanvasScene {
             fadeTrail = nil
         case .miss:
             // A called strike/ball: `DerbyMachine` reached this beat on its own (the pitch
-            // timed out), so no `touchesEnded` ever built a `missVisual` for it. Ring at the
+            // timed out), so no `touchEnded` ever built a `missVisual` for it. Ring at the
             // plate, no trail (DESIGN.md §7).
             if controller.machine.lastCall != .miss {
                 let ball = controller.ballAt(1.0)
@@ -645,7 +645,7 @@ final class AtBatScene: CanvasScene {
             } else if missVisual == nil {
                 // A swing-miss `DerbyMachine` resolved on its own: the pitch timed out with a
                 // slice still in progress, i.e. the finger held through it (DESIGN.md §3, issue
-                // #20). A real `touchesEnded` miss already set `missVisual` synchronously before
+                // #20). A real `touchEnded` miss already set `missVisual` synchronously before
                 // this runs, so this only fires when the finger is still down — draw the same
                 // markers from whatever the drag has recorded so far, same as `endDrag()`.
                 let machine = controller.machine
@@ -733,22 +733,21 @@ final class AtBatScene: CanvasScene {
 
     // MARK: - Touch input (the slice)
 
-    private func designPoint(for touch: UITouch) -> Point {
-        let p = touch.location(in: self)
-        return Point(x: Double(p.x) - xOffset, y: Double(size.height - p.y))
+    /// The host's design point, moved into the centred 320 column.
+    private func designPoint(_ point: CGPoint) -> Point {
+        Point(x: Double(point.x) - xOffset, y: Double(point.y))
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let p = designPoint(for: touch)
+    override func touchBegan(at point: CGPoint) {
+        let p = designPoint(point)
         dragStart = p
         trail = [SamplePoint(point: p, time: CACurrentMediaTime())]
         closest = nil
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let dragStart, let controller, var trail = self.trail else { return }
-        let b = designPoint(for: touch)
+    override func touchMoved(to point: CGPoint) {
+        guard let dragStart, let controller, var trail = self.trail else { return }
+        let b = designPoint(point)
         let now = CACurrentMediaTime()
         let a = trail.last?.point ?? b
         trail.append(SamplePoint(point: b, time: now))
@@ -803,11 +802,11 @@ final class AtBatScene: CanvasScene {
         }
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchEnded() {
         endDrag()
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchCancelled() {
         endDrag()
     }
 
